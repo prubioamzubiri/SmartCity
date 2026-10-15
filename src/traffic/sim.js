@@ -41,11 +41,12 @@ export class TrafficSim {
 
   randomEdge() {
     const g = this.g;
+    const list = g.drivableEdges;
     for (let tries = 0; tries < 6; tries++) {
-      const e = (Math.random() * g.edgeCount) | 0;
+      const e = list[(Math.random() * list.length) | 0];
       if (Math.random() * 5 < 5 - g.cls[e] || tries === 5) return e;
     }
-    return 0;
+    return list[0];
   }
 
   chooseNext(e) {
@@ -59,6 +60,7 @@ export class TrafficSim {
     const end = g.outStart[node + 1];
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
+      if (!g.drivable[c]) continue;
       if (c === rev) {
         fallback = c;
         continue;
@@ -69,7 +71,7 @@ export class TrafficSim {
     let r = Math.random() * total;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
-      if (c === rev) continue;
+      if (c === rev || !g.drivable[c]) continue;
       r -= this.weight(e, c);
       if (r <= 0) return c;
     }

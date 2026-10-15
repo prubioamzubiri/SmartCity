@@ -71,6 +71,70 @@ export function buildGraph(data) {
   const fill = outStart.slice(0, nodeCount);
   for (let e = 0; e < edgeCount; e++) outList[fill[A[e]]++] = e;
 
+  // Tarjan iterativo: los coches solo circulan por la mayor componente fuertemente conexa para no quedar atrapados en bucles sin salida.
+  const order = new Int32Array(nodeCount).fill(-1);
+  const low = new Int32Array(nodeCount);
+  const onStack = new Uint8Array(nodeCount);
+  const comp = new Int32Array(nodeCount).fill(-1);
+  const compSize = [];
+  const tarjanStack = [];
+  const cursor = outStart.slice(0, nodeCount);
+  let counter = 0;
+  for (let root = 0; root < nodeCount; root++) {
+    if (order[root] >= 0) continue;
+    const calls = [root];
+    order[root] = low[root] = counter++;
+    tarjanStack.push(root);
+    onStack[root] = 1;
+    while (calls.length) {
+      const v = calls[calls.length - 1];
+      const k = cursor[v];
+      if (k < outStart[v + 1]) {
+        cursor[v] = k + 1;
+        const w = B[outList[k]];
+        if (order[w] < 0) {
+          order[w] = low[w] = counter++;
+          tarjanStack.push(w);
+          onStack[w] = 1;
+          calls.push(w);
+        } else if (onStack[w]) {
+          low[v] = Math.min(low[v], order[w]);
+        }
+        continue;
+      }
+      if (low[v] === order[v]) {
+        const id = compSize.length;
+        let size = 0;
+        let w;
+        do {
+          w = tarjanStack.pop();
+          onStack[w] = 0;
+          comp[w] = id;
+          size++;
+        } while (w !== v);
+        compSize.push(size);
+      }
+      calls.pop();
+      if (calls.length) {
+        const parentNode = calls[calls.length - 1];
+        low[parentNode] = Math.min(low[parentNode], low[v]);
+      }
+    }
+  }
+  let mainComp = 0;
+  compSize.forEach((size, id) => {
+    if (size > compSize[mainComp]) mainComp = id;
+  });
+  const drivable = new Uint8Array(edgeCount);
+  const drivableList = [];
+  for (let e = 0; e < edgeCount; e++) {
+    if (comp[A[e]] === mainComp && comp[B[e]] === mainComp) {
+      drivable[e] = 1;
+      drivableList.push(e);
+    }
+  }
+  const drivableEdges = Int32Array.from(drivableList);
+
   // En OSM los semáforos se mapean en las aproximaciones al cruce: se agrupan por cercanía en un controlador.
   const raw = [];
   for (let i = 0; i < data.signals.length; i += 2) raw.push({ node: data.signals[i], id: data.signals[i + 1] });
@@ -167,6 +231,7 @@ export function buildGraph(data) {
     A, B, cls, len, ux, uz, speed, rev,
     outStart, outList,
     sig, grp,
+    drivable, drivableEdges,
     signals,
     nearestSegment,
   };
