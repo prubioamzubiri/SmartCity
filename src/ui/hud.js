@@ -65,6 +65,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   const planUrl = el('input', { type: 'text', placeholder: 'URL del plan de semáforos (JSON)' });
   const signalCount = el('div', { class: 'status' });
   const signalList = el('div', { class: 'signal-list', id: 'signal-list' });
+  const signalInputs = new Map();
   signalList.hidden = true;
   const signalToggle = el('button', {
     textContent: 'Mostrar semáforos',
@@ -79,8 +80,9 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   const renderSignalList = () => {
     const activeSignals = signals.signals.filter((signal) => signal.active);
     signalCount.textContent = `Cruces configurables: ${activeSignals.length}`;
+    signalInputs.clear();
     signalList.replaceChildren(...activeSignals.map((signal) => {
-      const timing = signals.timing(signal);
+      const timing = signals.timing(signal, clock.simTime);
       const heading = el('a', {
         class: 'signal-id',
         textContent: `OSM ${signal.id}`,
@@ -89,21 +91,29 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
         rel: 'noopener noreferrer',
         title: 'Abrir este nodo en OpenStreetMap',
       });
-      const timeInput = (label, key, value, min, max, title) => el('label', {
-        class: 'signal-time',
-        title,
-      }, el('span', { textContent: label }), el('input', {
-        type: 'number', min, max, step: 1, value,
-        onchange: (event) => {
-          signals.setSignalTiming(signal.id, { [key]: Number(event.currentTarget.value) });
-          renderSignalList();
-        },
-      }));
+      const timeInput = (label, key, value, min, max, title) => {
+        const input = el('input', {
+          type: 'number', min, max, step: 1, value,
+          onchange: (event) => {
+            signals.setSignalTiming(signal.id, { [key]: Number(event.currentTarget.value) });
+            signals.update(clock.simTime);
+            renderSignalList();
+          },
+        });
+        return {
+          input,
+          element: el('label', { class: 'signal-time', title }, el('span', { textContent: label }), input),
+        };
+      };
+      const greenA = timeInput('Verde A', 'greenA', timing.gA, 5, 180, 'Grupo de aproximaciones este-oeste, en segundos');
+      const greenB = timeInput('Verde B', 'greenB', timing.gB, 5, 180, 'Grupo de aproximaciones norte-sur, en segundos');
+      const yellow = timeInput('Ámbar', 'yellow', timing.y, 1, 10, 'Duración del ámbar, en segundos');
+      signalInputs.set(signal.id, { greenA: greenA.input, greenB: greenB.input, yellow: yellow.input });
       return el('div', { class: 'signal-entry' }, heading,
         el('div', { class: 'signal-timings' },
-          timeInput('Verde A', 'greenA', timing.gA, 5, 180, 'Grupo de aproximaciones este-oeste, en segundos'),
-          timeInput('Verde B', 'greenB', timing.gB, 5, 180, 'Grupo de aproximaciones norte-sur, en segundos'),
-          timeInput('Ámbar', 'yellow', timing.y, 1, 10, 'Duración del ámbar, en segundos'),
+          greenA.element,
+          greenB.element,
+          yellow.element,
         ),
       );
     }));
@@ -112,6 +122,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   const applyPlan = (plan, label) => {
     try {
       signals.setPlan(plan);
+      signals.update(clock.simTime);
       greenInput.value = signals.plan.default.green;
       renderSignalList();
       planStatus.textContent = `Plan cargado: ${label}`;
@@ -126,6 +137,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
       textContent: 'Aplicar',
       onclick: () => {
         signals.setGlobalGreen(Number(greenInput.value) || CONFIG.signals.green);
+        signals.update(clock.simTime);
         renderSignalList();
         planStatus.textContent = `Verde global: ${greenInput.value} s`;
       },
@@ -164,8 +176,31 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
         onclick: () => download(
           'plantilla-semaforos.json',
           JSON.stringify({
-            default: { green: CONFIG.signals.green, yellow: CONFIG.signals.yellow },
-            signals: {},
+            default: {
+              green: CONFIG.signals.green,
+              yellow: CONFIG.signals.yellow,
+              schedule: [
+                {
+                  when: { months: [12], daysOfMonth: [24], years: [2026] },
+                  green: 15,
+                },
+                {
+                  when: { weekdays: [1, 2, 3, 4, 5], start: '07:00', end: '09:00' },
+                  green: 30,
+                },
+              ],
+            },
+            signals: {
+              '123456789': {
+                schedule: [
+                  {
+                    when: { weekdays: [1, 2, 3, 4, 5], start: '16:00', end: '18:00' },
+                    greenA: 20,
+                    greenB: 35,
+                  },
+                ],
+              },
+            },
           }, null, 2),
           'application/json',
         ),
@@ -282,6 +317,15 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
         rows.get(s.id)?.classList.toggle('selected', s.id === sensors.selectedId);
       }
       recordsLabel.textContent = `Registros: ${sensors.records.length} · intervalo en curso`;
+      const signalDate = simDate(clock.simTime);
+      for (const signal of signals.signals) {
+        const inputs = signalInputs.get(signal.id);
+        if (!inputs) continue;
+        const timing = signals.timing(signal, clock.simTime, signalDate);
+        for (const [key, value] of Object.entries({ greenA: timing.gA, greenB: timing.gB, yellow: timing.y })) {
+          if (inputs[key] !== document.activeElement) inputs[key].value = value;
+        }
+      }
     },
   };
 }

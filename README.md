@@ -17,14 +17,6 @@ Desde la carpeta del proyecto:
 npm ci
 npm run fetch-osm
 npm run dev
-```
-
-Abre en el navegador la dirección local que indique Vite, normalmente `http://localhost:5173/`. Para detener el servidor, pulsa `Ctrl+C` en la terminal.
-
-`npm run fetch-osm` genera `public/data/city.json` con calles, edificios, semáforos y elementos de agua. Ese archivo no está incluido en el repositorio, así que hay que generarlo en cada instalación. La descarga depende de los servidores de Overpass y puede tardar o no estar disponible temporalmente.
-
-Comandos adicionales:
-
 ```bash
 npm run fetch-water # Actualiza solo los datos de agua; requiere city.json
 npm run build       # Genera la versión de producción en dist/
@@ -81,10 +73,55 @@ Pulsa **Descargar plantilla** para obtener un JSON inicial. También puedes crea
       "yellow": 3
     }
   }
+      },
+      {
+        "when": {
+          "weekdays": [1, 2, 3, 4, 5],
+          "start": "07:00",
+          "end": "09:00"
+        },
+        "green": 30
 }
 ```
 
 En el ejemplo, sustituye `123456789` por un ID real mostrado en el mapa. `default` define los tiempos para todos los cruces; cada entrada de `signals` sobrescribe esos valores para un cruce concreto. También puedes usar `green` dentro de una entrada individual para dar la misma duración a A y B.
+
+La plantilla descargable incluye además reglas de calendario como este ejemplo:
+
+```json
+{
+  "default": {
+    "green": 20,
+    "yellow": 3,
+    "schedule": [
+      {
+        "when": { "months": [12], "daysOfMonth": [24], "years": [2026] },
+        "green": 15
+      },
+      {
+        "when": { "weekdays": [1, 2, 3, 4, 5], "start": "07:00", "end": "09:00" },
+        "green": 30
+      }
+    ]
+  },
+  "signals": {
+    "123456789": {
+      "schedule": [
+        {
+          "when": { "weekdays": [1, 2, 3, 4, 5], "start": "16:00", "end": "18:00" },
+          "greenA": 20,
+          "greenB": 35,
+          "yellow": 3
+        }
+      ]
+    }
+  }
+}
+```
+
+`weekdays` usa `0` para domingo y `6` para sábado; `months` va de 1 a 12; `daysOfMonth`, de 1 a 31; `years` admite años como `2026`; y `dates` permite indicar fechas exactas como `2026-12-24`. Las horas usan UTC y formato `HH:MM`, con inicio incluido y final excluido. Se permiten franjas nocturnas, como `22:00`–`02:00`; en ellas, los filtros de día y fecha se refieren al día en que empieza la franja. Si no se indican horas, la regla se aplica todo el día.
+
+Las condiciones de `when` se combinan y deben cumplirse todas. Se aplica la primera regla coincidente: primero se revisa `signals[ID].schedule` y, si no coincide ninguna regla del cruce, `default.schedule`. Si ninguna coincide, se usan los valores base. Coloca las reglas específicas antes de las generales. El ejemplo usa un ID ilustrativo que debes sustituir por el del mapa; establece 15 s el 24 de diciembre de 2026, 30 s en hora punta de lunes a viernes y 20/35 s para el cruce indicado de 16:00 a 18:00. Los campos numéricos del panel muestran los tiempos efectivos en el momento simulado actual; las reglas activas tienen prioridad. Para editar una regla horaria, modifica el JSON y vuelve a cargarlo.
 
 - **Cargar archivo:** importa un plan JSON desde tu ordenador.
 - **Cargar URL:** obtiene el plan desde una dirección que sirva JSON. El servidor remoto debe permitir la petición del navegador (CORS).
