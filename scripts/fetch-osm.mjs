@@ -1,5 +1,5 @@
 // Descarga edificios y calles de Donostia desde OpenStreetMap (Overpass) y genera public/data/city.json.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -154,26 +154,157 @@ async function fetchRoads() {
   return { nodes, ways: outWays, signals };
 }
 
-const buildings = await fetchBuildings();
-const roads = await fetchRoads();
-
-let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-for (let i = 0; i < roads.nodes.length; i += 2) {
-  minX = Math.min(minX, roads.nodes[i]);
-  maxX = Math.max(maxX, roads.nodes[i]);
-  minZ = Math.min(minZ, roads.nodes[i + 1]);
-  maxZ = Math.max(maxZ, roads.nodes[i + 1]);
+// Une tramos que comparten extremos en anillos cerrados y cadenas abiertas.
+function assemble(parts) {
+  const rings = [];
+  const open = [];
+  const rest = parts.map((p) => p.slice());
+  while (rest.length) {
+    let cur = rest.pop();
+    let grew = true;
+    while (grew && cur[0].key !== cur[cur.length - 1].key) {
+      grew = false;
+      const head = cur[0].key;
+      const tail = cur[cur.length - 1].key;
+      for (let i = 0; i < rest.length; i++) {
+        const p = rest[i];
+        if (p[0].key === tail) cur = cur.concat(p.slice(1));
+        else if (p[p.length - 1].key === tail) cur = cur.concat(p.slice(0, -1).reverse());
+        else if (p[p.length - 1].key === head) cur = p.concat(cur.slice(1));
+        else if (p[0].key === head) cur = p.slice().reverse().concat(cur.slice(1));
+        else continue;
+        rest.splice(i, 1);
+        grew = true;
+        break;
+      }
+    }
+    (cur[0].key === cur[cur.length - 1].key ? rings : open).push(cur);
+  }
+  return { rings, open };
 }
 
-const city = {
-  origin: ORIGIN,
-  bounds: { minX, maxX, minZ, maxZ },
-  buildings,
-  nodes: roads.nodes,
-  ways: roads.ways,
-  signals: roads.signals,
+const ringArea = (r) => {
+  let a = 0;
+  for (let i = 0; i < r.length - 1; i++) a += r[i].x * r[i + 1].z - r[i + 1].x * r[i].z;
+  return Math.abs(a) / 2;
 };
 
+function inside(p, ring) {
+  let c = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i];
+    const b = ring[j];
+    if (a.z > p.z !== b.z > p.z && p.x < ((b.x - a.x) * (p.z - a.z)) / (b.z - a.z) + a.x) c = !c;
+  }
+  return c;
+}
+
+const flat = (pts) => pts.flatMap((p) => [round1(p.x), round1(p.z)]);
+
+// Mar (costa de OSM cerrada hacia el norte), ríos y lagos como polígonos planos.
+async function fetchWater(bounds) {
+  const PAD = 2500;
+  const south = ORIGIN.lat - (bounds.maxZ + PAD) / K_LAT;
+  const north = ORIGIN.lat - (bounds.minZ - PAD) / K_LAT;
+  const west = ORIGIN.lon + (bounds.minX - PAD) / K_LON;
+  const east = ORIGIN.lon + (bounds.maxX + PAD) / K_LON;
+  const bbox = `${south},${west},${north},${east}`;
+  const json = await overpass(
+    `[out:json][timeout:180];(way["natural"="water"](${bbox});way["waterway"="riverbank"](${bbox});` +
+      `relation["natural"="water"](${bbox});way["waterway"="river"](${bbox});way["natural"="coastline"](${bbox}););out geom;`,
+  );
+
+  const toPts = (geometry) =>
+    geometry.map((g) => {
+      const [x, z] = project(g.lat, g.lon);
+      return { x, z, key: `${g.lat},${g.lon}` };
+    });
+
+  const polygons = [];
+  const lines = [];
+  const coast = [];
+  for (const el of json.elements) {
+    const tags = el.tags || {};
+    if (el.type === 'way' && el.geometry) {
+      const pts = toPts(el.geometry);
+      if (tags.natural === 'coastline') coast.push(pts);
+      else if (tags.waterway === 'river') lines.push(flat(pts));
+      else if (pts.length > 3 && pts[0].key === pts[pts.length - 1].key && ringArea(pts) > 400) polygons.push([flat(pts)]);
+    } else if (el.type === 'relation' && el.members) {
+      const outer = [];
+      const inner = [];
+      for (const m of el.members) {
+        if (m.type !== 'way' || !m.geometry) continue;
+        (m.role === 'inner' ? inner : outer).push(toPts(m.geometry));
+      }
+      const holes = assemble(inner).rings;
+      for (const ring of assemble(outer).rings) {
+        if (ringArea(ring) <= 400) continue;
+        const own = holes.filter((h) => inside(h[0], ring));
+        polygons.push([flat(ring), ...own.map(flat)]);
+      }
+    }
+  }
+
+  // Mar: tramo de costa más largo dentro de la ventana, cerrado por el norte.
+  const { rings: islands, open } = assemble(coast);
+  const win = { x0: bounds.minX - PAD, x1: bounds.maxX + PAD, z0: bounds.minZ - PAD, z1: bounds.maxZ + PAD };
+  const inWin = (p) => p.x >= win.x0 && p.x <= win.x1 && p.z >= win.z0 && p.z <= win.z1;
+  let best = [];
+  for (const chain of open) {
+    let run = [];
+    for (const p of [...chain, null]) {
+      if (p && inWin(p)) run.push(p);
+      else {
+        if (run.length > best.length) best = run;
+        run = [];
+      }
+    }
+  }
+  if (best.length > 1) {
+    const far = bounds.minZ - 12000;
+    const first = best[0];
+    const last = best[best.length - 1];
+    const outline = [...best, { x: last.x, z: far }, { x: first.x, z: far }, first];
+    const holes = islands.filter((r) => inside(r[0], outline) && ringArea(r) < 5e6).map(flat);
+    polygons.unshift([flat(outline), ...holes]);
+    console.log(`Mar: costa de ${best.length} puntos, ${holes.length} islas`);
+  } else {
+    console.warn('No se encontró costa dentro de la ventana; sin mar.');
+  }
+  console.log(`Agua: ${polygons.length} polígonos, ${lines.length} ríos`);
+  return { polygons, lines };
+}
+
 await mkdir('public/data', { recursive: true });
-await writeFile('public/data/city.json', JSON.stringify(city));
-console.log('Generado public/data/city.json');
+
+if (process.argv.includes('--water-only')) {
+  const city = JSON.parse(await readFile('public/data/city.json', 'utf8'));
+  city.water = await fetchWater(city.bounds);
+  await writeFile('public/data/city.json', JSON.stringify(city));
+  console.log('Actualizado el agua en public/data/city.json');
+} else {
+  const buildings = await fetchBuildings();
+  const roads = await fetchRoads();
+
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < roads.nodes.length; i += 2) {
+    minX = Math.min(minX, roads.nodes[i]);
+    maxX = Math.max(maxX, roads.nodes[i]);
+    minZ = Math.min(minZ, roads.nodes[i + 1]);
+    maxZ = Math.max(maxZ, roads.nodes[i + 1]);
+  }
+  const bounds = { minX, maxX, minZ, maxZ };
+
+  const city = {
+    origin: ORIGIN,
+    bounds,
+    buildings,
+    nodes: roads.nodes,
+    ways: roads.ways,
+    signals: roads.signals,
+    water: await fetchWater(bounds),
+  };
+  await writeFile('public/data/city.json', JSON.stringify(city));
+  console.log('Generado public/data/city.json');
+}

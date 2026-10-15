@@ -5,6 +5,7 @@ import { CONFIG } from './config.js';
 import { loadCity } from './city/loadCity.js';
 import { createBuildings } from './city/buildings.js';
 import { createRoads } from './city/roads.js';
+import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
 import { SignalController, createSignalViz } from './traffic/signals.js';
 import { TrafficSim } from './traffic/sim.js';
@@ -36,8 +37,9 @@ async function main() {
     new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
     new THREE.MeshLambertMaterial({ color: 0x25352b }),
   );
-  ground.position.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
+  ground.position.set((minX + maxX) / 2, -1, (minZ + maxZ) / 2);
   scene.add(ground);
+  scene.add(createWater(data));
   scene.add(createBuildings(data));
   scene.add(createRoads(data));
 

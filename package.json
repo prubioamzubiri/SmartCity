@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "fetch-osm": "node scripts/fetch-osm.mjs"
+    "fetch-osm": "node scripts/fetch-osm.mjs",
+    "fetch-water": "node scripts/fetch-osm.mjs --water-only"
   },
   "dependencies": {
     "three": "^0.186.1"
