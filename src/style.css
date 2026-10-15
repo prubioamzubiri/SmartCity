@@ -1,0 +1,77 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0e1620;
+  font-family: system-ui, "Segoe UI", sans-serif;
+  color: #e8edf3;
+}
+
+#app, #app canvas {
+  position: fixed;
+  inset: 0;
+  display: block;
+}
+
+#loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #0e1620;
+  font-size: 1.2rem;
+  z-index: 10;
+}
+
+#hud {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  bottom: 8px;
+  width: 320px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  background: rgba(14, 22, 32, 0.88);
+  border: 1px solid #2a3a4d;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+#hud h2 { margin: 0 0 8px; font-size: 16px; }
+#hud h3 { margin: 0 0 6px; font-size: 13px; color: #8fb4dc; text-transform: uppercase; letter-spacing: 0.04em; }
+#hud section { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #243244; }
+#hud label { display: block; margin: 4px 0; }
+#hud .row { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+#hud .clock { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+#hud .stats, #hud .status, #hud .help { color: #9fb2c8; font-size: 12px; margin-top: 4px; }
+
+#hud input[type="text"], #hud input[type="number"], #hud select {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 3px 0;
+  padding: 4px 6px;
+  background: #16222f;
+  color: inherit;
+  border: 1px solid #2a3a4d;
+  border-radius: 4px;
+}
+#hud input[type="number"] { width: 70px; }
+#hud input[type="range"] { width: 100%; }
+
+#hud button {
+  padding: 4px 8px;
+  background: #22364d;
+  color: inherit;
+  border: 1px solid #36506d;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#hud button:hover { background: #2c4663; }
+#hud button.active { background: #ff8800; border-color: #ff8800; color: #111; }
+#hud button.primary { width: 100%; margin-bottom: 6px; }
+
+.sensor-list { max-height: 180px; overflow-y: auto; margin-bottom: 6px; }
+.sensor { display: flex; gap: 4px; align-items: center; padding: 2px; border-radius: 4px; }
+.sensor.selected { background: #12394a; }
+.sensor input { flex: 1; min-width: 0; }
+.sensor .count { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; color: #ffb454; }
