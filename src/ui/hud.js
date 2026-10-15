@@ -37,7 +37,7 @@ function pickFile(accept) {
   });
 }
 
-export function createHud({ clock, params, sim, signals, sensors, setMode, getMode }) {
+export function createHud({ clock, params, sim, signals, sensors, setMode, getMode, focusSignal }) {
   const root = el('div', { id: 'hud' });
   document.body.append(root);
 
@@ -66,31 +66,55 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   const signalCount = el('div', { class: 'status' });
   const signalList = el('div', { class: 'signal-list', id: 'signal-list' });
   const signalInputs = new Map();
+  const signalEntries = new Map();
+  let selectedSignalId = null;
   signalList.hidden = true;
+  const setListOpen = (open) => {
+    signalList.hidden = !open;
+    signalToggle.textContent = open ? 'Ocultar semáforos' : 'Mostrar semáforos';
+    signalToggle.setAttribute('aria-expanded', String(open));
+  };
   const signalToggle = el('button', {
     textContent: 'Mostrar semáforos',
-    onclick: () => {
-      signalList.hidden = !signalList.hidden;
-      signalToggle.textContent = signalList.hidden ? 'Mostrar semáforos' : 'Ocultar semáforos';
-      signalToggle.setAttribute('aria-expanded', String(!signalList.hidden));
-    },
+    onclick: () => setListOpen(signalList.hidden),
   });
+  const selectSignal = (id) => {
+    selectedSignalId = id;
+    signalEntries.forEach((entry, key) => entry.classList.toggle('selected', key === id));
+  };
+  const revealSignal = (id) => {
+    selectSignal(id);
+    setListOpen(true);
+    signalEntries.get(id)?.scrollIntoView({ block: 'nearest' });
+  };
   signalToggle.setAttribute('aria-controls', 'signal-list');
   signalToggle.setAttribute('aria-expanded', 'false');
   const renderSignalList = () => {
     const activeSignals = signals.signals.filter((signal) => signal.active);
     signalCount.textContent = `Cruces configurables: ${activeSignals.length}`;
     signalInputs.clear();
+    signalEntries.clear();
     signalList.replaceChildren(...activeSignals.map((signal) => {
       const timing = signals.timing(signal, clock.simTime);
-      const heading = el('a', {
-        class: 'signal-id',
-        textContent: `OSM ${signal.id}`,
-        href: `https://www.openstreetmap.org/node/${signal.id}`,
-        target: '_blank',
-        rel: 'noopener noreferrer',
-        title: 'Abrir este nodo en OpenStreetMap',
-      });
+      const heading = el('div', { class: 'signal-head' },
+        el('button', {
+          class: 'signal-id',
+          textContent: `Semáforo ${signal.id}`,
+          title: 'Ir a este semáforo en el mapa',
+          onclick: () => {
+            selectSignal(signal.id);
+            focusSignal(signal);
+          },
+        }),
+        el('a', {
+          class: 'signal-osm',
+          textContent: 'OSM',
+          href: `https://www.openstreetmap.org/node/${signal.id}`,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          title: 'Abrir este nodo en OpenStreetMap',
+        }),
+      );
       const timeInput = (label, key, value, min, max, title) => {
         const input = el('input', {
           type: 'number', min, max, step: 1, value,
@@ -109,13 +133,16 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
       const greenB = timeInput('Verde B', 'greenB', timing.gB, 5, 180, 'Grupo de aproximaciones norte-sur, en segundos');
       const yellow = timeInput('Ámbar', 'yellow', timing.y, 1, 10, 'Duración del ámbar, en segundos');
       signalInputs.set(signal.id, { greenA: greenA.input, greenB: greenB.input, yellow: yellow.input });
-      return el('div', { class: 'signal-entry' }, heading,
+      const entry = el('div', { class: 'signal-entry' }, heading,
         el('div', { class: 'signal-timings' },
           greenA.element,
           greenB.element,
           yellow.element,
         ),
       );
+      entry.classList.toggle('selected', signal.id === selectedSignalId);
+      signalEntries.set(signal.id, entry);
+      return entry;
     }));
   };
   renderSignalList();
@@ -297,6 +324,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
 
   let lastUpdate = 0;
   return {
+    revealSignal,
     update(now) {
       if (now - lastUpdate < 250) return;
       lastUpdate = now;

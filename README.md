@@ -29,6 +29,7 @@ npm run preview     # Sirve localmente la versión de producción
 - Arrastrar con el botón derecho: desplazar la vista.
 - Rueda del ratón: acercar o alejar.
 - Pasar el puntero por un marcador de semáforo: mostrar su identificador OSM.
+- Hacer clic en un marcador de semáforo (fuera del modo sensor): abrir y resaltar su configuración en el panel.
 
 El panel de la izquierda contiene los controles del reloj, el tráfico, los semáforos y los sensores.
 
@@ -42,7 +43,7 @@ La simulación introduce variación aleatoria en las rutas, posiciones y velocid
 
 ## Semáforos
 
-La lista empieza plegada. Pulsa **Mostrar semáforos** para abrirla; el contador indica cuántos cruces configurables hay. Cada entrada muestra el ID OSM del cruce. El enlace abre el nodo correspondiente en OpenStreetMap.
+La lista empieza plegada. Pulsa **Mostrar semáforos** para abrirla; el contador indica cuántos cruces configurables hay. Cada entrada muestra el ID OSM del cruce. Al pulsar el ID, la cámara se desplaza hasta ese semáforo y lo señala con un anillo cian; el enlace **OSM** de al lado abre el nodo en OpenStreetMap. Al hacer clic en un semáforo del mapa, se despliega la lista y se resalta su entrada.
 
 Los semáforos OSM cercanos se agrupan como un único controlador (distancia máxima de agrupación: 45 m). El grupo se identifica con el ID OSM más bajo de sus nodos. Usa exactamente ese ID, tal como aparece en el panel o en el tooltip, como clave dentro de `signals`.
 

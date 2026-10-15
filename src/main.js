@@ -75,7 +75,25 @@ async function main() {
     if (m !== 'sensor') sensors.showGhost(0, 0, false);
     renderer.domElement.style.cursor = m === 'sensor' ? 'crosshair' : '';
   };
-  const hud = createHud({ clock, params, sim, signals, sensors, setMode, getMode: () => mode });
+  const signalMarker = new THREE.Mesh(
+    new THREE.RingGeometry(10, 13, 32).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x00e5ff, side: THREE.DoubleSide }),
+  );
+  signalMarker.visible = false;
+  scene.add(signalMarker);
+  const markSignal = (signal) => {
+    signalMarker.position.set(signal.x, 1, signal.z);
+    signalMarker.visible = true;
+  };
+  const focusSignal = (signal) => {
+    markSignal(signal);
+    const offset = camera.position.clone().sub(controls.target);
+    offset.setLength(Math.max(controls.minDistance, Math.min(offset.length(), 250)));
+    controls.target.set(signal.x, 0, signal.z);
+    camera.position.copy(controls.target).add(offset);
+    controls.update();
+  };
+  const hud = createHud({ clock, params, sim, signals, sensors, setMode, getMode: () => mode, focusSignal });
   const signalTooltip = document.createElement('div');
   signalTooltip.id = 'signal-tooltip';
   signalTooltip.hidden = true;
@@ -117,6 +135,16 @@ async function main() {
   renderer.domElement.addEventListener('pointerup', (ev) => {
     if (!down || ev.button !== 0 || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
     setPointer(ev);
+    if (mode !== 'sensor') {
+      const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
+      const id = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
+      const signal = id === undefined ? undefined : signals.signals.find((s) => s.id === id);
+      if (signal) {
+        markSignal(signal);
+        hud.revealSignal(signal.id);
+        return;
+      }
+    }
     const picked = sensors.pick(raycaster);
     if (picked) return sensors.select(picked);
     if (mode === 'sensor' && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {

@@ -91,7 +91,11 @@ html, body {
 
 .signal-list { max-height: 220px; overflow-y: auto; margin: 4px 0 8px; }
 .signal-entry { padding: 5px 4px; border-bottom: 1px solid #243244; }
-.signal-id { display: inline-block; margin-bottom: 3px; color: #8fb4dc; }
+.signal-entry.selected { background: #12394a; }
+.signal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+#hud button.signal-id { padding: 0; border: 0; background: none; color: #8fb4dc; text-decoration: underline; }
+#hud button.signal-id:hover { background: none; color: #bcd6f2; }
+.signal-osm { color: #9fb2c8; font-size: 11px; }
 .signal-timings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
 .signal-time { display: flex !important; flex-direction: column; gap: 2px; min-width: 0; color: #9fb2c8; font-size: 11px; }
 .signal-time input { width: 100% !important; min-width: 0; box-sizing: border-box; margin: 0 !important; padding: 3px 4px !important; }
