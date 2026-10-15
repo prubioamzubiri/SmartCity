@@ -107,6 +107,17 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
           }
         },
       }),
+      el('button', {
+        textContent: 'Descargar plantilla',
+        onclick: () => download(
+          'plantilla-semaforos.json',
+          JSON.stringify({
+            default: { green: CONFIG.signals.green, yellow: CONFIG.signals.yellow },
+            signals: {},
+          }, null, 2),
+          'application/json',
+        ),
+      }),
     ),
     planStatus,
   );
