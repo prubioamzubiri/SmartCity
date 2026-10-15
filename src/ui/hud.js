@@ -63,9 +63,57 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   const greenInput = el('input', { type: 'number', min: 5, max: 180, value: CONFIG.signals.green });
   const planStatus = el('div', { class: 'status' });
   const planUrl = el('input', { type: 'text', placeholder: 'URL del plan de semáforos (JSON)' });
+  const signalCount = el('div', { class: 'status' });
+  const signalList = el('div', { class: 'signal-list', id: 'signal-list' });
+  signalList.hidden = true;
+  const signalToggle = el('button', {
+    textContent: 'Mostrar semáforos',
+    onclick: () => {
+      signalList.hidden = !signalList.hidden;
+      signalToggle.textContent = signalList.hidden ? 'Mostrar semáforos' : 'Ocultar semáforos';
+      signalToggle.setAttribute('aria-expanded', String(!signalList.hidden));
+    },
+  });
+  signalToggle.setAttribute('aria-controls', 'signal-list');
+  signalToggle.setAttribute('aria-expanded', 'false');
+  const renderSignalList = () => {
+    const activeSignals = signals.signals.filter((signal) => signal.active);
+    signalCount.textContent = `Cruces configurables: ${activeSignals.length}`;
+    signalList.replaceChildren(...activeSignals.map((signal) => {
+      const timing = signals.timing(signal);
+      const heading = el('a', {
+        class: 'signal-id',
+        textContent: `OSM ${signal.id}`,
+        href: `https://www.openstreetmap.org/node/${signal.id}`,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        title: 'Abrir este nodo en OpenStreetMap',
+      });
+      const timeInput = (label, key, value, min, max, title) => el('label', {
+        class: 'signal-time',
+        title,
+      }, el('span', { textContent: label }), el('input', {
+        type: 'number', min, max, step: 1, value,
+        onchange: (event) => {
+          signals.setSignalTiming(signal.id, { [key]: Number(event.currentTarget.value) });
+          renderSignalList();
+        },
+      }));
+      return el('div', { class: 'signal-entry' }, heading,
+        el('div', { class: 'signal-timings' },
+          timeInput('Verde A', 'greenA', timing.gA, 5, 180, 'Grupo de aproximaciones este-oeste, en segundos'),
+          timeInput('Verde B', 'greenB', timing.gB, 5, 180, 'Grupo de aproximaciones norte-sur, en segundos'),
+          timeInput('Ámbar', 'yellow', timing.y, 1, 10, 'Duración del ámbar, en segundos'),
+        ),
+      );
+    }));
+  };
+  renderSignalList();
   const applyPlan = (plan, label) => {
     try {
       signals.setPlan(plan);
+      greenInput.value = signals.plan.default.green;
+      renderSignalList();
       planStatus.textContent = `Plan cargado: ${label}`;
     } catch (err) {
       planStatus.textContent = `Plan no válido: ${err.message}`;
@@ -78,9 +126,13 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
       textContent: 'Aplicar',
       onclick: () => {
         signals.setGlobalGreen(Number(greenInput.value) || CONFIG.signals.green);
+        renderSignalList();
         planStatus.textContent = `Verde global: ${greenInput.value} s`;
       },
     }),
+    signalCount,
+    signalToggle,
+    signalList,
     planUrl,
     el('div', { class: 'row' },
       el('button', {
@@ -117,6 +169,10 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
           }, null, 2),
           'application/json',
         ),
+      }),
+      el('button', {
+        textContent: 'Descargar plan actual',
+        onclick: () => download('plan-semaforos.json', JSON.stringify(signals.plan, null, 2), 'application/json'),
       }),
     ),
     planStatus,

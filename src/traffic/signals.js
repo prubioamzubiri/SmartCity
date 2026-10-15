@@ -17,6 +17,10 @@ export class SignalController {
     this.plan = { default: { green, yellow }, signals: {} };
   }
 
+  setSignalTiming(id, timing) {
+    this.plan.signals[id] = { ...(this.plan.signals[id] ?? {}), ...timing };
+  }
+
   // Formato: { default: {green, yellow}, signals: { "<osmId>": {green | greenA, greenB, yellow} } }
   setPlan(plan) {
     const d = plan.default ?? {};
@@ -89,5 +93,5 @@ export function createSignalViz(controller) {
     });
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   };
-  return { mesh, update };
+  return { mesh, update, signalIds: items.map(({ s }) => controller.signals[s].id) };
 }
