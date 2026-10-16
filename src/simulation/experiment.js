@@ -37,7 +37,8 @@ export class Experiment {
     this.samples = 0;
     this.activeSum = this.stoppedSum = this.speedSum = 0;
     this.snapshot = {
-      version: 1, simulationVersion: 1, dataOrigin: 'simulated', datasetId: this.datasetId,
+      version: 1, simulationVersion: 2, dataOrigin: 'simulated', datasetId: this.datasetId,
+      municipalSpeedLimits: structuredClone(this.sim.g.municipalContext ?? null),
       settings: structuredClone(settings), startSeconds: this.startTime,
       baseDate: new Date(CONFIG.sim.baseDate).toISOString(), stepSeconds: CONFIG.sim.step,
       traffic: structuredClone(CONFIG.traffic), cars: structuredClone(CONFIG.cars),

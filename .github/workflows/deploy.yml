@@ -28,6 +28,8 @@ jobs:
         run: npm ci
       - name: Generate city data from OpenStreetMap
         run: npm run fetch-osm
+      - name: Fetch official municipal mobility data
+        run: npm run fetch-municipal
       - name: Build
         run: npm run build
       - name: Upload Pages artifact

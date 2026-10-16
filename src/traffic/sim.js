@@ -186,7 +186,7 @@ export class TrafficSim {
     for (let i = 0; i < this.activeCount; i++) {
       const gap = this.freeGap(i);
       const e0 = this.edge[i];
-      const vmax = g.speed[e0] * this.factor[i];
+      const vmax = Math.min(g.speed[e0] * this.factor[i], g.speedCaps?.[e0] ?? Infinity);
       const safe = gap === Infinity ? vmax : Math.sqrt(2 * C.decel * Math.max(0, gap - C.minGap));
       const v = Math.max(0, Math.min(this.speed[i] + C.accel * dt, vmax, safe));
       this.speed[i] = v;

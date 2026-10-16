@@ -14,6 +14,7 @@ import { SensorManager } from './sensors/sensorManager.js';
 import { createHud } from './ui/hud.js';
 import { Experiment } from './simulation/experiment.js';
 import { createExperimentPanel } from './ui/experimentPanel.js';
+import { createMunicipalPanel } from './ui/municipalPanel.js';
 
 const loading = document.getElementById('loading');
 
@@ -90,7 +91,8 @@ async function main() {
     hud.update(performance.now(), true);
     experimentPanel.update();
   });
-  document.getElementById('hud').prepend(experimentPanel.panel);
+  const municipalPanel = createMunicipalPanel({ scene, graph, city: data, experiment, clock, sensors });
+  document.getElementById('hud').prepend(experimentPanel.panel, municipalPanel.panel);
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -117,6 +119,7 @@ async function main() {
     setPointer(ev);
     const picked = sensors.pick(raycaster);
     if (picked) return sensors.select(picked);
+    if (mode === 'navigate' && municipalPanel.pick(raycaster)) return;
     if (mode === 'sensor' && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
       const s = sensors.add(hitPoint.x, hitPoint.z);
       if (s) sensors.select(s.id);
@@ -162,6 +165,7 @@ async function main() {
     renderer.render(scene, camera);
     hud.update(now);
     experimentPanel.update();
+    municipalPanel.update();
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
