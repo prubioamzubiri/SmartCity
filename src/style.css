@@ -75,3 +75,8 @@ html, body {
 .sensor.selected { background: #12394a; }
 .sensor input { flex: 1; min-width: 0; }
 .sensor .count { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; color: #ffb454; }
+
+#hud .simulation-controls { border: 0; margin: 0; padding: 0; min-width: 0; }
+#hud button:disabled, #hud fieldset:disabled { opacity: 0.55; }
+#hud button:disabled { cursor: default; }
+#hud input[name="seed"] { width: 125px; }

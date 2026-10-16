@@ -56,3 +56,41 @@ npm run build
 
 Tests use Node's built-in test runner and synthetic road data; no browser,
 network, or downloaded city dataset is needed for the tests.
+
+## Reproducible experiments
+
+The **Experimentos** panel runs an educational traffic experiment from an empty
+vehicle population at 07:00 on the configured base date. Set the unsigned 32-bit
+seed, weekday/weekend demand profile, peak vehicle count (0–3000), duration
+(1–1440 simulated minutes), and global green time (5–180 seconds). Click
+**Iniciar / repetir** to reset vehicles and measurements while retaining sensor
+placements. Starting a run clears current records and the pending upload queue;
+automatic upload is turned off. Existing signal plans are replaced by the
+selected global timing. Traffic and sensor editing are locked during the run;
+clock buttons still allow pausing or changing playback speed.
+
+The run pauses automatically at the exact duration. **Detener** ends it early
+and marks the export as cancelled. **Exportar experimento JSON** downloads a
+snapshot containing the settings, model configuration, SHA-256 city-data
+identifier, sensor placements and IDs, completed measurement buckets, partial
+sensor buckets, and a summary. JSON is available even when no sensors are placed;
+place sensors before starting to collect crossing measurements. The existing
+CSV export contains only completed sensor buckets; use experiment JSON to retain
+its settings and any partial bucket. Speeds in partial buckets are accumulated
+in metres per second (`speedSum`); divide by the crossing count and multiply by
+3.6 to obtain the crossing-weighted average in km/h.
+
+Compare runs by keeping seed, dataset, sensor placements and bucket interval
+identical, then changing only the scenario or green time. The same settings and
+simulation version reproduce the same fixed-step trajectory regardless of
+playback speed. The city download can change between deployments; compare the
+dataset identifiers too. Re-enter the exported settings in the panel to repeat a
+run; importing an experiment JSON is not currently supported.
+
+Summary metrics are arithmetic means sampled after every 0.25-second physics
+step: active vehicles, stopped vehicles (speed below 0.5 m/s), and the fleet's
+average speed. Mean speed includes empty-population samples as zero and is not
+weighted by distance or vehicle count. Sensor crossings sum events across all
+sensors, so a vehicle may be counted more than once. Runs include initial
+population growth with no warm-up period. These simulated measurements are not
+calibrated real-world observations.
