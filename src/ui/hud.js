@@ -1,5 +1,5 @@
 import { CONFIG } from '../config.js';
-import { demandFactor, simDate } from '../traffic/demand.js';
+import { demandFactor, scenarioForTime, simDate } from '../traffic/demand.js';
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const SPEEDS = [
@@ -57,7 +57,16 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     oninput: () => (params.maxCars = Number(carsInput.value)),
   });
   const statsLabel = el('div', { class: 'stats' });
-  const trafficSection = section('Tráfico', el('label', {}, 'Coches en hora punta: ', carsLabel), carsInput, statsLabel);
+  const scenarioNames = { auto: 'Automático (calendario)', weekday: 'Laborable', weekend: 'Fin de semana' };
+  const scenarioSelect = el('select', {
+    onchange: () => (params.scenario = scenarioSelect.value),
+  }, ...Object.entries(scenarioNames).map(([value, textContent]) =>
+    el('option', { value, textContent, selected: value === params.scenario }),
+  ));
+  const scenarioLabel = el('div', { class: 'status' });
+  const trafficSection = section('Tráfico',
+    el('label', {}, 'Escenario: ', scenarioSelect), scenarioLabel,
+    el('label', {}, 'Coches en hora punta: ', carsLabel), carsInput, statsLabel);
 
   // Semáforos
   const greenInput = el('input', { type: 'number', min: 5, max: 180, value: CONFIG.signals.green });
@@ -205,8 +214,9 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
       clockLabel.textContent = `${WEEKDAYS[d.getUTCDay()]} ${hh}:${mm} (día ${day}) · ×${clock.scale}`;
       speedButtons.forEach((b, i) => b.classList.toggle('active', SPEEDS[i][1] === clock.scale));
       carsLabel.textContent = params.maxCars;
+      scenarioLabel.textContent = `Escenario activo: ${scenarioNames[scenarioForTime(clock.simTime, params.scenario)]}`;
       const st = sim.stats();
-      statsLabel.textContent = `Activos: ${st.active} · Parados: ${st.stopped} · Vel. media: ${st.avgKmh.toFixed(1)} km/h · Demanda: ${(demandFactor(clock.simTime) * 100).toFixed(0)}%`;
+      statsLabel.textContent = `Activos: ${st.active} · Parados: ${st.stopped} · Vel. media: ${st.avgKmh.toFixed(1)} km/h · Demanda: ${(demandFactor(clock.simTime, params.scenario) * 100).toFixed(0)}%`;
       modeButton.textContent = getMode() === 'sensor' ? 'Colocando sensores… (clic en una calle)' : 'Colocar sensores';
       modeButton.classList.toggle('active', getMode() === 'sensor');
       for (const s of sensors.sensors) {
