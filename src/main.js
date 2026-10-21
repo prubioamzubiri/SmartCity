@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { loadCity } from './city/loadCity.js';
 import { createBuildings } from './city/buildings.js';
 import { createRoads } from './city/roads.js';
-import { createParking, createParkingPicker, parkingStats, PARKING_TYPE_LABEL } from './city/parking.js';
+import { createParking, createParkingPicker, parkingStats, updateParkingOccupancy, PARKING_TYPE_LABEL } from './city/parking.js';
 import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
 import { SignalController, createSignalViz } from './traffic/signals.js';
@@ -134,12 +134,13 @@ async function main() {
     if (signalId !== undefined) {
       label = `Semáforo OSM: ${signalId}`;
     } else if (marker) {
-      const { name, capacity, fee } = marker.object.userData;
+      const { name, capacity, estimatedCapacity, fee, occupancy } = marker.object.userData;
+      const taken = Math.round(occupancy * capacity);
       label = [
         `Parking subterráneo público${name ? `: ${name}` : ''}`,
         fee ? 'de pago' : 'tarifa no indicada',
-        capacity ? `${capacity} plazas` : null,
-      ].filter(Boolean).join(' · ');
+        `ocupación simulada ${Math.round(occupancy * 100)}% (${taken}/${capacity}${estimatedCapacity ? ' est.' : ''} plazas)`,
+      ].join(' · ');
     } else if (parkingLayer.visible && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
       const lot = pickParking(hitPoint.x, hitPoint.z);
       if (lot) {
@@ -211,6 +212,7 @@ async function main() {
       if (acc >= STEP) acc = 0;
     }
     sim.render();
+    updateParkingOccupancy(parkingLayer, clock.simTime);
     signalViz.update();
     controls.update();
     renderer.render(scene, camera);

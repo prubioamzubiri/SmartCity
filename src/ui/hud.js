@@ -286,10 +286,12 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   const parkingStats = parking.stats
     ? `Parkings: ${parking.stats.lots} (capacidad indicada en OSM: ${parking.stats.capacity}) · subterráneos públicos (icono P): ${parking.stats.underground} · plazas sueltas: ${parking.stats.spaces} · tramos con aparcamiento en calle: ${parking.stats.street}`
     : 'Sin datos de aparcamiento. Ejecuta "npm run fetch-parking".';
+  const parkingOccupancy = el('div', { class: 'status' });
   const parkingSection = section(
     'Aparcamiento (OSM)',
     el('label', {}, parkingToggle, ' Mostrar aparcamientos'),
     el('div', { class: 'status', textContent: parkingStats }),
+    parkingOccupancy,
   );
 
   root.append(
@@ -359,6 +361,11 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
         rows.get(s.id)?.classList.toggle('selected', s.id === sensors.selectedId);
       }
       recordsLabel.textContent = `Registros: ${sensors.records.length} · intervalo en curso`;
+      const lots = parking.layer.userData.markers ?? [];
+      if (lots.length) {
+        const avg = lots.reduce((sum, m) => sum + m.userData.occupancy, 0) / lots.length;
+        parkingOccupancy.textContent = `Ocupación simulada de subterráneos (verde libre, rojo lleno): ${(avg * 100).toFixed(0)}%`;
+      }
       const signalDate = simDate(clock.simTime);
       for (const signal of signals.signals) {
         const inputs = signalInputs.get(signal.id);

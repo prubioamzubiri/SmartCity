@@ -1,11 +1,16 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CONFIG } from '../config.js';
+import { demandFactor } from '../traffic/demand.js';
 
 const COLORS = { area: 0x2f6fdd, underground: 0x7a4fd6, street: 0x4fc3f7, space: 0xffffff };
 const STREET_WIDTH = 2.2;
 const SPACE_SIZE = 2.5;
 const MARKER_SIZE = 36;
+const DEFAULT_UNDERGROUND_CAPACITY = 150;
+const FREE = new THREE.Color(0x2ecc71);
+const HALF = new THREE.Color(0xf1c40f);
+const FULL = new THREE.Color(0xe74c3c);
 
 function ringToPoints(flat) {
   const pts = [];
@@ -77,7 +82,7 @@ function streetGeometry(street) {
   return [g];
 }
 
-// Parkings (superficie y subterráneos), plazas sueltas y aparcamiento en calle de OSM.
+// Disco blanco con "P" negra: el color final lo da el tinte según la ocupación.
 function undergroundTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 128;
@@ -86,11 +91,7 @@ function undergroundTexture() {
   ctx.beginPath();
   ctx.arc(64, 64, 60, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#7a4fd6';
-  ctx.beginPath();
-  ctx.arc(64, 64, 50, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#111111';
   ctx.font = 'bold 76px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -100,14 +101,33 @@ function undergroundTexture() {
 
 // Un icono "P" por cada parking subterráneo de uso público, visible desde lejos.
 function undergroundMarkers(list) {
-  const material = new THREE.SpriteMaterial({ map: undergroundTexture(), depthWrite: false });
-  return list.map(([x, z, capacity, fee, name]) => {
-    const sprite = new THREE.Sprite(material);
+  const map = undergroundTexture();
+  return list.map(([x, z, capacity, fee, name], i) => {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, depthWrite: false }));
     sprite.scale.set(MARKER_SIZE, MARKER_SIZE, 1);
     sprite.position.set(x, MARKER_SIZE, z);
-    sprite.userData = { capacity, fee: !!fee, name };
+    sprite.userData = {
+      capacity: capacity || DEFAULT_UNDERGROUND_CAPACITY,
+      estimatedCapacity: !capacity,
+      fee: !!fee,
+      name,
+      bias: 0.85 + 0.3 * ((i * 0.618034) % 1),
+      occupancy: 0,
+    };
     return sprite;
   });
+}
+
+// Ocupación simulada (no es un dato real de OSM): sigue la curva de demanda de la ciudad.
+export function updateParkingOccupancy(group, simTime) {
+  const demand = demandFactor(simTime);
+  for (const sprite of group.userData.markers ?? []) {
+    const d = sprite.userData;
+    d.occupancy = Math.min(1, Math.max(0.05, (0.15 + 0.8 * demand) * d.bias));
+    const color = sprite.material.color;
+    if (d.occupancy < 0.5) color.lerpColors(FREE, HALF, d.occupancy / 0.5);
+    else color.lerpColors(HALF, FULL, (d.occupancy - 0.5) / 0.5);
+  }
 }
 
 export function createParking(data) {
