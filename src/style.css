@@ -57,6 +57,8 @@ html, body {
 #hud .row { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
 #hud .clock { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
 #hud .stats, #hud .status, #hud .help { color: #9fb2c8; font-size: 12px; margin-top: 4px; }
+#hud .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; color: #9fb2c8; font-size: 12px; margin-top: 6px; }
+#hud .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
 
 #hud input[type="text"], #hud input[type="number"], #hud select {
   width: 100%;

@@ -287,11 +287,21 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     ? `Parkings: ${parking.stats.lots} (capacidad indicada en OSM: ${parking.stats.capacity}) · subterráneos públicos (icono P): ${parking.stats.underground} · plazas sueltas: ${parking.stats.spaces} · tramos con aparcamiento en calle: ${parking.stats.street}`
     : 'Sin datos de aparcamiento. Ejecuta "npm run fetch-parking".';
   const parkingOccupancy = el('div', { class: 'status' });
+  const legendItem = (color, text) => el('span', {}, el('i', { style: `background:${color}` }), text);
+  const parkingLegend = el('div', { class: 'legend' },
+    legendItem('#2f6fdd', 'Parking en superficie'),
+    legendItem('#7a4fd6', 'Área subterránea'),
+    legendItem('#4fc3f7', 'Aparcamiento en calle'),
+    legendItem('#ffffff', 'Plaza individual'),
+    legendItem('#2ecc71', 'P subterráneo libre'),
+    legendItem('#e74c3c', 'P subterráneo lleno'),
+  );
   const parkingSection = section(
     'Aparcamiento (OSM)',
     el('label', {}, parkingToggle, ' Mostrar aparcamientos'),
     el('div', { class: 'status', textContent: parkingStats }),
     parkingOccupancy,
+    parkingLegend,
   );
 
   root.append(
