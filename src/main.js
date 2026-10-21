@@ -5,6 +5,7 @@ import { CONFIG } from './config.js';
 import { loadCity } from './city/loadCity.js';
 import { createBuildings } from './city/buildings.js';
 import { createRoads } from './city/roads.js';
+import { createParking, parkingStats } from './city/parking.js';
 import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
 import { SignalController, createSignalViz } from './traffic/signals.js';
@@ -42,6 +43,8 @@ async function main() {
   scene.add(createWater(data));
   scene.add(createBuildings(data));
   scene.add(createRoads(data));
+  const parkingLayer = createParking(data);
+  scene.add(parkingLayer);
 
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 5, 40000);
   const center = new THREE.Vector3(0, 0, 0); // centro de Donostia (origen de la proyección)
@@ -93,7 +96,10 @@ async function main() {
     camera.position.copy(controls.target).add(offset);
     controls.update();
   };
-  const hud = createHud({ clock, params, sim, signals, sensors, setMode, getMode: () => mode, focusSignal });
+  const hud = createHud({
+    clock, params, sim, signals, sensors, setMode, getMode: () => mode, focusSignal,
+    parking: { layer: parkingLayer, stats: parkingStats(data) },
+  });
   const signalTooltip = document.createElement('div');
   signalTooltip.id = 'signal-tooltip';
   signalTooltip.hidden = true;

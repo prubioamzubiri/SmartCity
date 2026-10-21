@@ -37,7 +37,7 @@ function pickFile(accept) {
   });
 }
 
-export function createHud({ clock, params, sim, signals, sensors, setMode, getMode, focusSignal }) {
+export function createHud({ clock, params, sim, signals, sensors, setMode, getMode, focusSignal, parking }) {
   const root = el('div', { id: 'hud' });
   document.body.append(root);
 
@@ -278,9 +278,23 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     sendStatus,
   );
 
+  // Aparcamiento
+  const parkingToggle = el('input', {
+    type: 'checkbox', checked: true,
+    onchange: () => (parking.layer.visible = parkingToggle.checked),
+  });
+  const parkingStats = parking.stats
+    ? `Parkings: ${parking.stats.lots} · plazas sueltas: ${parking.stats.spaces} · tramos con aparcamiento en calle: ${parking.stats.street}`
+    : 'Sin datos de aparcamiento. Ejecuta "npm run fetch-parking".';
+  const parkingSection = section(
+    'Aparcamiento (OSM)',
+    el('label', {}, parkingToggle, ' Mostrar aparcamientos'),
+    el('div', { class: 'status', textContent: parkingStats }),
+  );
+
   root.append(
     el('h2', {}, 'SmartCity Donostia'),
-    clockSection, trafficSection, signalSection, sensorSection,
+    clockSection, trafficSection, signalSection, sensorSection, parkingSection,
     el('p', { class: 'help' }, 'Ratón: arrastrar = girar, derecho = mover, rueda = zoom. Esc: salir del modo sensor. Supr: borrar sensor seleccionado.'),
   );
 

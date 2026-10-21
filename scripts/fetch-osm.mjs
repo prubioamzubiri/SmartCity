@@ -276,9 +276,80 @@ async function fetchWater(bounds) {
   return { polygons, lines };
 }
 
+const NO_PARKING = new Set(['no', 'none', 'separate', 'no_parking', 'no_stopping', 'no_standing']);
+const PARKING_TYPE = { multi_storey: 1, underground: 2, rooftop: 1 };
+
+// Valor de aparcamiento de un lado (left/right) con los esquemas parking:lane:* y parking:*.
+function streetParkingSide(tags, side) {
+  const v = tags[`parking:lane:${side}`] ?? tags[`parking:${side}`] ?? tags['parking:lane:both'] ?? tags['parking:both'];
+  return v !== undefined && !NO_PARKING.has(v);
+}
+
+const centroid = (pts) => {
+  let x = 0, z = 0;
+  for (const p of pts) { x += p.x; z += p.z; }
+  return [round1(x / pts.length), round1(z / pts.length)];
+};
+
+// Parkings (áreas y puntos), plazas sueltas y aparcamiento en calle (lado de la vía).
+async function fetchParking() {
+  const filter = '^(' + Object.keys(ROAD_CLASS).join('|') + ')$';
+  const json = await overpass(
+    `[out:json][timeout:300];${AREA}(` +
+      `nwr["amenity"="parking"](area.city);nwr["amenity"="parking_space"](area.city);` +
+      `way["highway"~"${filter}"][~"^parking(:lane)?:(left|right|both)$"~"."](area.city););out geom;`,
+  );
+  const toPts = (geometry) => geometry.map((g) => {
+    const [x, z] = project(g.lat, g.lon);
+    return { x, z, key: `${g.lat},${g.lon}` };
+  });
+
+  const areas = []; // [capacidad, tipo, anillo plano]
+  const points = []; // x, z de parkings en nodo
+  const spaces = []; // x, z de plazas individuales
+  const street = []; // [clase, lado (1 derecha, -1 izquierda), ...coords planas]
+
+  for (const el of json.elements) {
+    const tags = el.tags || {};
+    if (tags.highway) {
+      if (el.type !== 'way' || !el.geometry || tags.area === 'yes') continue;
+      const flatPts = flat(toPts(el.geometry));
+      for (const [side, sign] of [['right', 1], ['left', -1]]) {
+        if (streetParkingSide(tags, side)) street.push([ROAD_CLASS[tags.highway], sign, ...flatPts]);
+      }
+      continue;
+    }
+    if (tags.access === 'private' || tags.access === 'no') continue;
+    if (tags.amenity === 'parking_space') {
+      if (el.type === 'node') spaces.push(...project(el.lat, el.lon).map(round1));
+      else if (el.type === 'way' && el.geometry) spaces.push(...centroid(toPts(el.geometry)));
+      continue;
+    }
+    const capacity = parseInt(tags.capacity, 10) || 0;
+    const type = PARKING_TYPE[tags.parking] ?? 0;
+    if (el.type === 'node') {
+      points.push(...project(el.lat, el.lon).map(round1));
+    } else if (el.type === 'way' && el.geometry) {
+      const pts = toPts(el.geometry);
+      if (pts.length > 3 && pts[0].key === pts[pts.length - 1].key) areas.push([capacity, type, flat(pts)]);
+      else if (pts.length) points.push(...centroid(pts));
+    } else if (el.type === 'relation' && el.members) {
+      const outer = el.members.filter((m) => m.type === 'way' && m.role !== 'inner' && m.geometry).map((m) => toPts(m.geometry));
+      for (const ring of assemble(outer).rings) areas.push([capacity, type, flat(ring)]);
+    }
+  }
+  console.log(`Aparcamiento: ${areas.length} áreas, ${points.length / 2} puntos, ${spaces.length / 2} plazas, ${street.length} lados de calle`);
+  return { areas, points, spaces, street };
+}
+
 await mkdir('public/data', { recursive: true });
 
-if (process.argv.includes('--water-only')) {
+if (process.argv.includes('--parking-only')) {
+  const city = JSON.parse(await readFile('public/data/city.json', 'utf8'));
+  city.parking = await fetchParking();
+  await writeFile('public/data/city.json', JSON.stringify(city));
+  console.log('Actualizado el aparcamiento en public/data/city.json');
+} else if (process.argv.includes('--water-only')) {
   const city = JSON.parse(await readFile('public/data/city.json', 'utf8'));
   city.water = await fetchWater(city.bounds);
   await writeFile('public/data/city.json', JSON.stringify(city));
@@ -304,6 +375,7 @@ if (process.argv.includes('--water-only')) {
     ways: roads.ways,
     signals: roads.signals,
     water: await fetchWater(bounds),
+    parking: await fetchParking(),
   };
   await writeFile('public/data/city.json', JSON.stringify(city));
   console.log('Generado public/data/city.json');
