@@ -60,7 +60,7 @@ async function main() {
   scene.add(signalViz.mesh);
 
   const clock = { simTime: CONFIG.sim.startSeconds, scale: 60 };
-  const params = { maxCars: CONFIG.cars.initialMax };
+  const params = { maxCars: CONFIG.cars.initialMax, scenario: CONFIG.traffic.scenario };
 
   let sensors;
   const sim = new TrafficSim(graph, signals, (sensor, dir, speed) => sensors.recordCrossing(sensor, dir, speed));
@@ -177,7 +177,7 @@ async function main() {
       while (acc >= STEP && steps < CONFIG.sim.maxStepsPerFrame) {
         clock.simTime += STEP;
         signals.update(clock.simTime);
-        sim.setTarget(params.maxCars * demandFactor(clock.simTime));
+        sim.setTarget(params.maxCars * demandFactor(clock.simTime, params.scenario));
         sim.step(STEP);
         sensors.tick(clock.simTime);
         acc -= STEP;
