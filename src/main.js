@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { loadCity } from './city/loadCity.js';
 import { createBuildings } from './city/buildings.js';
 import { createRoads } from './city/roads.js';
-import { createParking, createParkingPicker, parkingStats, updateParkingOccupancy, PARKING_TYPE_LABEL } from './city/parking.js';
+import { createParking, createParkingPicker, lotOccupancy, parkingStats, updateParkingOccupancy, PARKING_TYPE_LABEL } from './city/parking.js';
 import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
 import { SignalController, createSignalViz } from './traffic/signals.js';
@@ -144,8 +144,14 @@ async function main() {
     } else if (parkingLayer.visible && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
       const lot = pickParking(hitPoint.x, hitPoint.z);
       if (lot) {
-        const capacity = lot.capacity ? `${lot.capacity} plazas` : 'capacidad desconocida';
-        label = `Parking ${PARKING_TYPE_LABEL[lot.type]} · ${capacity}`;
+        label = `Parking ${PARKING_TYPE_LABEL[lot.type]}`;
+        if (lot.type === 2) {
+          label += lot.estimated ? ' · capacidad desconocida' : ` · ${lot.capacity} plazas`;
+        } else {
+          const occupancy = lotOccupancy(lot, clock.simTime);
+          const places = `${Math.round(occupancy * lot.capacity)}/${lot.capacity}${lot.estimated ? ' est.' : ''}`;
+          label += ` · ocupación simulada ${Math.round(occupancy * 100)}% (${places} plazas)`;
+        }
       }
     }
     if (!label) {

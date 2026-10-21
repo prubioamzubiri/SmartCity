@@ -289,12 +289,11 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   const parkingOccupancy = el('div', { class: 'status' });
   const legendItem = (color, text) => el('span', {}, el('i', { style: `background:${color}` }), text);
   const parkingLegend = el('div', { class: 'legend' },
-    legendItem('#2f6fdd', 'Parking en superficie'),
+    legendItem('#2ecc71', 'Parking libre (simulado)'),
+    legendItem('#e74c3c', 'Parking lleno (simulado)'),
     legendItem('#7a4fd6', 'Área subterránea'),
     legendItem('#4fc3f7', 'Aparcamiento en calle'),
     legendItem('#ffffff', 'Plaza individual'),
-    legendItem('#2ecc71', 'P subterráneo libre'),
-    legendItem('#e74c3c', 'P subterráneo lleno'),
   );
   const parkingSection = section(
     'Aparcamiento (OSM)',
@@ -374,7 +373,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
       const lots = parking.layer.userData.markers ?? [];
       if (lots.length) {
         const avg = lots.reduce((sum, m) => sum + m.userData.occupancy, 0) / lots.length;
-        parkingOccupancy.textContent = `Ocupación simulada de subterráneos (verde libre, rojo lleno): ${(avg * 100).toFixed(0)}%`;
+        parkingOccupancy.textContent = `Ocupación simulada de los P subterráneos: ${(avg * 100).toFixed(0)}%`;
       }
       const signalDate = simDate(clock.simTime);
       for (const signal of signals.signals) {

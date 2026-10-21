@@ -11,6 +11,9 @@ const DEFAULT_UNDERGROUND_CAPACITY = 150;
 const FREE = new THREE.Color(0x2ecc71);
 const HALF = new THREE.Color(0xf1c40f);
 const FULL = new THREE.Color(0xe74c3c);
+const SPACE_AREA = 25; // m² por plaza para estimar la capacidad en superficie
+const BUCKET_SECONDS = 300;
+const tmpColor = new THREE.Color();
 
 function ringToPoints(flat) {
   const pts = [];
@@ -27,11 +30,11 @@ function areaGeometry(flat) {
   return out;
 }
 
-function flatMesh(geometries, color, y) {
+function flatMesh(geometries, color, y, vertexColors = false) {
   if (!geometries.length) return null;
   const mesh = new THREE.Mesh(
     mergeGeometries(geometries),
-    new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }),
+    new THREE.MeshBasicMaterial({ color, vertexColors, side: THREE.DoubleSide }),
   );
   mesh.position.y = y;
   mesh.frustumCulled = false;
@@ -119,15 +122,65 @@ function undergroundMarkers(list) {
 }
 
 // Ocupación simulada (no es un dato real de OSM): sigue la curva de demanda de la ciudad.
+const occupancyAt = (demand, bias) => Math.min(1, Math.max(0.05, (0.15 + 0.8 * demand) * bias));
+
+function setRamp(color, occupancy) {
+  if (occupancy < 0.5) color.lerpColors(FREE, HALF, occupancy / 0.5);
+  else color.lerpColors(HALF, FULL, (occupancy - 0.5) / 0.5);
+}
+
+function ringArea(ring) {
+  let a = 0;
+  for (let i = 0; i < ring.length; i += 2) {
+    const j = (i + 2) % ring.length;
+    a += ring[i] * ring[j + 1] - ring[j] * ring[i + 1];
+  }
+  return Math.abs(a) / 2;
+}
+
+const lotCache = new WeakMap();
+
+// Áreas de parking con capacidad (estimada si OSM no la indica), sesgo de ocupación y caja envolvente.
+function lotsOf(data) {
+  let lots = lotCache.get(data);
+  if (lots) return lots;
+  lots = (data.parking?.areas ?? []).map(([capacity, type, ring], i) => {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (let k = 0; k < ring.length; k += 2) {
+      minX = Math.min(minX, ring[k]); maxX = Math.max(maxX, ring[k]);
+      minZ = Math.min(minZ, ring[k + 1]); maxZ = Math.max(maxZ, ring[k + 1]);
+    }
+    return {
+      type, ring, minX, maxX, minZ, maxZ,
+      capacity: capacity || Math.max(4, Math.round(ringArea(ring) / SPACE_AREA)),
+      estimated: !capacity,
+      bias: 0.7 + 0.6 * ((i * 0.618034) % 1),
+    };
+  });
+  lotCache.set(data, lots);
+  return lots;
+}
+
+export const lotOccupancy = (lot, simTime) => occupancyAt(demandFactor(simTime), lot.bias);
+
 export function updateParkingOccupancy(group, simTime) {
+  const bucket = Math.floor(simTime / BUCKET_SECONDS);
+  if (group.userData.bucket === bucket) return;
+  group.userData.bucket = bucket;
   const demand = demandFactor(simTime);
   for (const sprite of group.userData.markers ?? []) {
     const d = sprite.userData;
-    d.occupancy = Math.min(1, Math.max(0.05, (0.15 + 0.8 * demand) * d.bias));
-    const color = sprite.material.color;
-    if (d.occupancy < 0.5) color.lerpColors(FREE, HALF, d.occupancy / 0.5);
-    else color.lerpColors(HALF, FULL, (d.occupancy - 0.5) / 0.5);
+    d.occupancy = occupancyAt(demand, d.bias);
+    setRamp(sprite.material.color, d.occupancy);
   }
+  const surface = group.userData.surface;
+  if (!surface) return;
+  const colors = surface.mesh.geometry.getAttribute('color');
+  for (const { bias, vertexStart, vertexCount } of surface.lots) {
+    setRamp(tmpColor, occupancyAt(demand, bias));
+    for (let v = 0; v < vertexCount; v++) colors.setXYZ(vertexStart + v, tmpColor.r, tmpColor.g, tmpColor.b);
+  }
+  colors.needsUpdate = true;
 }
 
 export function createParking(data) {
@@ -136,15 +189,28 @@ export function createParking(data) {
   if (!parking) return group;
 
   const surface = [];
+  const surfaceLots = [];
   const underground = [];
-  for (const [, type, ring] of parking.areas) {
-    if (ring.length < 6) continue;
-    (type === 2 ? underground : surface).push(areaGeometry(ring));
+  let vertexStart = 0;
+  for (const lot of lotsOf(data)) {
+    if (lot.ring.length < 6) continue;
+    const g = areaGeometry(lot.ring);
+    if (lot.type === 2) {
+      underground.push(g);
+      continue;
+    }
+    const vertexCount = g.getAttribute('position').count;
+    g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(vertexCount * 3).fill(1), 3));
+    surface.push(g);
+    surfaceLots.push({ bias: lot.bias, vertexStart, vertexCount });
+    vertexStart += vertexCount;
   }
-  if (parking.points.length) surface.push(squares(parking.points, 14));
 
+  const surfaceMesh = flatMesh(surface, 0xffffff, 0.25, true);
+  if (surfaceMesh) group.userData.surface = { mesh: surfaceMesh, lots: surfaceLots };
   const layers = [
-    flatMesh(surface, COLORS.area, 0.25),
+    surfaceMesh,
+    flatMesh(parking.points.length ? [squares(parking.points, 14)] : [], COLORS.area, 0.25),
     flatMesh(underground, COLORS.underground, 0.24),
     flatMesh(streetGeometry(parking.street), COLORS.street, 0.3),
     flatMesh(parking.spaces.length ? [squares(parking.spaces, SPACE_SIZE)] : [], COLORS.space, 0.35),
@@ -159,14 +225,7 @@ export const PARKING_TYPE_LABEL = ['en superficie', 'en altura', 'subterráneo']
 
 // Devuelve el parking que contiene el punto (x, z), o null.
 export function createParkingPicker(data) {
-  const lots = (data.parking?.areas ?? []).map(([capacity, type, ring]) => {
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-    for (let i = 0; i < ring.length; i += 2) {
-      minX = Math.min(minX, ring[i]); maxX = Math.max(maxX, ring[i]);
-      minZ = Math.min(minZ, ring[i + 1]); maxZ = Math.max(maxZ, ring[i + 1]);
-    }
-    return { capacity, type, ring, minX, maxX, minZ, maxZ };
-  });
+  const lots = lotsOf(data);
   const contains = (ring, x, z) => {
     let inside = false;
     for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
