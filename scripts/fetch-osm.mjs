@@ -278,6 +278,10 @@ async function fetchWater(bounds) {
 
 const NO_PARKING = new Set(['no', 'none', 'separate', 'no_parking', 'no_stopping', 'no_standing']);
 const PARKING_TYPE = { multi_storey: 1, underground: 2, rooftop: 1 };
+const RESTRICTED_ACCESS = new Set(['private', 'no', 'permit', 'customers', 'residents', 'delivery']);
+
+const isUnderground = (tags) =>
+  tags.parking === 'underground' || tags.location === 'underground' || parseInt(tags.layer, 10) < 0;
 
 // Valor de aparcamiento de un lado (left/right) con los esquemas parking:lane:* y parking:*.
 function streetParkingSide(tags, side) {
@@ -308,6 +312,7 @@ async function fetchParking() {
   const points = []; // x, z de parkings en nodo
   const spaces = []; // x, z de plazas individuales
   const street = []; // [clase, lado (1 derecha, -1 izquierda), ...coords planas]
+  const underground = []; // [x, z, capacidad, de pago (1/0), nombre] de parkings subterráneos de uso público
 
   for (const el of json.elements) {
     const tags = el.tags || {};
@@ -326,20 +331,34 @@ async function fetchParking() {
       continue;
     }
     const capacity = parseInt(tags.capacity, 10) || 0;
-    const type = PARKING_TYPE[tags.parking] ?? 0;
+    const type = isUnderground(tags) ? 2 : (PARKING_TYPE[tags.parking] ?? 0);
+    const markUnderground = (x, z) => {
+      if (type === 2 && !RESTRICTED_ACCESS.has(tags.access)) {
+        underground.push([x, z, capacity, tags.fee === 'yes' ? 1 : 0, tags.name ?? '']);
+      }
+    };
     if (el.type === 'node') {
-      points.push(...project(el.lat, el.lon).map(round1));
+      const [x, z] = project(el.lat, el.lon).map(round1);
+      if (type === 2) markUnderground(x, z);
+      else points.push(x, z);
     } else if (el.type === 'way' && el.geometry) {
       const pts = toPts(el.geometry);
-      if (pts.length > 3 && pts[0].key === pts[pts.length - 1].key) areas.push([capacity, type, flat(pts)]);
-      else if (pts.length) points.push(...centroid(pts));
+      const closed = pts.length > 3 && pts[0].key === pts[pts.length - 1].key;
+      if (closed) areas.push([capacity, type, flat(pts)]);
+      if (pts.length) {
+        const c = centroid(pts);
+        if (type === 2) markUnderground(...c);
+        else if (!closed) points.push(...c);
+      }
     } else if (el.type === 'relation' && el.members) {
       const outer = el.members.filter((m) => m.type === 'way' && m.role !== 'inner' && m.geometry).map((m) => toPts(m.geometry));
-      for (const ring of assemble(outer).rings) areas.push([capacity, type, flat(ring)]);
+      const rings = assemble(outer).rings;
+      for (const ring of rings) areas.push([capacity, type, flat(ring)]);
+      if (rings.length) markUnderground(...centroid(rings[0]));
     }
   }
-  console.log(`Aparcamiento: ${areas.length} áreas, ${points.length / 2} puntos, ${spaces.length / 2} plazas, ${street.length} lados de calle`);
-  return { areas, points, spaces, street };
+  console.log(`Aparcamiento: ${areas.length} áreas, ${points.length / 2} puntos, ${spaces.length / 2} plazas, ${street.length} lados de calle, ${underground.length} subterráneos públicos`);
+  return { areas, points, spaces, street, underground };
 }
 
 await mkdir('public/data', { recursive: true });

@@ -284,7 +284,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     onchange: () => (parking.layer.visible = parkingToggle.checked),
   });
   const parkingStats = parking.stats
-    ? `Parkings: ${parking.stats.lots} · plazas sueltas: ${parking.stats.spaces} · tramos con aparcamiento en calle: ${parking.stats.street}`
+    ? `Parkings: ${parking.stats.lots} (capacidad indicada en OSM: ${parking.stats.capacity}) · subterráneos públicos (icono P): ${parking.stats.underground} · plazas sueltas: ${parking.stats.spaces} · tramos con aparcamiento en calle: ${parking.stats.street}`
     : 'Sin datos de aparcamiento. Ejecuta "npm run fetch-parking".';
   const parkingSection = section(
     'Aparcamiento (OSM)',

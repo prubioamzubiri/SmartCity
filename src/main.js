@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { loadCity } from './city/loadCity.js';
 import { createBuildings } from './city/buildings.js';
 import { createRoads } from './city/roads.js';
-import { createParking, parkingStats } from './city/parking.js';
+import { createParking, createParkingPicker, parkingStats, PARKING_TYPE_LABEL } from './city/parking.js';
 import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
 import { SignalController, createSignalViz } from './traffic/signals.js';
@@ -45,6 +45,7 @@ async function main() {
   scene.add(createRoads(data));
   const parkingLayer = createParking(data);
   scene.add(parkingLayer);
+  const pickParking = createParkingPicker(data);
 
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 5, 40000);
   const center = new THREE.Vector3(0, 0, 0); // centro de Donostia (origen de la proyección)
@@ -128,11 +129,29 @@ async function main() {
     }
     const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
     const signalId = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
-    if (signalId === undefined) {
+    let label;
+    const marker = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
+    if (signalId !== undefined) {
+      label = `Semáforo OSM: ${signalId}`;
+    } else if (marker) {
+      const { name, capacity, fee } = marker.object.userData;
+      label = [
+        `Parking subterráneo público${name ? `: ${name}` : ''}`,
+        fee ? 'de pago' : 'tarifa no indicada',
+        capacity ? `${capacity} plazas` : null,
+      ].filter(Boolean).join(' · ');
+    } else if (parkingLayer.visible && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
+      const lot = pickParking(hitPoint.x, hitPoint.z);
+      if (lot) {
+        const capacity = lot.capacity ? `${lot.capacity} plazas` : 'capacidad desconocida';
+        label = `Parking ${PARKING_TYPE_LABEL[lot.type]} · ${capacity}`;
+      }
+    }
+    if (!label) {
       signalTooltip.hidden = true;
       return;
     }
-    signalTooltip.textContent = `Semáforo OSM: ${signalId}`;
+    signalTooltip.textContent = label;
     signalTooltip.style.left = `${Math.max(8, Math.min(ev.clientX + 14, window.innerWidth - 220))}px`;
     signalTooltip.style.top = `${Math.max(8, Math.min(ev.clientY + 14, window.innerHeight - 48))}px`;
     signalTooltip.hidden = false;

@@ -5,6 +5,7 @@ import { CONFIG } from '../config.js';
 const COLORS = { area: 0x2f6fdd, underground: 0x7a4fd6, street: 0x4fc3f7, space: 0xffffff };
 const STREET_WIDTH = 2.2;
 const SPACE_SIZE = 2.5;
+const MARKER_SIZE = 36;
 
 function ringToPoints(flat) {
   const pts = [];
@@ -77,6 +78,38 @@ function streetGeometry(street) {
 }
 
 // Parkings (superficie y subterráneos), plazas sueltas y aparcamiento en calle de OSM.
+function undergroundTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(64, 64, 60, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#7a4fd6';
+  ctx.beginPath();
+  ctx.arc(64, 64, 50, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 76px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('P', 64, 68);
+  return new THREE.CanvasTexture(canvas);
+}
+
+// Un icono "P" por cada parking subterráneo de uso público, visible desde lejos.
+function undergroundMarkers(list) {
+  const material = new THREE.SpriteMaterial({ map: undergroundTexture(), depthWrite: false });
+  return list.map(([x, z, capacity, fee, name]) => {
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(MARKER_SIZE, MARKER_SIZE, 1);
+    sprite.position.set(x, MARKER_SIZE, z);
+    sprite.userData = { capacity, fee: !!fee, name };
+    return sprite;
+  });
+}
+
 export function createParking(data) {
   const group = new THREE.Group();
   const parking = data.parking;
@@ -97,12 +130,38 @@ export function createParking(data) {
     flatMesh(parking.spaces.length ? [squares(parking.spaces, SPACE_SIZE)] : [], COLORS.space, 0.35),
   ];
   for (const mesh of layers) if (mesh) group.add(mesh);
+  group.userData.markers = undergroundMarkers(parking.underground ?? []);
+  group.add(...group.userData.markers);
   return group;
+}
+
+export const PARKING_TYPE_LABEL = ['en superficie', 'en altura', 'subterráneo'];
+
+// Devuelve el parking que contiene el punto (x, z), o null.
+export function createParkingPicker(data) {
+  const lots = (data.parking?.areas ?? []).map(([capacity, type, ring]) => {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (let i = 0; i < ring.length; i += 2) {
+      minX = Math.min(minX, ring[i]); maxX = Math.max(maxX, ring[i]);
+      minZ = Math.min(minZ, ring[i + 1]); maxZ = Math.max(maxZ, ring[i + 1]);
+    }
+    return { capacity, type, ring, minX, maxX, minZ, maxZ };
+  });
+  const contains = (ring, x, z) => {
+    let inside = false;
+    for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
+      const ax = ring[i], az = ring[i + 1], bx = ring[j], bz = ring[j + 1];
+      if (az > z !== bz > z && x < ((bx - ax) * (z - az)) / (bz - az) + ax) inside = !inside;
+    }
+    return inside;
+  };
+  return (x, z) =>
+    lots.find((l) => x >= l.minX && x <= l.maxX && z >= l.minZ && z <= l.maxZ && contains(l.ring, x, z)) ?? null;
 }
 
 export function parkingStats(data) {
   const p = data.parking;
   if (!p) return null;
   const capacity = p.areas.reduce((sum, a) => sum + a[0], 0);
-  return { lots: p.areas.length + p.points.length / 2, spaces: p.spaces.length / 2, street: p.street.length, capacity };
+  return { lots: p.areas.length + p.points.length / 2, spaces: p.spaces.length / 2, street: p.street.length, capacity, underground: p.underground?.length ?? 0 };
 }
