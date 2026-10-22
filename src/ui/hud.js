@@ -37,7 +37,7 @@ function pickFile(accept) {
   });
 }
 
-export function createHud({ clock, params, sim, signals, sensors, setMode, getMode, focusSignal }) {
+export function createHud({ clock, params, sim, signals, sensors, setMode, getMode, experiment }) {
   const root = el('div', { id: 'hud' });
   document.body.append(root);
 
@@ -156,6 +156,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   };
   renderSignalList();
   const applyPlan = (plan, label) => {
+    if (experiment.status === 'running') return;
     try {
       signals.setPlan(plan);
       signals.update(clock.simTime);
@@ -199,7 +200,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
         textContent: 'Cargar archivo',
         onclick: async () => {
           const text = await pickFile('.json,application/json');
-          if (text === null) return;
+          if (text === null || experiment.status === 'running') return;
           try {
             applyPlan(JSON.parse(text), 'archivo');
           } catch (err) {
@@ -272,7 +273,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
         textContent: 'Importar sensores',
         onclick: async () => {
           const text = await pickFile('.json,application/json');
-          if (text === null) return;
+          if (text === null || experiment.status === 'running') return;
           try {
             sensors.importJson(JSON.parse(text));
           } catch {
@@ -287,9 +288,10 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     sendStatus,
   );
 
+  const controls = el('fieldset', { class: 'simulation-controls' }, trafficSection, signalSection, sensorSection);
   root.append(
     el('h2', {}, 'SmartCity Donostia'),
-    clockSection, trafficSection, signalSection, sensorSection,
+    clockSection, controls,
     el('p', { class: 'help' }, 'Ratón: arrastrar = girar, derecho = mover, rueda = zoom. Esc: salir del modo sensor. Supr: borrar sensor seleccionado.'),
   );
 
@@ -314,7 +316,8 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   renderSensorList();
 
   async function flush() {
-    if (!autoSend.checked || !endpointInput.value || !sensors.pending.length) return;
+    if (experiment.status === 'running' || !autoSend.checked || !endpointInput.value || !sensors.pending.length) return;
+    const recordsAtSend = sensors.records;
     const batch = sensors.pending.splice(0, sensors.pending.length);
     try {
       const res = await fetch(endpointInput.value, {
@@ -325,7 +328,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       sendStatus.textContent = `Enviados ${batch.length} registros`;
     } catch (err) {
-      sensors.pending.unshift(...batch);
+      if (sensors.records === recordsAtSend) sensors.pending.unshift(...batch);
       sendStatus.textContent = `Error de envío: ${err.message} (${sensors.pending.length} pendientes)`;
     }
   }
@@ -333,9 +336,16 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
 
   let lastUpdate = 0;
   return {
-    revealSignal,
-    update(now) {
-      if (now - lastUpdate < 250) return;
+    syncExperiment() {
+      carsInput.value = params.maxCars;
+      scenarioSelect.value = params.scenario;
+      greenInput.value = signals.plan.default.green;
+      planStatus.textContent = `Verde global: ${greenInput.value} s`;
+      autoSend.checked = false;
+    },
+    update(now, force = false) {
+      controls.disabled = experiment.status === 'running';
+      if (!force && now - lastUpdate < 250) return;
       lastUpdate = now;
       const d = simDate(clock.simTime);
       const day = Math.floor(clock.simTime / 86400) + 1;

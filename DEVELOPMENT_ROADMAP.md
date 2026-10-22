@@ -91,5 +91,7 @@ The build currently reports a JavaScript chunk above 500 kB. Existing automated 
 | Date | Change | Evidence / remaining work |
 | --- | --- | --- |
 | 2026-10-15 | Established the roadmap and reviewed the existing implementation. | `npm test`: 10 passed. `npm run build`: passed with a chunk-size warning. Browser acceptance and backend integration remain to be verified. |
+| 2026-10-16 | Added seeded experiments with clean resets, weekday/weekend demand, configurable duration and global green time, automatic stop, and JSON settings/results export. | Automated repeatability and scenario checks plus local browser completion/export verification. Live publication pending. |
+| 2026-10-16 | Connected official road, speed-limit and Dbizi layers; added optional approximate speed caps and experiment provenance. | Complete API download, 19 automated checks, and local browser verification. Observed-count calibration remains open; municipal layers are snapshots. |
 
 For each future update, record the completed work, relevant tests or manual checks, and any remaining limitation. Keep unfinished tasks unchecked and revise this roadmap when requirements change.

@@ -4,7 +4,8 @@ import { CONFIG } from '../config.js';
 const C = CONFIG.cars;
 
 export class TrafficSim {
-  constructor(graph, signals, onCross) {
+  constructor(graph, signals, onCross, random = Math.random) {
+    this.random = random;
     this.g = graph;
     this.signals = signals;
     this.onCross = onCross;
@@ -18,7 +19,7 @@ export class TrafficSim {
     this.sensorsByEdge = new Map();
     this.activeCount = 0;
     this.targetCount = 0;
-    for (let i = 0; i < n; i++) this.factor[i] = 0.85 + Math.random() * 0.25;
+    for (let i = 0; i < n; i++) this.factor[i] = 0.85 + this.random() * 0.25;
 
     const geometry = new THREE.SphereGeometry(C.radius, 8, 6);
     this.mesh = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial({ color: 0xffffff }), n);
@@ -29,6 +30,17 @@ export class TrafficSim {
       this.mesh.setMatrixAt(i, new THREE.Matrix4().identity());
       this.mesh.setColorAt(i, color);
     }
+  }
+
+  reset(random = this.random) {
+    this.random = random;
+    this.edge.fill(0);
+    this.pos.fill(0);
+    this.speed.fill(0);
+    this.next.fill(-1);
+    this.edgeCars = new Array(this.g.edgeCount);
+    this.activeCount = this.targetCount = this.mesh.count = 0;
+    for (let i = 0; i < this.factor.length; i++) this.factor[i] = 0.85 + this.random() * 0.25;
   }
 
   setSensorIndex(map) {
@@ -42,8 +54,8 @@ export class TrafficSim {
   randomEdge() {
     const g = this.g;
     for (let tries = 0; tries < 6; tries++) {
-      const e = (Math.random() * g.edgeCount) | 0;
-      if (Math.random() * 5 < 5 - g.cls[e] || tries === 5) return e;
+      const e = (this.random() * g.edgeCount) | 0;
+      if (this.random() * 5 < 5 - g.cls[e] || tries === 5) return e;
     }
     return 0;
   }
@@ -66,7 +78,7 @@ export class TrafficSim {
       total += this.weight(e, c);
     }
     if (total === 0) return fallback;
-    let r = Math.random() * total;
+    let r = this.random() * total;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
       if (c === rev) continue;
@@ -101,7 +113,7 @@ export class TrafficSim {
   spawn(i) {
     const e = this.randomEdge();
     this.place(i, e);
-    this.pos[i] = Math.random() * this.g.len[e];
+    this.pos[i] = this.random() * this.g.len[e];
     this.speed[i] = 0;
     const n0 = this.chooseNext(e);
     const n1 = this.chooseNext(n0);
@@ -174,7 +186,7 @@ export class TrafficSim {
     for (let i = 0; i < this.activeCount; i++) {
       const gap = this.freeGap(i);
       const e0 = this.edge[i];
-      const vmax = g.speed[e0] * this.factor[i];
+      const vmax = Math.min(g.speed[e0] * this.factor[i], g.speedCaps?.[e0] ?? Infinity);
       const safe = gap === Infinity ? vmax : Math.sqrt(2 * C.decel * Math.max(0, gap - C.minGap));
       const v = Math.max(0, Math.min(this.speed[i] + C.accel * dt, vmax, safe));
       this.speed[i] = v;

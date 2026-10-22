@@ -1,3 +1,6 @@
 node_modules/
 dist/
 public/data/city.json
+
+public/data/municipal.json
+public/data/municipal.json.tmp

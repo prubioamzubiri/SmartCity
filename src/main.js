@@ -12,11 +12,16 @@ import { TrafficSim } from './traffic/sim.js';
 import { demandFactor } from './traffic/demand.js';
 import { SensorManager } from './sensors/sensorManager.js';
 import { createHud } from './ui/hud.js';
+import { Experiment } from './simulation/experiment.js';
+import { createExperimentPanel } from './ui/experimentPanel.js';
+import { createMunicipalPanel } from './ui/municipalPanel.js';
 
 const loading = document.getElementById('loading');
 
 async function main() {
   const data = await loadCity();
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(data)));
+  const datasetId = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -68,6 +73,8 @@ async function main() {
   sensors = new SensorManager({ scene, graph, sim, getSimTime: () => clock.simTime });
   sensors.load();
 
+  const experiment = new Experiment({ clock, params, sim, signals, sensors, datasetId });
+
   // Modo de interacción: navegar o colocar sensores
   let mode = 'navigate';
   const setMode = (m) => {
@@ -75,6 +82,17 @@ async function main() {
     if (m !== 'sensor') sensors.showGhost(0, 0, false);
     renderer.domElement.style.cursor = m === 'sensor' ? 'crosshair' : '';
   };
+  const hud = createHud({ clock, params, sim, signals, sensors, setMode, getMode: () => mode, experiment });
+  const experimentPanel = createExperimentPanel(experiment, settings => {
+    experiment.start(settings);
+    setMode('navigate');
+    acc = 0;
+    hud.syncExperiment();
+    hud.update(performance.now(), true);
+    experimentPanel.update();
+  });
+  const municipalPanel = createMunicipalPanel({ scene, graph, city: data, experiment, clock, sensors });
+  document.getElementById('hud').prepend(experimentPanel.panel, municipalPanel.panel);
   const signalMarker = new THREE.Mesh(
     new THREE.RingGeometry(10, 13, 32).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ color: 0x00e5ff, side: THREE.DoubleSide }),
@@ -133,6 +151,7 @@ async function main() {
   });
   renderer.domElement.addEventListener('pointerleave', () => (signalTooltip.hidden = true));
   renderer.domElement.addEventListener('pointerup', (ev) => {
+    if (experiment.status === 'running') return;
     if (!down || ev.button !== 0 || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
     setPointer(ev);
     if (mode !== 'sensor') {
@@ -147,6 +166,7 @@ async function main() {
     }
     const picked = sensors.pick(raycaster);
     if (picked) return sensors.select(picked);
+    if (mode === 'navigate' && municipalPanel.pick(raycaster)) return;
     if (mode === 'sensor' && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
       const s = sensors.add(hitPoint.x, hitPoint.z);
       if (s) sensors.select(s.id);
@@ -155,7 +175,7 @@ async function main() {
     }
   });
   window.addEventListener('keydown', (ev) => {
-    if (ev.target instanceof HTMLInputElement) return;
+    if (experiment.status === 'running' || ev.target instanceof HTMLInputElement || ev.target instanceof HTMLSelectElement) return;
     if (ev.key === 'Escape') setMode('navigate');
     if (ev.key === 'Delete' && sensors.selectedId) sensors.remove(sensors.selectedId);
   });
@@ -174,12 +194,13 @@ async function main() {
     if (clock.scale > 0) {
       acc += dt * clock.scale;
       let steps = 0;
-      while (acc >= STEP && steps < CONFIG.sim.maxStepsPerFrame) {
+      while (clock.scale > 0 && acc >= STEP && steps < CONFIG.sim.maxStepsPerFrame) {
         clock.simTime += STEP;
         signals.update(clock.simTime);
         sim.setTarget(params.maxCars * demandFactor(clock.simTime, params.scenario));
         sim.step(STEP);
         sensors.tick(clock.simTime);
+        experiment.afterStep();
         acc -= STEP;
         steps++;
       }
@@ -190,6 +211,8 @@ async function main() {
     controls.update();
     renderer.render(scene, camera);
     hud.update(now);
+    experimentPanel.update();
+    municipalPanel.update();
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
