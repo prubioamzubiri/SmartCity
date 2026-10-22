@@ -72,10 +72,96 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   const greenInput = el('input', { type: 'number', min: 5, max: 180, value: CONFIG.signals.green });
   const planStatus = el('div', { class: 'status' });
   const planUrl = el('input', { type: 'text', placeholder: 'URL del plan de semáforos (JSON)' });
+  const signalCount = el('div', { class: 'status' });
+  const signalList = el('div', { class: 'signal-list', id: 'signal-list' });
+  const signalInputs = new Map();
+  const signalEntries = new Map();
+  let selectedSignalId = null;
+  signalList.hidden = true;
+  const setListOpen = (open) => {
+    signalList.hidden = !open;
+    signalToggle.textContent = open ? 'Ocultar semáforos' : 'Mostrar semáforos';
+    signalToggle.setAttribute('aria-expanded', String(open));
+  };
+  const signalToggle = el('button', {
+    textContent: 'Mostrar semáforos',
+    onclick: () => setListOpen(signalList.hidden),
+  });
+  const selectSignal = (id) => {
+    selectedSignalId = id;
+    signalEntries.forEach((entry, key) => entry.classList.toggle('selected', key === id));
+  };
+  const revealSignal = (id) => {
+    selectSignal(id);
+    setListOpen(true);
+    signalEntries.get(id)?.scrollIntoView({ block: 'nearest' });
+  };
+  signalToggle.setAttribute('aria-controls', 'signal-list');
+  signalToggle.setAttribute('aria-expanded', 'false');
+  const renderSignalList = () => {
+    const activeSignals = signals.signals.filter((signal) => signal.active);
+    signalCount.textContent = `Cruces configurables: ${activeSignals.length}`;
+    signalInputs.clear();
+    signalEntries.clear();
+    signalList.replaceChildren(...activeSignals.map((signal) => {
+      const timing = signals.timing(signal, clock.simTime);
+      const heading = el('div', { class: 'signal-head' },
+        el('button', {
+          class: 'signal-id',
+          textContent: `Semáforo ${signal.id}`,
+          title: 'Ir a este semáforo en el mapa',
+          onclick: () => {
+            selectSignal(signal.id);
+            focusSignal(signal);
+          },
+        }),
+        el('a', {
+          class: 'signal-osm',
+          textContent: 'OSM',
+          href: `https://www.openstreetmap.org/node/${signal.id}`,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          title: 'Abrir este nodo en OpenStreetMap',
+        }),
+      );
+      const timeInput = (label, key, value, min, max, title) => {
+        const input = el('input', {
+          type: 'number', min, max, step: 1, value,
+          onchange: (event) => {
+            signals.setSignalTiming(signal.id, { [key]: Number(event.currentTarget.value) });
+            signals.update(clock.simTime);
+            renderSignalList();
+          },
+        });
+        return {
+          input,
+          element: el('label', { class: 'signal-time', title }, el('span', { textContent: label }), input),
+        };
+      };
+      const greenA = timeInput('Verde A', 'greenA', timing.gA, 5, 180, 'Grupo de aproximaciones este-oeste, en segundos');
+      const greenB = timeInput('Verde B', 'greenB', timing.gB, 5, 180, 'Grupo de aproximaciones norte-sur, en segundos');
+      const yellow = timeInput('Ámbar', 'yellow', timing.y, 1, 10, 'Duración del ámbar, en segundos');
+      signalInputs.set(signal.id, { greenA: greenA.input, greenB: greenB.input, yellow: yellow.input });
+      const entry = el('div', { class: 'signal-entry' }, heading,
+        el('div', { class: 'signal-timings' },
+          greenA.element,
+          greenB.element,
+          yellow.element,
+        ),
+      );
+      entry.classList.toggle('selected', signal.id === selectedSignalId);
+      signalEntries.set(signal.id, entry);
+      return entry;
+    }));
+  };
+  renderSignalList();
   const applyPlan = (plan, label) => {
     if (experiment.status === 'running') return;
     try {
       signals.setPlan(plan);
+      signals.update(clock.simTime);
+      greenInput.value = signals.plan.default.green;
+      renderSignalList();
       planStatus.textContent = `Plan cargado: ${label}`;
     } catch (err) {
       planStatus.textContent = `Plan no válido: ${err.message}`;
@@ -88,9 +174,14 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
       textContent: 'Aplicar',
       onclick: () => {
         signals.setGlobalGreen(Number(greenInput.value) || CONFIG.signals.green);
+        signals.update(clock.simTime);
+        renderSignalList();
         planStatus.textContent = `Verde global: ${greenInput.value} s`;
       },
     }),
+    signalCount,
+    signalToggle,
+    signalList,
     planUrl,
     el('div', { class: 'row' },
       el('button', {
@@ -116,6 +207,44 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
             planStatus.textContent = `Archivo no válido: ${err.message}`;
           }
         },
+      }),
+      el('button', {
+        textContent: 'Descargar plantilla',
+        onclick: () => download(
+          'plantilla-semaforos.json',
+          JSON.stringify({
+            default: {
+              green: CONFIG.signals.green,
+              yellow: CONFIG.signals.yellow,
+              schedule: [
+                {
+                  when: { months: [12], daysOfMonth: [24], years: [2026] },
+                  green: 15,
+                },
+                {
+                  when: { weekdays: [1, 2, 3, 4, 5], start: '07:00', end: '09:00' },
+                  green: 30,
+                },
+              ],
+            },
+            signals: {
+              '123456789': {
+                schedule: [
+                  {
+                    when: { weekdays: [1, 2, 3, 4, 5], start: '16:00', end: '18:00' },
+                    greenA: 20,
+                    greenB: 35,
+                  },
+                ],
+              },
+            },
+          }, null, 2),
+          'application/json',
+        ),
+      }),
+      el('button', {
+        textContent: 'Descargar plan actual',
+        onclick: () => download('plan-semaforos.json', JSON.stringify(signals.plan, null, 2), 'application/json'),
       }),
     ),
     planStatus,
@@ -236,6 +365,15 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
         rows.get(s.id)?.classList.toggle('selected', s.id === sensors.selectedId);
       }
       recordsLabel.textContent = `Registros: ${sensors.records.length} · intervalo en curso`;
+      const signalDate = simDate(clock.simTime);
+      for (const signal of signals.signals) {
+        const inputs = signalInputs.get(signal.id);
+        if (!inputs) continue;
+        const timing = signals.timing(signal, clock.simTime, signalDate);
+        for (const [key, value] of Object.entries({ greenA: timing.gA, greenB: timing.gB, yellow: timing.y })) {
+          if (inputs[key] !== document.activeElement) inputs[key].value = value;
+        }
+      }
     },
   };
 }

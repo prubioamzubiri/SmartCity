@@ -93,6 +93,29 @@ async function main() {
   });
   const municipalPanel = createMunicipalPanel({ scene, graph, city: data, experiment, clock, sensors });
   document.getElementById('hud').prepend(experimentPanel.panel, municipalPanel.panel);
+  const signalMarker = new THREE.Mesh(
+    new THREE.RingGeometry(10, 13, 32).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x00e5ff, side: THREE.DoubleSide }),
+  );
+  signalMarker.visible = false;
+  scene.add(signalMarker);
+  const markSignal = (signal) => {
+    signalMarker.position.set(signal.x, 1, signal.z);
+    signalMarker.visible = true;
+  };
+  const focusSignal = (signal) => {
+    markSignal(signal);
+    const offset = camera.position.clone().sub(controls.target);
+    offset.setLength(Math.max(controls.minDistance, Math.min(offset.length(), 250)));
+    controls.target.set(signal.x, 0, signal.z);
+    camera.position.copy(controls.target).add(offset);
+    controls.update();
+  };
+  const hud = createHud({ clock, params, sim, signals, sensors, setMode, getMode: () => mode, focusSignal });
+  const signalTooltip = document.createElement('div');
+  signalTooltip.id = 'signal-tooltip';
+  signalTooltip.hidden = true;
+  document.body.append(signalTooltip);
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -107,16 +130,40 @@ async function main() {
   let down = null;
   renderer.domElement.addEventListener('pointerdown', (ev) => (down = { x: ev.clientX, y: ev.clientY }));
   renderer.domElement.addEventListener('pointermove', (ev) => {
-    if (mode !== 'sensor') return;
     setPointer(ev);
-    if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return sensors.showGhost(0, 0, false);
-    const hit = sensors.snap(hitPoint.x, hitPoint.z);
-    sensors.showGhost(hit?.x ?? 0, hit?.z ?? 0, !!hit);
+    if (mode === 'sensor') {
+      signalTooltip.hidden = true;
+      if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return sensors.showGhost(0, 0, false);
+      const hit = sensors.snap(hitPoint.x, hitPoint.z);
+      sensors.showGhost(hit?.x ?? 0, hit?.z ?? 0, !!hit);
+      return;
+    }
+    const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
+    const signalId = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
+    if (signalId === undefined) {
+      signalTooltip.hidden = true;
+      return;
+    }
+    signalTooltip.textContent = `Semáforo OSM: ${signalId}`;
+    signalTooltip.style.left = `${Math.max(8, Math.min(ev.clientX + 14, window.innerWidth - 220))}px`;
+    signalTooltip.style.top = `${Math.max(8, Math.min(ev.clientY + 14, window.innerHeight - 48))}px`;
+    signalTooltip.hidden = false;
   });
+  renderer.domElement.addEventListener('pointerleave', () => (signalTooltip.hidden = true));
   renderer.domElement.addEventListener('pointerup', (ev) => {
     if (experiment.status === 'running') return;
     if (!down || ev.button !== 0 || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
     setPointer(ev);
+    if (mode !== 'sensor') {
+      const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
+      const id = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
+      const signal = id === undefined ? undefined : signals.signals.find((s) => s.id === id);
+      if (signal) {
+        markSignal(signal);
+        hud.revealSignal(signal.id);
+        return;
+      }
+    }
     const picked = sensors.pick(raycaster);
     if (picked) return sensors.select(picked);
     if (mode === 'navigate' && municipalPanel.pick(raycaster)) return;

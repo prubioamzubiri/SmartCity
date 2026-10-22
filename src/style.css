@@ -23,6 +23,19 @@ html, body {
   z-index: 10;
 }
 
+#signal-tooltip {
+  position: fixed;
+  z-index: 20;
+  max-width: 220px;
+  padding: 6px 9px;
+  border: 1px solid #54718e;
+  border-radius: 4px;
+  background: #16222f;
+  color: #e8edf3;
+  font-size: 12px;
+  pointer-events: none;
+}
+
 #hud {
   position: fixed;
   top: 8px;
@@ -84,3 +97,13 @@ html, body {
 #hud a { color: #8ecbff; }
 #hud fieldset { border: 1px solid #2a3a4d; border-radius: 4px; margin: 6px 0; min-width: 0; }
 #hud [data-selection] { color: #bde0ff; }
+.signal-list { max-height: 220px; overflow-y: auto; margin: 4px 0 8px; }
+.signal-entry { padding: 5px 4px; border-bottom: 1px solid #243244; }
+.signal-entry.selected { background: #12394a; }
+.signal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+#hud button.signal-id { padding: 0; border: 0; background: none; color: #8fb4dc; text-decoration: underline; }
+#hud button.signal-id:hover { background: none; color: #bcd6f2; }
+.signal-osm { color: #9fb2c8; font-size: 11px; }
+.signal-timings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.signal-time { display: flex !important; flex-direction: column; gap: 2px; min-width: 0; color: #9fb2c8; font-size: 11px; }
+.signal-time input { width: 100% !important; min-width: 0; box-sizing: border-box; margin: 0 !important; padding: 3px 4px !important; }
