@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CONFIG } from '../config.js';
 import { demandFactor } from '../traffic/demand.js';
+import { occupancyAt, undergroundLots, undergroundOccupancy as undergroundOccupancyAt } from './undergroundLots.js';
 
 const COLORS = { area: 0x2f6fdd, underground: 0x7a4fd6, street: 0x4fc3f7, space: 0xffffff };
 const STREET_WIDTH = 2.2;
 const SPACE_SIZE = 2.5;
 const MARKER_SIZE = 36;
-const DEFAULT_UNDERGROUND_CAPACITY = 150;
 const FREE = new THREE.Color(0x2ecc71);
 const HALF = new THREE.Color(0xf1c40f);
 const FULL = new THREE.Color(0xe74c3c);
@@ -105,25 +105,15 @@ function undergroundTexture() {
 // Un icono "P" por cada parking subterráneo de uso público, visible desde lejos.
 function undergroundMarkers(list) {
   const map = undergroundTexture();
-  return list.map(([x, z, capacity, fee, name], i) => {
+  return undergroundLots(list).map(({ x, z, ...data }) => {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, depthWrite: false }));
     sprite.scale.set(MARKER_SIZE, MARKER_SIZE, 1);
     sprite.position.set(x, MARKER_SIZE, z);
-    sprite.userData = {
-      id: `U${Math.round(x)}_${Math.round(z)}`,
-      capacity: capacity || DEFAULT_UNDERGROUND_CAPACITY,
-      estimatedCapacity: !capacity,
-      fee: !!fee,
-      name,
-      bias: 0.85 + 0.3 * ((i * 0.618034) % 1),
-      occupancy: 0,
-    };
+    sprite.userData = { ...data, occupancy: 0 };
     return sprite;
   });
 }
 
-// Ocupación simulada (no es un dato real de OSM): sigue la curva de demanda de la ciudad.
-const occupancyAt = (demand, bias) => Math.min(1, Math.max(0.05, (0.15 + 0.8 * demand) * bias));
 
 function setRamp(color, occupancy) {
   if (occupancy < 0.5) color.lerpColors(FREE, HALF, occupancy / 0.5);
@@ -175,7 +165,7 @@ export function trackableLots(group) {
   return lots;
 }
 
-export const undergroundOccupancy = (lot, simTime) => occupancyAt(demandFactor(simTime), lot.bias);
+export const undergroundOccupancy = undergroundOccupancyAt;
 
 // Los parkings seguidos se dibujan más grandes para distinguirlos en el mapa.
 export function highlightTracked(group, isTracked) {

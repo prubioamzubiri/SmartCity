@@ -14,6 +14,13 @@ npm run dev
 `fetch-osm` downloads the city data required by the viewer into
 `public/data/city.json` (not tracked in Git).
 
+## Simulation server
+
+`npm run serve` runs the simulation headless so that sensors keep recording
+while no browser is open (one real week = one simulated year), with SQLite
+persistence, catch-up after restarts and CSV export by date range. See
+[DEPLOYMENT.md](DEPLOYMENT.md#simulation-server-continuous-sensors).
+
 ## Traffic scenarios
 
 In the **Tráfico** panel, choose **Automático (calendario)**, **Laborable**, or

@@ -2,6 +2,7 @@ export const CONFIG = {
   dataUrl: `${import.meta.env?.BASE_URL ?? '/'}data/city.json`,
 
   sim: {
+    seed: 20260105, // semilla del PRNG de la simulación
     step: 0.25, // segundos simulados por paso de física
     maxStepsPerFrame: 200,
     startSeconds: 7 * 3600, // lunes 07:00
@@ -59,6 +60,13 @@ export const CONFIG = {
     bucketSeconds: 300,
     snapDistance: 30,
     storageKey: 'smartcity.sensors',
+  },
+
+  // URL de la API del servidor de simulación (VITE_API_URL en la compilación o la que se escriba en el panel).
+  server: {
+    url: import.meta.env?.VITE_API_URL ?? '',
+    urlKey: 'smartcity.server.url',
+    pollSeconds: 5,
   },
 
   parkingTracking: {

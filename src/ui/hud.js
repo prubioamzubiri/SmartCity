@@ -1,4 +1,6 @@
 import { CONFIG } from '../config.js';
+import { el } from './dom.js';
+import { createServerPanel } from './serverPanel.js';
 import { demandFactor, scenarioForTime, simDate } from '../traffic/demand.js';
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -10,17 +12,6 @@ const SPEEDS = [
   ['300x', 300],
   ['1000x', 1000],
 ];
-
-function el(tag, props = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (k === 'class') node.className = v;
-    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
-    else node[k] = v;
-  }
-  for (const c of children) node.append(c);
-  return node;
-}
 
 function download(filename, text, type) {
   const url = URL.createObjectURL(new Blob([text], { type }));
@@ -37,7 +28,7 @@ function pickFile(accept) {
   });
 }
 
-export function createHud({ clock, params, sim, signals, sensors, setMode, getMode, focusSignal, parking }) {
+export function createHud({ clock, params, sim, signals, sensors, setMode, getMode, focusSignal, parking, server }) {
   const root = el('div', { id: 'hud' });
   document.body.append(root);
 
@@ -360,9 +351,11 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     trackSection,
   );
 
+  const serverPanel = createServerPanel({ section, clock, sensors, tracker, view: server.view, setMode, getMode });
+
   root.append(
     el('h2', {}, 'SmartCity Donostia'),
-    clockSection, trafficSection, signalSection, sensorSection, parkingSection,
+    serverPanel.node, clockSection, trafficSection, signalSection, sensorSection, parkingSection,
     el('p', { class: 'help' }, 'Ratón: arrastrar = girar, derecho = mover, rueda = zoom. Esc: salir del modo sensor. Supr: borrar sensor seleccionado.'),
   );
 
@@ -434,9 +427,11 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   let lastUpdate = 0;
   return {
     revealSignal,
+    addServerSensor: serverPanel.addSensor,
     update(now) {
       if (now - lastUpdate < 250) return;
       lastUpdate = now;
+      serverPanel.update();
       const d = simDate(clock.simTime);
       const day = Math.floor(clock.simTime / 86400) + 1;
       const hh = String(d.getUTCHours()).padStart(2, '0');

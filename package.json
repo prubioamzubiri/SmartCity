@@ -10,12 +10,16 @@
     "preview": "vite preview",
     "fetch-osm": "node scripts/fetch-osm.mjs",
     "fetch-water": "node scripts/fetch-osm.mjs --water-only",
-    "fetch-parking": "node scripts/fetch-osm.mjs --parking-only"
+    "fetch-parking": "node scripts/fetch-osm.mjs --parking-only",
+    "serve": "node server/index.js"
   },
   "dependencies": {
     "three": "^0.186.1"
   },
   "devDependencies": {
     "vite": "^8.3.4"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

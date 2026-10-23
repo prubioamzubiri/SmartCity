@@ -1,0 +1,51 @@
+services:
+  # Simulación continua: un único proceso (SQLite y el reloj viven en él). No escalar a más réplicas.
+  sim:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SMARTCITY_TOKEN: ${SMARTCITY_TOKEN:-}
+      CHECKPOINT_SECONDS: ${CHECKPOINT_SECONDS:-30}
+      DB_FILE: /data/smartcity.db
+    volumes:
+      - sim-data:/data
+    stop_grace_period: 30s # deja tiempo para guardar el estado al parar
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Visor estático compilado con Vite.
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+
+  # Único punto de entrada: HTTPS automático, / al visor y /api al simulador.
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      sim:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+volumes:
+  sim-data:
+  caddy-data:
+  caddy-config:

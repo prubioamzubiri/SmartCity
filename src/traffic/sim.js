@@ -1,13 +1,15 @@
-import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { createRng } from '../core/random.js';
+import { fromBase64, toBase64 } from '../core/binary.js';
 
 const C = CONFIG.cars;
 
 export class TrafficSim {
-  constructor(graph, signals, onCross) {
+  constructor(graph, signals, onCross, { rng = createRng(CONFIG.sim.seed) } = {}) {
     this.g = graph;
     this.signals = signals;
     this.onCross = onCross;
+    this.rng = rng;
     const n = C.max;
     this.edge = new Int32Array(n);
     this.pos = new Float32Array(n);
@@ -18,21 +20,40 @@ export class TrafficSim {
     this.sensorsByEdge = new Map();
     this.activeCount = 0;
     this.targetCount = 0;
-    for (let i = 0; i < n; i++) this.factor[i] = 0.85 + Math.random() * 0.25;
-
-    const geometry = new THREE.SphereGeometry(C.radius, 8, 6);
-    this.mesh = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial({ color: 0xffffff }), n);
-    this.mesh.count = 0;
-    this.mesh.frustumCulled = false;
-    const color = new THREE.Color(1, 1, 1);
-    for (let i = 0; i < n; i++) {
-      this.mesh.setMatrixAt(i, new THREE.Matrix4().identity());
-      this.mesh.setColorAt(i, color);
-    }
+    for (let i = 0; i < n; i++) this.factor[i] = 0.85 + this.rng() * 0.25;
   }
 
   setSensorIndex(map) {
     this.sensorsByEdge = map;
+  }
+
+  // Estado completo de los coches y del PRNG para reanudar la simulación exactamente.
+  serialize() {
+    const n = this.activeCount;
+    return {
+      activeCount: n,
+      targetCount: this.targetCount,
+      rng: this.rng.getState(),
+      edge: toBase64(this.edge.subarray(0, n)),
+      pos: toBase64(this.pos.subarray(0, n)),
+      speed: toBase64(this.speed.subarray(0, n)),
+      next: toBase64(this.next.subarray(0, n * 3)),
+      factor: toBase64(this.factor),
+    };
+  }
+
+  restore(state) {
+    const n = state.activeCount;
+    this.edge.set(fromBase64(state.edge, Int32Array));
+    this.pos.set(fromBase64(state.pos, Float32Array));
+    this.speed.set(fromBase64(state.speed, Float32Array));
+    this.next.set(fromBase64(state.next, Int32Array));
+    this.factor.set(fromBase64(state.factor, Float32Array));
+    this.edgeCars = new Array(this.g.edgeCount);
+    this.activeCount = n;
+    this.targetCount = state.targetCount;
+    for (let i = 0; i < n; i++) this.place(i, this.edge[i]);
+    this.rng.setState(state.rng);
   }
 
   setTarget(n) {
@@ -42,8 +63,8 @@ export class TrafficSim {
   randomEdge() {
     const g = this.g;
     for (let tries = 0; tries < 6; tries++) {
-      const e = (Math.random() * g.edgeCount) | 0;
-      if (Math.random() * 5 < 5 - g.cls[e] || tries === 5) return e;
+      const e = (this.rng() * g.edgeCount) | 0;
+      if (this.rng() * 5 < 5 - g.cls[e] || tries === 5) return e;
     }
     return 0;
   }
@@ -66,7 +87,7 @@ export class TrafficSim {
       total += this.weight(e, c);
     }
     if (total === 0) return fallback;
-    let r = Math.random() * total;
+    let r = this.rng() * total;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
       if (c === rev) continue;
@@ -101,7 +122,7 @@ export class TrafficSim {
   spawn(i) {
     const e = this.randomEdge();
     this.place(i, e);
-    this.pos[i] = Math.random() * this.g.len[e];
+    this.pos[i] = this.rng() * this.g.len[e];
     this.speed[i] = 0;
     const n0 = this.chooseNext(e);
     const n1 = this.chooseNext(n0);
@@ -216,32 +237,6 @@ export class TrafficSim {
     for (const entry of list) {
       if (entry.s > from && entry.s <= to) this.onCross(entry.sensor, entry.dir, v);
     }
-  }
-
-  render() {
-    const g = this.g;
-    const m = this.mesh.instanceMatrix.array;
-    const c = this.mesh.instanceColor.array;
-    const n = this.activeCount;
-    for (let i = 0; i < n; i++) {
-      const e = this.edge[i];
-      const a = g.A[e];
-      const p = this.pos[i];
-      const ux = g.ux[e];
-      const uz = g.uz[e];
-      const o = i * 16;
-      m[o] = 1; m[o + 5] = 1; m[o + 10] = 1; m[o + 15] = 1;
-      m[o + 12] = g.nx[a] + ux * p - uz * C.laneOffset;
-      m[o + 13] = C.radius;
-      m[o + 14] = g.nz[a] + uz * p + ux * C.laneOffset;
-      const ratio = Math.min(1, this.speed[i] / (g.speed[e] * 0.8));
-      c[i * 3] = 0.95 - 0.75 * ratio;
-      c[i * 3 + 1] = 0.15 + 0.7 * ratio;
-      c[i * 3 + 2] = 0.12 + 0.25 * ratio;
-    }
-    this.mesh.count = n;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.instanceColor.needsUpdate = true;
   }
 
   stats() {

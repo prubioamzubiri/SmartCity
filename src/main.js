@@ -11,7 +11,10 @@ import {
 } from './city/parking.js';
 import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
-import { SignalController, createSignalViz } from './traffic/signals.js';
+import { SignalController } from './traffic/signals.js';
+import { createSignalViz } from './traffic/signalViz.js';
+import { CarView } from './traffic/carView.js';
+import { SensorView } from './sensors/sensorView.js';
 import { TrafficSim } from './traffic/sim.js';
 import { demandFactor } from './traffic/demand.js';
 import { SensorManager } from './sensors/sensorManager.js';
@@ -72,8 +75,10 @@ async function main() {
 
   let sensors;
   const sim = new TrafficSim(graph, signals, (sensor, dir, speed) => sensors.recordCrossing(sensor, dir, speed));
-  scene.add(sim.mesh);
-  sensors = new SensorManager({ scene, graph, sim, getSimTime: () => clock.simTime });
+  const carView = new CarView(sim);
+  scene.add(carView.mesh);
+  const serverView = new SensorView(scene, { color: 0x4caf50 });
+  sensors = new SensorManager({ view: new SensorView(scene), graph, sim, getSimTime: () => clock.simTime });
   sensors.load();
 
   const parkingTracker = new ParkingTracker({
@@ -88,8 +93,9 @@ async function main() {
   let mode = 'navigate';
   const setMode = (m) => {
     mode = m;
-    if (m !== 'sensor') sensors.showGhost(0, 0, false);
-    renderer.domElement.style.cursor = m === 'sensor' ? 'crosshair' : '';
+    const placing = m === 'sensor' || m === 'server-sensor';
+    if (!placing) sensors.showGhost(0, 0, false);
+    renderer.domElement.style.cursor = placing ? 'crosshair' : '';
   };
   const signalMarker = new THREE.Mesh(
     new THREE.RingGeometry(10, 13, 32).rotateX(-Math.PI / 2),
@@ -112,6 +118,7 @@ async function main() {
   const hud = createHud({
     clock, params, sim, signals, sensors, setMode, getMode: () => mode, focusSignal,
     parking: { layer: parkingLayer, stats: parkingStats(data), tracker: parkingTracker },
+    server: { view: serverView },
   });
   const signalTooltip = document.createElement('div');
   signalTooltip.id = 'signal-tooltip';
@@ -132,7 +139,7 @@ async function main() {
   renderer.domElement.addEventListener('pointerdown', (ev) => (down = { x: ev.clientX, y: ev.clientY }));
   renderer.domElement.addEventListener('pointermove', (ev) => {
     setPointer(ev);
-    if (mode === 'sensor') {
+    if (mode === 'sensor' || mode === 'server-sensor') {
       signalTooltip.hidden = true;
       if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return sensors.showGhost(0, 0, false);
       const hit = sensors.snap(hitPoint.x, hitPoint.z);
@@ -179,7 +186,7 @@ async function main() {
   renderer.domElement.addEventListener('pointerup', (ev) => {
     if (!down || ev.button !== 0 || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
     setPointer(ev);
-    if (mode !== 'sensor') {
+    if (mode === 'navigate') {
       const parkingHit = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
       if (parkingHit) return parkingTracker.toggle(parkingHit.object.userData.id);
       const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
@@ -190,6 +197,10 @@ async function main() {
         hud.revealSignal(signal.id);
         return;
       }
+    }
+    if (mode === 'server-sensor') {
+      if (raycaster.ray.intersectPlane(groundPlane, hitPoint)) hud.addServerSensor(hitPoint.x, hitPoint.z);
+      return;
     }
     const picked = sensors.pick(raycaster);
     if (picked) return sensors.select(picked);
@@ -232,7 +243,7 @@ async function main() {
       }
       if (acc >= STEP) acc = 0;
     }
-    sim.render();
+    carView.render();
     updateParkingOccupancy(parkingLayer, clock.simTime);
     signalViz.update();
     controls.update();
