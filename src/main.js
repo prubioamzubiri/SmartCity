@@ -5,12 +5,17 @@ import { CONFIG } from './config.js';
 import { loadCity } from './city/loadCity.js';
 import { createBuildings } from './city/buildings.js';
 import { createRoads } from './city/roads.js';
+import {
+  createParking, createParkingPicker, highlightTracked, lotOccupancy, parkingStats, trackableLots,
+  undergroundOccupancy, updateParkingOccupancy, PARKING_TYPE_LABEL,
+} from './city/parking.js';
 import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
 import { SignalController, createSignalViz } from './traffic/signals.js';
 import { TrafficSim } from './traffic/sim.js';
 import { demandFactor } from './traffic/demand.js';
 import { SensorManager } from './sensors/sensorManager.js';
+import { ParkingTracker } from './sensors/parkingTracker.js';
 import { createHud } from './ui/hud.js';
 
 const loading = document.getElementById('loading');
@@ -42,6 +47,9 @@ async function main() {
   scene.add(createWater(data));
   scene.add(createBuildings(data));
   scene.add(createRoads(data));
+  const parkingLayer = createParking(data);
+  scene.add(parkingLayer);
+  const pickParking = createParkingPicker(data);
 
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 5, 40000);
   const center = new THREE.Vector3(0, 0, 0); // centro de Donostia (origen de la proyección)
@@ -68,6 +76,14 @@ async function main() {
   sensors = new SensorManager({ scene, graph, sim, getSimTime: () => clock.simTime });
   sensors.load();
 
+  const parkingTracker = new ParkingTracker({
+    lots: trackableLots(parkingLayer),
+    occupancyOf: undergroundOccupancy,
+    getSimTime: () => clock.simTime,
+  });
+  parkingTracker.onChange(() => highlightTracked(parkingLayer, (id) => parkingTracker.isTracked(id)));
+  parkingTracker.load();
+
   // Modo de interacción: navegar o colocar sensores
   let mode = 'navigate';
   const setMode = (m) => {
@@ -93,7 +109,10 @@ async function main() {
     camera.position.copy(controls.target).add(offset);
     controls.update();
   };
-  const hud = createHud({ clock, params, sim, signals, sensors, setMode, getMode: () => mode, focusSignal });
+  const hud = createHud({
+    clock, params, sim, signals, sensors, setMode, getMode: () => mode, focusSignal,
+    parking: { layer: parkingLayer, stats: parkingStats(data), tracker: parkingTracker },
+  });
   const signalTooltip = document.createElement('div');
   signalTooltip.id = 'signal-tooltip';
   signalTooltip.hidden = true;
@@ -122,11 +141,36 @@ async function main() {
     }
     const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
     const signalId = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
-    if (signalId === undefined) {
+    let label;
+    const marker = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
+    if (signalId !== undefined) {
+      label = `Semáforo OSM: ${signalId}`;
+    } else if (marker) {
+      const { name, capacity, estimatedCapacity, fee, occupancy } = marker.object.userData;
+      const taken = Math.round(occupancy * capacity);
+      label = [
+        `Parking subterráneo público${name ? `: ${name}` : ''}`,
+        fee ? 'de pago' : 'tarifa no indicada',
+        `ocupación simulada ${Math.round(occupancy * 100)}% (${taken}/${capacity}${estimatedCapacity ? ' est.' : ''} plazas)`,
+      ].join(' · ');
+    } else if (parkingLayer.visible && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
+      const lot = pickParking(hitPoint.x, hitPoint.z);
+      if (lot) {
+        label = `Parking ${PARKING_TYPE_LABEL[lot.type]}`;
+        if (lot.type === 2) {
+          label += lot.estimated ? ' · capacidad desconocida' : ` · ${lot.capacity} plazas`;
+        } else {
+          const occupancy = lotOccupancy(lot, clock.simTime);
+          const places = `${Math.round(occupancy * lot.capacity)}/${lot.capacity}${lot.estimated ? ' est.' : ''}`;
+          label += ` · ocupación simulada ${Math.round(occupancy * 100)}% (${places} plazas)`;
+        }
+      }
+    }
+    if (!label) {
       signalTooltip.hidden = true;
       return;
     }
-    signalTooltip.textContent = `Semáforo OSM: ${signalId}`;
+    signalTooltip.textContent = label;
     signalTooltip.style.left = `${Math.max(8, Math.min(ev.clientX + 14, window.innerWidth - 220))}px`;
     signalTooltip.style.top = `${Math.max(8, Math.min(ev.clientY + 14, window.innerHeight - 48))}px`;
     signalTooltip.hidden = false;
@@ -136,6 +180,8 @@ async function main() {
     if (!down || ev.button !== 0 || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
     setPointer(ev);
     if (mode !== 'sensor') {
+      const parkingHit = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
+      if (parkingHit) return parkingTracker.toggle(parkingHit.object.userData.id);
       const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
       const id = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
       const signal = id === undefined ? undefined : signals.signals.find((s) => s.id === id);
@@ -180,12 +226,14 @@ async function main() {
         sim.setTarget(params.maxCars * demandFactor(clock.simTime, params.scenario));
         sim.step(STEP);
         sensors.tick(clock.simTime);
+        parkingTracker.tick(clock.simTime);
         acc -= STEP;
         steps++;
       }
       if (acc >= STEP) acc = 0;
     }
     sim.render();
+    updateParkingOccupancy(parkingLayer, clock.simTime);
     signalViz.update();
     controls.update();
     renderer.render(scene, camera);

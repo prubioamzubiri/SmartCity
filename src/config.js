@@ -60,4 +60,9 @@ export const CONFIG = {
     snapDistance: 30,
     storageKey: 'smartcity.sensors',
   },
+
+  parkingTracking: {
+    intervalSeconds: 300,
+    storageKey: 'smartcity.parkings',
+  },
 };

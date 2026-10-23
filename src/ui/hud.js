@@ -37,11 +37,33 @@ function pickFile(accept) {
   });
 }
 
-export function createHud({ clock, params, sim, signals, sensors, setMode, getMode, focusSignal }) {
+export function createHud({ clock, params, sim, signals, sensors, setMode, getMode, focusSignal, parking }) {
   const root = el('div', { id: 'hud' });
   document.body.append(root);
 
-  const section = (title, ...children) => el('section', {}, el('h3', {}, title), ...children);
+  // Secciones plegables; el estado se recuerda entre recargas.
+  const COLLAPSED_KEY = 'smartcity.hud.collapsed';
+  let collapsed = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY));
+    if (Array.isArray(saved)) collapsed = saved;
+  } catch {
+    /* sin estado guardado */
+  }
+  const section = (title, ...children) => {
+    const details = el('details', { class: 'collapsible', open: !collapsed.includes(title) },
+      el('summary', {}, el('h3', {}, title)), ...children);
+    details.addEventListener('toggle', () => {
+      collapsed = collapsed.filter((t) => t !== title);
+      if (!details.open) collapsed.push(title);
+      try {
+        localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed));
+      } catch {
+        /* almacenamiento no disponible */
+      }
+    });
+    return details;
+  };
 
   // Reloj
   const clockLabel = el('div', { class: 'clock' });
@@ -93,6 +115,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   };
   const revealSignal = (id) => {
     selectSignal(id);
+    signalSection.open = true;
     setListOpen(true);
     signalEntries.get(id)?.scrollIntoView({ block: 'nearest' });
   };
@@ -287,9 +310,59 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     sendStatus,
   );
 
+  // Aparcamiento
+  const parkingToggle = el('input', {
+    type: 'checkbox', checked: true,
+    onchange: () => (parking.layer.visible = parkingToggle.checked),
+  });
+  const parkingStats = parking.stats
+    ? `Parkings: ${parking.stats.lots} (capacidad indicada en OSM: ${parking.stats.capacity}) · subterráneos públicos (icono P): ${parking.stats.underground} · plazas sueltas: ${parking.stats.spaces} · tramos con aparcamiento en calle: ${parking.stats.street}`
+    : 'Sin datos de aparcamiento. Ejecuta "npm run fetch-parking".';
+  const parkingOccupancy = el('div', { class: 'status' });
+  const legendItem = (color, text) => el('span', {}, el('i', { style: `background:${color}` }), text);
+  const parkingLegend = el('div', { class: 'legend' },
+    legendItem('#2ecc71', 'Parking libre (simulado)'),
+    legendItem('#e74c3c', 'Parking lleno (simulado)'),
+    legendItem('#7a4fd6', 'Área subterránea'),
+    legendItem('#4fc3f7', 'Aparcamiento en calle'),
+    legendItem('#ffffff', 'Plaza individual'),
+  );
+  // Seguimiento de la ocupación de parkings concretos
+  const tracker = parking.tracker;
+  const trackList = el('div', { class: 'parking-list' });
+  const trackIntervalSelect = el('select', {
+    onchange: () => tracker.setIntervalSeconds(Number(trackIntervalSelect.value) * 60, clock.simTime),
+  }, ...[1, 5, 15, 30, 60].map((m) => el('option', { value: m, textContent: `${m} min`, selected: m * 60 === CONFIG.parkingTracking.intervalSeconds })));
+  const trackEndpoint = el('input', { type: 'text', placeholder: 'URL de la BigData para parkings (POST JSON)' });
+  const trackAutoSend = el('input', { type: 'checkbox' });
+  const trackSendStatus = el('div', { class: 'status' });
+  const trackRecordsLabel = el('div', { class: 'status' });
+  const trackSection = el('div', { class: 'parking-tracking' },
+    el('h4', {}, 'Seguir ocupación'),
+    el('div', { class: 'row' },
+      el('button', { textContent: 'Todos', onclick: () => tracker.setAll(true) }),
+      el('button', { textContent: 'Ninguno', onclick: () => tracker.setAll(false) }),
+    ),
+    trackList,
+    el('label', {}, 'Intervalo de muestreo: ', trackIntervalSelect),
+    el('button', { textContent: 'Exportar CSV de ocupación', onclick: () => download('ocupacion-parkings.csv', tracker.recordsCsv(), 'text/csv') }),
+    trackRecordsLabel,
+    trackEndpoint,
+    el('label', {}, trackAutoSend, ' Enviar ocupación automáticamente'),
+    trackSendStatus,
+  );
+  const parkingSection = section(
+    'Aparcamiento (OSM)',
+    el('label', {}, parkingToggle, ' Mostrar aparcamientos'),
+    el('div', { class: 'status', textContent: parkingStats }),
+    parkingOccupancy,
+    parkingLegend,
+    trackSection,
+  );
+
   root.append(
     el('h2', {}, 'SmartCity Donostia'),
-    clockSection, trafficSection, signalSection, sensorSection,
+    clockSection, trafficSection, signalSection, sensorSection, parkingSection,
     el('p', { class: 'help' }, 'Ratón: arrastrar = girar, derecho = mover, rueda = zoom. Esc: salir del modo sensor. Supr: borrar sensor seleccionado.'),
   );
 
@@ -313,23 +386,50 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   sensors.onChange(renderSensorList);
   renderSensorList();
 
-  async function flush() {
-    if (!autoSend.checked || !endpointInput.value || !sensors.pending.length) return;
-    const batch = sensors.pending.splice(0, sensors.pending.length);
-    try {
-      const res = await fetch(endpointInput.value, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(batch),
+  function renderTrackList() {
+    trackList.replaceChildren();
+    for (const lot of tracker.lots.values()) {
+      const box = el('input', {
+        type: 'checkbox', checked: tracker.isTracked(lot.id),
+        onchange: () => tracker.setTracked(lot.id, box.checked),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      sendStatus.textContent = `Enviados ${batch.length} registros`;
-    } catch (err) {
-      sensors.pending.unshift(...batch);
-      sendStatus.textContent = `Error de envío: ${err.message} (${sensors.pending.length} pendientes)`;
+      const label = el('label', { class: 'parking-item' }, box, ` ${lot.name} `,
+        el('span', { class: 'count', id: `track-${lot.id}` }));
+      trackList.append(label);
     }
+    if (!tracker.lots.size) trackList.append(el('em', {}, 'Sin parkings subterráneos en los datos.'));
   }
-  setInterval(flush, 2000);
+  tracker.onChange(renderTrackList);
+  renderTrackList();
+
+  function autoSender(source, endpoint, enabled, status) {
+    let sending = false;
+    return async () => {
+      if (sending || !enabled.checked || !endpoint.value || !source.pending.length) return;
+      sending = true;
+      const batch = source.pending.splice(0, source.pending.length);
+      try {
+        const res = await fetch(endpoint.value, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(batch),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        status.textContent = `Enviados ${batch.length} registros`;
+      } catch (err) {
+        source.pending.unshift(...batch);
+        status.textContent = `Error de envío: ${err.message} (${source.pending.length} pendientes)`;
+      } finally {
+        sending = false;
+      }
+    };
+  }
+  const flushSensors = autoSender(sensors, endpointInput, autoSend, sendStatus);
+  const flushParking = autoSender(tracker, trackEndpoint, trackAutoSend, trackSendStatus);
+  setInterval(() => {
+    flushSensors();
+    flushParking();
+  }, 2000);
 
   let lastUpdate = 0;
   return {
@@ -355,6 +455,16 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
         rows.get(s.id)?.classList.toggle('selected', s.id === sensors.selectedId);
       }
       recordsLabel.textContent = `Registros: ${sensors.records.length} · intervalo en curso`;
+      const lots = parking.layer.userData.markers ?? [];
+      if (lots.length) {
+        const avg = lots.reduce((sum, m) => sum + m.userData.occupancy, 0) / lots.length;
+        parkingOccupancy.textContent = `Ocupación simulada de los P subterráneos: ${(avg * 100).toFixed(0)}%`;
+        for (const m of lots) {
+          const c = document.getElementById(`track-${m.userData.id}`);
+          if (c) c.textContent = `${Math.round(m.userData.occupancy * 100)}%`;
+        }
+      }
+      trackRecordsLabel.textContent = `Parkings seguidos: ${tracker.tracked.size} · registros: ${tracker.records.length}`;
       const signalDate = simDate(clock.simTime);
       for (const signal of signals.signals) {
         const inputs = signalInputs.get(signal.id);
