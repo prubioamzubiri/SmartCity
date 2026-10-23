@@ -47,6 +47,21 @@ unchanged. Configuration is validated and copied when the demand model is
 created; reload after editing it. `CONFIG.sim.baseDate` defines the simulation's
 UTC calendar origin and need not be a Monday.
 
+## Parking occupancy tracking
+
+In **Aparcamiento (OSM) → Seguir ocupación**, tick the public underground
+parkings (the "P" icons) you want to track, or click their icon on the map
+(tracked icons are drawn larger). **Todos**/**Ninguno** select everything or
+nothing; the selection is stored in the browser (`smartcity.parkings`).
+
+Each sampling interval (1–60 min of simulated time, default 5 min,
+`CONFIG.parkingTracking`) a record is stored per tracked parking with
+`timestamp, weekday, parking_id, parking_name, capacity, occupied, free,
+occupancy_pct`. Export them with **Exportar CSV de ocupación**, or POST them as
+JSON to a separate Big Data URL by enabling **Enviar ocupación
+automáticamente**. Occupancy is simulated from the demand curve, and capacity is
+a default estimate when OSM does not provide it; these are not real measurements.
+
 ## Checks
 
 ```sh

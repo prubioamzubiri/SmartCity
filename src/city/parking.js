@@ -110,6 +110,7 @@ function undergroundMarkers(list) {
     sprite.scale.set(MARKER_SIZE, MARKER_SIZE, 1);
     sprite.position.set(x, MARKER_SIZE, z);
     sprite.userData = {
+      id: `U${Math.round(x)}_${Math.round(z)}`,
       capacity: capacity || DEFAULT_UNDERGROUND_CAPACITY,
       estimatedCapacity: !capacity,
       fee: !!fee,
@@ -159,6 +160,29 @@ function lotsOf(data) {
   });
   lotCache.set(data, lots);
   return lots;
+}
+
+// Parkings subterráneos públicos que se pueden seguir (con id estable por posición).
+export function trackableLots(group) {
+  const seen = new Set();
+  const lots = [];
+  for (const sprite of group.userData.markers ?? []) {
+    const { id, name, capacity, estimatedCapacity, bias } = sprite.userData;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    lots.push({ id, name: name || `Parking subterráneo (${id.slice(1).replace('_', ', ')})`, capacity, estimatedCapacity, bias });
+  }
+  return lots;
+}
+
+export const undergroundOccupancy = (lot, simTime) => occupancyAt(demandFactor(simTime), lot.bias);
+
+// Los parkings seguidos se dibujan más grandes para distinguirlos en el mapa.
+export function highlightTracked(group, isTracked) {
+  for (const sprite of group.userData.markers ?? []) {
+    const k = isTracked(sprite.userData.id) ? 1.5 : 1;
+    sprite.scale.set(MARKER_SIZE * k, MARKER_SIZE * k, 1);
+  }
 }
 
 export const lotOccupancy = (lot, simTime) => occupancyAt(demandFactor(simTime), lot.bias);

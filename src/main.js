@@ -5,13 +5,17 @@ import { CONFIG } from './config.js';
 import { loadCity } from './city/loadCity.js';
 import { createBuildings } from './city/buildings.js';
 import { createRoads } from './city/roads.js';
-import { createParking, createParkingPicker, lotOccupancy, parkingStats, updateParkingOccupancy, PARKING_TYPE_LABEL } from './city/parking.js';
+import {
+  createParking, createParkingPicker, highlightTracked, lotOccupancy, parkingStats, trackableLots,
+  undergroundOccupancy, updateParkingOccupancy, PARKING_TYPE_LABEL,
+} from './city/parking.js';
 import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
 import { SignalController, createSignalViz } from './traffic/signals.js';
 import { TrafficSim } from './traffic/sim.js';
 import { demandFactor } from './traffic/demand.js';
 import { SensorManager } from './sensors/sensorManager.js';
+import { ParkingTracker } from './sensors/parkingTracker.js';
 import { createHud } from './ui/hud.js';
 
 const loading = document.getElementById('loading');
@@ -72,6 +76,14 @@ async function main() {
   sensors = new SensorManager({ scene, graph, sim, getSimTime: () => clock.simTime });
   sensors.load();
 
+  const parkingTracker = new ParkingTracker({
+    lots: trackableLots(parkingLayer),
+    occupancyOf: undergroundOccupancy,
+    getSimTime: () => clock.simTime,
+  });
+  parkingTracker.onChange(() => highlightTracked(parkingLayer, (id) => parkingTracker.isTracked(id)));
+  parkingTracker.load();
+
   // Modo de interacción: navegar o colocar sensores
   let mode = 'navigate';
   const setMode = (m) => {
@@ -99,7 +111,7 @@ async function main() {
   };
   const hud = createHud({
     clock, params, sim, signals, sensors, setMode, getMode: () => mode, focusSignal,
-    parking: { layer: parkingLayer, stats: parkingStats(data) },
+    parking: { layer: parkingLayer, stats: parkingStats(data), tracker: parkingTracker },
   });
   const signalTooltip = document.createElement('div');
   signalTooltip.id = 'signal-tooltip';
@@ -168,6 +180,8 @@ async function main() {
     if (!down || ev.button !== 0 || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
     setPointer(ev);
     if (mode !== 'sensor') {
+      const parkingHit = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
+      if (parkingHit) return parkingTracker.toggle(parkingHit.object.userData.id);
       const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
       const id = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
       const signal = id === undefined ? undefined : signals.signals.find((s) => s.id === id);
@@ -212,6 +226,7 @@ async function main() {
         sim.setTarget(params.maxCars * demandFactor(clock.simTime, params.scenario));
         sim.step(STEP);
         sensors.tick(clock.simTime);
+        parkingTracker.tick(clock.simTime);
         acc -= STEP;
         steps++;
       }
