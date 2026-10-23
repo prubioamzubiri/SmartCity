@@ -89,14 +89,6 @@ html, body {
 .sensor input { flex: 1; min-width: 0; }
 .sensor .count { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; color: #ffb454; }
 
-#hud .simulation-controls { border: 0; margin: 0; padding: 0; min-width: 0; }
-#hud button:disabled, #hud fieldset:disabled { opacity: 0.55; }
-#hud button:disabled { cursor: default; }
-#hud input[name="seed"] { width: 125px; }
-
-#hud a { color: #8ecbff; }
-#hud fieldset { border: 1px solid #2a3a4d; border-radius: 4px; margin: 6px 0; min-width: 0; }
-#hud [data-selection] { color: #bde0ff; }
 .signal-list { max-height: 220px; overflow-y: auto; margin: 4px 0 8px; }
 .signal-entry { padding: 5px 4px; border-bottom: 1px solid #243244; }
 .signal-entry.selected { background: #12394a; }

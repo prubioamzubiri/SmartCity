@@ -45,17 +45,6 @@ export class SensorManager {
     scene.add(this.ghost);
   }
 
-  resetMeasurements(startTime) {
-    this.records = [];
-    this.pending = [];
-    this.bucketStart = startTime;
-    for (const sensor of this.sensors) {
-      sensor.bucket = { fwd: 0, bwd: 0, speedSum: 0 };
-      sensor.total = 0;
-    }
-    this.emit();
-  }
-
   onChange(fn) {
     this.listeners.add(fn);
   }
