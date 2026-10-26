@@ -19,7 +19,46 @@ npm run dev
 `npm run serve` runs the simulation headless so that sensors keep recording
 while no browser is open (one real week = one simulated year), with SQLite
 persistence, catch-up after restarts and CSV export by date range. See
-[DEPLOYMENT.md](DEPLOYMENT.md#simulation-server-continuous-sensors).
+[DEPLOYMENT.md](DEPLOYMENT.md#simulation-server-continuous-sensors) for the API
+and Fly.io.
+
+### Arranque rápido
+
+Requisitos: Node ≥ 24 (usa `node:sqlite`) o Docker con Compose. En ambos casos
+hace falta antes el mapa: `npm ci && npm run fetch-osm`.
+
+**Opción A: Docker Compose (sim + visor web + proxy Caddy)**
+
+```sh
+cp .env.example .env     # DOMAIN=:80 para HTTP en local; HTTP_PORT/HTTPS_PORT si 80/443 están ocupados
+docker compose up -d --build
+```
+
+Abre `http://localhost` (o `http://localhost:<HTTP_PORT>`). La API queda en
+`/api` (comprueba `/api/health`). Los datos persisten en el volumen `sim-data`.
+Comandos útiles: `docker compose logs -f sim`, `docker compose stop`
+(parada limpia), `docker compose down` (conserva datos; `-v` los borra).
+
+**Opción B: sin Docker**
+
+```sh
+npm run serve            # API en http://localhost:8080 (datos en data/smartcity.db)
+npm run dev              # visor en otra terminal
+```
+
+En el visor, abre el panel **Servidor (datos continuos)**, escribe la URL de la
+API (`http://localhost:8080`), conecta y añade sensores. El token es opcional:
+si defines `SMARTCITY_TOKEN`, hay que introducirlo para modificar datos.
+
+**Descargar el CSV** (fechas simuladas, `to` exclusivo):
+
+```sh
+curl -o trafico.csv "http://localhost/api/traffic.csv?from=2026-01-05T00:00:00Z&to=2026-02-01T00:00:00Z"
+curl -o parkings.csv "http://localhost/api/parking.csv"
+```
+
+Variables de entorno principales (`SMARTCITY_TOKEN`, `DB_FILE`, `PORT`,
+`CHECKPOINT_SECONDS`, `CORS_ORIGIN`): ver [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Traffic scenarios
 
