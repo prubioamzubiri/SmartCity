@@ -6,19 +6,17 @@ import { loadCity } from './city/loadCity.js';
 import { createBuildings } from './city/buildings.js';
 import { createRoads } from './city/roads.js';
 import {
-  createParking, createParkingPicker, highlightTracked, lotOccupancy, parkingStats, trackableLots,
-  undergroundOccupancy, updateParkingOccupancy, PARKING_TYPE_LABEL,
+  createParking, createParkingPicker, highlightTracked, lotOccupancy, parkingStats,
+  updateParkingOccupancy, PARKING_TYPE_LABEL,
 } from './city/parking.js';
 import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
 import { SignalController } from './traffic/signals.js';
 import { createSignalViz } from './traffic/signalViz.js';
 import { CarView } from './traffic/carView.js';
+import { RemoteCars } from './traffic/remoteCars.js';
 import { SensorView } from './sensors/sensorView.js';
-import { TrafficSim } from './traffic/sim.js';
-import { demandFactor } from './traffic/demand.js';
-import { SensorManager } from './sensors/sensorManager.js';
-import { ParkingTracker } from './sensors/parkingTracker.js';
+import { ServerSync } from './api/serverSync.js';
 import { createHud } from './ui/hud.js';
 
 const loading = document.getElementById('loading');
@@ -70,32 +68,22 @@ async function main() {
   const signalViz = createSignalViz(signals);
   scene.add(signalViz.mesh);
 
-  const clock = { simTime: CONFIG.sim.startSeconds, scale: 60 };
-  const params = { maxCars: CONFIG.cars.initialMax, scenario: CONFIG.traffic.scenario };
-
-  let sensors;
-  const sim = new TrafficSim(graph, signals, (sensor, dir, speed) => sensors.recordCrossing(sensor, dir, speed));
-  const carView = new CarView(sim);
+  const graphKey = `${graph.edgeCount}:${data.nodes.length}`;
+  const sync = new ServerSync();
+  const cars = new RemoteCars(graph, graphKey);
+  const carView = new CarView(cars);
   scene.add(carView.mesh);
+  sync.on('cars', (payload) => cars.apply(payload));
+  sync.on('disconnect', () => cars.clear());
   const serverView = new SensorView(scene, { color: 0x4caf50 });
-  sensors = new SensorManager({ view: new SensorView(scene), graph, sim, getSimTime: () => clock.simTime });
-  sensors.load();
+  const simNow = () => sync.simTime() ?? CONFIG.sim.startSeconds;
 
-  const parkingTracker = new ParkingTracker({
-    lots: trackableLots(parkingLayer),
-    occupancyOf: undergroundOccupancy,
-    getSimTime: () => clock.simTime,
-  });
-  parkingTracker.onChange(() => highlightTracked(parkingLayer, (id) => parkingTracker.isTracked(id)));
-  parkingTracker.load();
-
-  // Modo de interacción: navegar o colocar sensores
+  // Modo de interacción: navegar o colocar sensores en el servidor
   let mode = 'navigate';
   const setMode = (m) => {
     mode = m;
-    const placing = m === 'sensor' || m === 'server-sensor';
-    if (!placing) sensors.showGhost(0, 0, false);
-    renderer.domElement.style.cursor = placing ? 'crosshair' : '';
+    if (m !== 'sensor') serverView.showGhost(0, 0, false);
+    renderer.domElement.style.cursor = m === 'sensor' ? 'crosshair' : '';
   };
   const signalMarker = new THREE.Mesh(
     new THREE.RingGeometry(10, 13, 32).rotateX(-Math.PI / 2),
@@ -116,8 +104,8 @@ async function main() {
     controls.update();
   };
   const hud = createHud({
-    clock, params, sim, signals, sensors, setMode, getMode: () => mode, focusSignal,
-    parking: { layer: parkingLayer, stats: parkingStats(data), tracker: parkingTracker },
+    sync, signals, localGraphKey: graphKey, setMode, getMode: () => mode, focusSignal,
+    parking: { layer: parkingLayer, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked) },
     server: { view: serverView },
   });
   const signalTooltip = document.createElement('div');
@@ -139,11 +127,11 @@ async function main() {
   renderer.domElement.addEventListener('pointerdown', (ev) => (down = { x: ev.clientX, y: ev.clientY }));
   renderer.domElement.addEventListener('pointermove', (ev) => {
     setPointer(ev);
-    if (mode === 'sensor' || mode === 'server-sensor') {
+    if (mode === 'sensor') {
       signalTooltip.hidden = true;
-      if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return sensors.showGhost(0, 0, false);
-      const hit = sensors.snap(hitPoint.x, hitPoint.z);
-      sensors.showGhost(hit?.x ?? 0, hit?.z ?? 0, !!hit);
+      if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return serverView.showGhost(0, 0, false);
+      const hit = graph.nearestSegment(hitPoint.x, hitPoint.z);
+      serverView.showGhost(hit?.x ?? 0, hit?.z ?? 0, !!hit);
       return;
     }
     const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
@@ -167,7 +155,7 @@ async function main() {
         if (lot.type === 2) {
           label += lot.estimated ? ' · capacidad desconocida' : ` · ${lot.capacity} plazas`;
         } else {
-          const occupancy = lotOccupancy(lot, clock.simTime);
+          const occupancy = lotOccupancy(lot, simNow());
           const places = `${Math.round(occupancy * lot.capacity)}/${lot.capacity}${lot.estimated ? ' est.' : ''}`;
           label += ` · ocupación simulada ${Math.round(occupancy * 100)}% (${places} plazas)`;
         }
@@ -188,7 +176,7 @@ async function main() {
     setPointer(ev);
     if (mode === 'navigate') {
       const parkingHit = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
-      if (parkingHit) return parkingTracker.toggle(parkingHit.object.userData.id);
+      if (parkingHit) return hud.toggleParking(parkingHit.object.userData.id);
       const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
       const id = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
       const signal = id === undefined ? undefined : signals.signals.find((s) => s.id === id);
@@ -198,23 +186,17 @@ async function main() {
         return;
       }
     }
-    if (mode === 'server-sensor') {
+    if (mode === 'sensor') {
       if (raycaster.ray.intersectPlane(groundPlane, hitPoint)) hud.addServerSensor(hitPoint.x, hitPoint.z);
       return;
     }
-    const picked = sensors.pick(raycaster);
-    if (picked) return sensors.select(picked);
-    if (mode === 'sensor' && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
-      const s = sensors.add(hitPoint.x, hitPoint.z);
-      if (s) sensors.select(s.id);
-    } else {
-      sensors.select(null);
-    }
+    const picked = serverView.pick(raycaster);
+    hud.selectSensor(picked);
   });
   window.addEventListener('keydown', (ev) => {
     if (ev.target instanceof HTMLInputElement) return;
     if (ev.key === 'Escape') setMode('navigate');
-    if (ev.key === 'Delete' && sensors.selectedId) sensors.remove(sensors.selectedId);
+    if (ev.key === 'Delete') hud.removeSelectedSensor();
   });
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -222,29 +204,14 @@ async function main() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  const STEP = CONFIG.sim.step;
-  let acc = 0;
-  let last = performance.now();
   function frame(now) {
-    const dt = Math.min((now - last) / 1000, 0.1);
-    last = now;
-    if (clock.scale > 0) {
-      acc += dt * clock.scale;
-      let steps = 0;
-      while (acc >= STEP && steps < CONFIG.sim.maxStepsPerFrame) {
-        clock.simTime += STEP;
-        signals.update(clock.simTime);
-        sim.setTarget(params.maxCars * demandFactor(clock.simTime, params.scenario));
-        sim.step(STEP);
-        sensors.tick(clock.simTime);
-        parkingTracker.tick(clock.simTime);
-        acc -= STEP;
-        steps++;
-      }
-      if (acc >= STEP) acc = 0;
+    const simTime = sync.simTime();
+    if (simTime !== null) {
+      signals.update(simTime);
+      updateParkingOccupancy(parkingLayer, simTime);
     }
+    cars.update(now);
     carView.render();
-    updateParkingOccupancy(parkingLayer, clock.simTime);
     signalViz.update();
     controls.update();
     renderer.render(scene, camera);

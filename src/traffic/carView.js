@@ -33,9 +33,9 @@ export class CarView {
       const uz = g.uz[e];
       const o = i * 16;
       m[o] = 1; m[o + 5] = 1; m[o + 10] = 1; m[o + 15] = 1;
-      m[o + 12] = g.nx[a] + ux * p - uz * C.laneOffset;
+      m[o + 12] = sim.rx ? sim.rx[i] : g.nx[a] + ux * p - uz * C.laneOffset;
       m[o + 13] = C.radius;
-      m[o + 14] = g.nz[a] + uz * p + ux * C.laneOffset;
+      m[o + 14] = sim.rz ? sim.rz[i] : g.nz[a] + uz * p + ux * C.laneOffset;
       const ratio = Math.min(1, sim.speed[i] / (g.speed[e] * 0.8));
       c[i * 3] = 0.95 - 0.75 * ratio;
       c[i * 3 + 1] = 0.15 + 0.7 * ratio;

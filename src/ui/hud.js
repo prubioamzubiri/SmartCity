@@ -4,14 +4,6 @@ import { createServerPanel } from './serverPanel.js';
 import { demandFactor, scenarioForTime, simDate } from '../traffic/demand.js';
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-const SPEEDS = [
-  ['⏸', 0],
-  ['1x', 1],
-  ['10x', 10],
-  ['60x', 60],
-  ['300x', 300],
-  ['1000x', 1000],
-];
 
 function download(filename, text, type) {
   const url = URL.createObjectURL(new Blob([text], { type }));
@@ -28,7 +20,8 @@ function pickFile(accept) {
   });
 }
 
-export function createHud({ clock, params, sim, signals, sensors, setMode, getMode, focusSignal, parking, server }) {
+// Panel de control del visor: muestra el estado del servidor y le envía los cambios; no guarda estado propio.
+export function createHud({ sync, signals, localGraphKey, setMode, getMode, focusSignal, parking, server }) {
   const root = el('div', { id: 'hud' });
   document.body.append(root);
 
@@ -56,28 +49,36 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     return details;
   };
 
+  let state = null; // último estado recibido del servidor
+  const simNow = () => sync.simTime() ?? CONFIG.sim.startSeconds;
+  const serverPanel = createServerPanel({ section, sync, localGraphKey });
+  const run = async (fn) => {
+    try {
+      await sync.act(fn);
+    } catch (err) {
+      serverPanel.say(err.message, true);
+    }
+  };
+
   // Reloj
   const clockLabel = el('div', { class: 'clock' });
-  const speedButtons = SPEEDS.map(([label, value]) =>
-    el('button', { textContent: label, onclick: () => (clock.scale = value) }),
-  );
-  const clockSection = section('Reloj', clockLabel, el('div', { class: 'row' }, ...speedButtons));
+  const clockNote = el('div', { class: 'status' });
+  const clockSection = section('Reloj (servidor)', clockLabel, clockNote);
 
   // Tráfico
-  const carsLabel = el('span');
+  const carsLabel = el('span', { textContent: CONFIG.cars.initialMax });
   const carsInput = el('input', {
-    type: 'range', min: 100, max: CONFIG.cars.max, step: 100, value: params.maxCars,
-    oninput: () => (params.maxCars = Number(carsInput.value)),
+    type: 'range', min: 100, max: CONFIG.cars.max, step: 100, value: CONFIG.cars.initialMax,
+    oninput: () => (carsLabel.textContent = carsInput.value),
+    onchange: () => run((c) => c.setParams({ maxCars: Number(carsInput.value) })),
   });
   const statsLabel = el('div', { class: 'stats' });
   const scenarioNames = { auto: 'Automático (calendario)', weekday: 'Laborable', weekend: 'Fin de semana' };
   const scenarioSelect = el('select', {
-    onchange: () => (params.scenario = scenarioSelect.value),
-  }, ...Object.entries(scenarioNames).map(([value, textContent]) =>
-    el('option', { value, textContent, selected: value === params.scenario }),
-  ));
+    onchange: () => run((c) => c.setParams({ scenario: scenarioSelect.value })),
+  }, ...Object.entries(scenarioNames).map(([value, textContent]) => el('option', { value, textContent })));
   const scenarioLabel = el('div', { class: 'status' });
-  const trafficSection = section('Tráfico',
+  const trafficSection = section('Tráfico (servidor)',
     el('label', {}, 'Escenario: ', scenarioSelect), scenarioLabel,
     el('label', {}, 'Coches en hora punta: ', carsLabel), carsInput, statsLabel);
 
@@ -90,6 +91,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   const signalInputs = new Map();
   const signalEntries = new Map();
   let selectedSignalId = null;
+  let planKey = '';
   signalList.hidden = true;
   const setListOpen = (open) => {
     signalList.hidden = !open;
@@ -112,13 +114,17 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   };
   signalToggle.setAttribute('aria-controls', 'signal-list');
   signalToggle.setAttribute('aria-expanded', 'false');
+  const sendPlan = (plan, label) => run(async (c) => {
+    await c.setSignalPlan(plan);
+    planStatus.textContent = label;
+  });
   const renderSignalList = () => {
     const activeSignals = signals.signals.filter((signal) => signal.active);
     signalCount.textContent = `Cruces configurables: ${activeSignals.length}`;
     signalInputs.clear();
     signalEntries.clear();
     signalList.replaceChildren(...activeSignals.map((signal) => {
-      const timing = signals.timing(signal, clock.simTime);
+      const timing = signals.timing(signal, simNow());
       const heading = el('div', { class: 'signal-head' },
         el('button', {
           class: 'signal-id',
@@ -142,9 +148,9 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
         const input = el('input', {
           type: 'number', min, max, step: 1, value,
           onchange: (event) => {
-            signals.setSignalTiming(signal.id, { [key]: Number(event.currentTarget.value) });
-            signals.update(clock.simTime);
-            renderSignalList();
+            const plan = structuredClone(signals.plan);
+            plan.signals[signal.id] = { ...(plan.signals[signal.id] ?? {}), [key]: Number(event.currentTarget.value) };
+            sendPlan(plan, `Semáforo ${signal.id} actualizado en el servidor`);
           },
         });
         return {
@@ -169,27 +175,14 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     }));
   };
   renderSignalList();
-  const applyPlan = (plan, label) => {
-    try {
-      signals.setPlan(plan);
-      signals.update(clock.simTime);
-      greenInput.value = signals.plan.default.green;
-      renderSignalList();
-      planStatus.textContent = `Plan cargado: ${label}`;
-    } catch (err) {
-      planStatus.textContent = `Plan no válido: ${err.message}`;
-    }
-  };
   const signalSection = section(
-    'Semáforos',
+    'Semáforos (servidor)',
     el('label', {}, 'Verde (s) para todos: ', greenInput),
     el('button', {
       textContent: 'Aplicar',
       onclick: () => {
-        signals.setGlobalGreen(Number(greenInput.value) || CONFIG.signals.green);
-        signals.update(clock.simTime);
-        renderSignalList();
-        planStatus.textContent = `Verde global: ${greenInput.value} s`;
+        const green = Number(greenInput.value) || CONFIG.signals.green;
+        sendPlan({ default: { green, yellow: signals.plan.default.yellow }, signals: {} }, `Verde global: ${green} s`);
       },
     }),
     signalCount,
@@ -203,7 +196,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
           try {
             const res = await fetch(planUrl.value);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            applyPlan(await res.json(), planUrl.value);
+            await sendPlan(await res.json(), `Plan cargado: ${planUrl.value}`);
           } catch (err) {
             planStatus.textContent = `Error: ${err.message}`;
           }
@@ -215,7 +208,7 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
           const text = await pickFile('.json,application/json');
           if (text === null) return;
           try {
-            applyPlan(JSON.parse(text), 'archivo');
+            await sendPlan(JSON.parse(text), 'Plan cargado: archivo');
           } catch (err) {
             planStatus.textContent = `Archivo no válido: ${err.message}`;
           }
@@ -264,42 +257,53 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
   );
 
   // Sensores
-  const modeButton = el('button', { class: 'primary', onclick: () => setMode(getMode() === 'sensor' ? 'navigate' : 'sensor') });
+  const sensorModeButton = el('button', { class: 'primary', onclick: () => setMode(getMode() === 'sensor' ? 'navigate' : 'sensor') });
   const sensorList = el('div', { class: 'sensor-list' });
-  const bucketSelect = el('select', {
-    onchange: () => sensors.setBucketSeconds(Number(bucketSelect.value) * 60),
-  }, ...[1, 5, 15, 30, 60].map((m) => el('option', { value: m, textContent: `${m} min`, selected: m * 60 === CONFIG.sensors.bucketSeconds })));
-  const endpointInput = el('input', { type: 'text', placeholder: 'URL de la BigData (POST JSON)' });
-  const autoSend = el('input', { type: 'checkbox' });
-  const sendStatus = el('div', { class: 'status' });
   const recordsLabel = el('div', { class: 'status' });
+  const sensorSection = section('Sensores (servidor)', sensorModeButton, sensorList, recordsLabel);
 
-  const sensorSection = section(
-    'Sensores',
-    modeButton,
-    sensorList,
-    el('label', {}, 'Intervalo de medida: ', bucketSelect),
-    el('div', { class: 'row' },
-      el('button', { textContent: 'Exportar CSV', onclick: () => download('trafico.csv', sensors.recordsCsv(), 'text/csv') }),
-      el('button', { textContent: 'Exportar sensores', onclick: () => download('sensores.json', sensors.sensorsJson(), 'application/json') }),
-      el('button', {
-        textContent: 'Importar sensores',
-        onclick: async () => {
-          const text = await pickFile('.json,application/json');
-          if (text === null) return;
-          try {
-            sensors.importJson(JSON.parse(text));
-          } catch {
-            sendStatus.textContent = 'Archivo de sensores no válido';
-          }
-        },
-      }),
-    ),
-    recordsLabel,
-    endpointInput,
-    el('label', {}, autoSend, ' Enviar datos automáticamente'),
-    sendStatus,
-  );
+  let selectedSensorId = null;
+  let sensorKey = null;
+  const sensorRows = new Map();
+  const selectSensor = (id) => {
+    selectedSensorId = id;
+    server.view.select(id);
+    sensorRows.forEach((r, key) => r.row.classList.toggle('selected', key === id));
+  };
+  const removeSensor = (id) => run((c) => c.removeSensor(id));
+  function renderSensors(list) {
+    const ids = new Set(list.map((s) => s.id));
+    for (const id of [...server.view.markers.keys()]) if (!ids.has(id)) server.view.remove(id);
+    for (const s of list) if (!server.view.markers.has(s.id)) server.view.add(s);
+    if (selectedSensorId && !ids.has(selectedSensorId)) selectedSensorId = null;
+    // Solo se reconstruye la lista si cambian sensores o nombres, para no pisar lo que se esté escribiendo.
+    const key = JSON.stringify(list.map((s) => [s.id, s.name]));
+    if (key !== sensorKey) {
+      sensorKey = key;
+      sensorRows.clear();
+      sensorList.replaceChildren();
+      for (const s of list) {
+        const name = el('input', {
+          type: 'text', value: s.name, maxLength: 60,
+          onchange: () => run((c) => c.renameSensor(s.id, name.value)),
+        });
+        const count = el('span', { class: 'count' });
+        const del = el('button', {
+          textContent: '✕', title: 'Borrar del servidor (el histórico se conserva)',
+          onclick: (event) => {
+            event.stopPropagation();
+            removeSensor(s.id);
+          },
+        });
+        const row = el('div', { class: 'sensor', onclick: () => selectSensor(s.id) }, name, count, del);
+        sensorRows.set(s.id, { row, count });
+        sensorList.append(row);
+      }
+      if (!list.length) sensorList.append(el('em', {}, 'Sin sensores en el servidor. Activa el modo y haz clic sobre una calle.'));
+    }
+    for (const s of list) sensorRows.get(s.id).count.textContent = `${s.current} (${s.total})`;
+    selectSensor(selectedSensorId);
+  }
 
   // Aparcamiento
   const parkingToggle = el('input', {
@@ -318,29 +322,44 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     legendItem('#4fc3f7', 'Aparcamiento en calle'),
     legendItem('#ffffff', 'Plaza individual'),
   );
-  // Seguimiento de la ocupación de parkings concretos
-  const tracker = parking.tracker;
   const trackList = el('div', { class: 'parking-list' });
-  const trackIntervalSelect = el('select', {
-    onchange: () => tracker.setIntervalSeconds(Number(trackIntervalSelect.value) * 60, clock.simTime),
-  }, ...[1, 5, 15, 30, 60].map((m) => el('option', { value: m, textContent: `${m} min`, selected: m * 60 === CONFIG.parkingTracking.intervalSeconds })));
-  const trackEndpoint = el('input', { type: 'text', placeholder: 'URL de la BigData para parkings (POST JSON)' });
-  const trackAutoSend = el('input', { type: 'checkbox' });
-  const trackSendStatus = el('div', { class: 'status' });
-  const trackRecordsLabel = el('div', { class: 'status' });
+  const trackedIds = () => (state?.parkings ?? []).filter((p) => p.tracked).map((p) => p.id);
+  let trackKey = null;
+  function renderTracked() {
+    const lots = state?.parkings ?? [];
+    const key = JSON.stringify(lots.map((p) => [p.id, p.name, p.tracked]));
+    if (key !== trackKey) {
+      trackKey = key;
+      trackList.replaceChildren();
+      for (const lot of lots) {
+        const box = el('input', { type: 'checkbox', checked: lot.tracked, onchange: () => toggleParking(lot.id) });
+        trackList.append(el('label', { class: 'parking-item' }, box, ` ${lot.name} `,
+          el('span', { class: 'count', id: `track-${lot.id}` })));
+      }
+      if (!lots.length) trackList.append(el('em', {}, 'Sin parkings subterráneos en los datos.'));
+    }
+    for (const lot of lots) {
+      const c = document.getElementById(`track-${lot.id}`);
+      if (c) c.textContent = `${Math.round(lot.occupancy * 100)}%`;
+    }
+  }
+  const setTracked = async (ids) => {
+    await run((c) => c.setTrackedParkings(ids));
+    trackKey = null; // vuelve a mostrar lo que el servidor tiene realmente
+    renderTracked();
+  };
+  const toggleParking = (id) => {
+    const ids = new Set(trackedIds());
+    if (!ids.delete(id)) ids.add(id);
+    return setTracked([...ids]);
+  };
   const trackSection = el('div', { class: 'parking-tracking' },
-    el('h4', {}, 'Seguir ocupación'),
+    el('h4', {}, 'Ocupación registrada por el servidor'),
     el('div', { class: 'row' },
-      el('button', { textContent: 'Todos', onclick: () => tracker.setAll(true) }),
-      el('button', { textContent: 'Ninguno', onclick: () => tracker.setAll(false) }),
+      el('button', { textContent: 'Todos', onclick: () => setTracked((state?.parkings ?? []).map((p) => p.id)) }),
+      el('button', { textContent: 'Ninguno', onclick: () => setTracked([]) }),
     ),
     trackList,
-    el('label', {}, 'Intervalo de muestreo: ', trackIntervalSelect),
-    el('button', { textContent: 'Exportar CSV de ocupación', onclick: () => download('ocupacion-parkings.csv', tracker.recordsCsv(), 'text/csv') }),
-    trackRecordsLabel,
-    trackEndpoint,
-    el('label', {}, trackAutoSend, ' Enviar ocupación automáticamente'),
-    trackSendStatus,
   );
   const parkingSection = section(
     'Aparcamiento (OSM)',
@@ -351,120 +370,80 @@ export function createHud({ clock, params, sim, signals, sensors, setMode, getMo
     trackSection,
   );
 
-  const serverPanel = createServerPanel({ section, clock, sensors, tracker, view: server.view, setMode, getMode });
-
   root.append(
     el('h2', {}, 'SmartCity Donostia'),
     serverPanel.node, clockSection, trafficSection, signalSection, sensorSection, parkingSection,
     el('p', { class: 'help' }, 'Ratón: arrastrar = girar, derecho = mover, rueda = zoom. Esc: salir del modo sensor. Supr: borrar sensor seleccionado.'),
   );
 
-  const rows = new Map();
-  function renderSensorList() {
+  sync.on('state', (s) => {
+    state = s;
+    if (document.activeElement !== carsInput) {
+      carsInput.value = s.params.maxCars;
+      carsLabel.textContent = s.params.maxCars;
+    }
+    if (document.activeElement !== scenarioSelect) scenarioSelect.value = s.params.scenario;
+    signals.setPlan(s.signalPlan);
+    const key = JSON.stringify(s.signalPlan);
+    if (key !== planKey) {
+      planKey = key;
+      greenInput.value = signals.plan.default.green;
+      renderSignalList();
+    }
+    renderSensors(s.sensors);
+    renderTracked();
+    parking.highlight((id) => s.parkings.some((p) => p.id === id && p.tracked));
+    if (s.parkings.length) {
+      const avg = s.parkings.reduce((sum, p) => sum + p.occupancy, 0) / s.parkings.length;
+      parkingOccupancy.textContent = `Ocupación simulada de los P subterráneos: ${(avg * 100).toFixed(0)}%`;
+    }
+    recordsLabel.textContent = `Registros guardados: ${s.records.traffic} · cruces en el intervalo en curso y total entre paréntesis`;
+  });
+  sync.on('disconnect', () => {
+    state = null;
+    sensorKey = null;
+    trackKey = null;
+    for (const id of [...server.view.markers.keys()]) server.view.remove(id);
     sensorList.replaceChildren();
-    rows.clear();
-    for (const s of sensors.sensors) {
-      const name = el('input', {
-        type: 'text', value: s.name, maxLength: 60,
-        onchange: () => sensors.rename(s.id, name.value),
-      });
-      const count = el('span', { class: 'count', id: `count-${s.id}` });
-      const del = el('button', { textContent: '✕', title: 'Borrar', onclick: () => sensors.remove(s.id) });
-      const row = el('div', { class: 'sensor', onclick: () => sensors.select(s.id) }, name, count, del);
-      rows.set(s.id, row);
-      sensorList.append(row);
-    }
-    if (!sensors.sensors.length) sensorList.append(el('em', {}, 'Sin sensores. Activa el modo y haz clic sobre una calle.'));
-  }
-  sensors.onChange(renderSensorList);
-  renderSensorList();
-
-  function renderTrackList() {
     trackList.replaceChildren();
-    for (const lot of tracker.lots.values()) {
-      const box = el('input', {
-        type: 'checkbox', checked: tracker.isTracked(lot.id),
-        onchange: () => tracker.setTracked(lot.id, box.checked),
-      });
-      const label = el('label', { class: 'parking-item' }, box, ` ${lot.name} `,
-        el('span', { class: 'count', id: `track-${lot.id}` }));
-      trackList.append(label);
-    }
-    if (!tracker.lots.size) trackList.append(el('em', {}, 'Sin parkings subterráneos en los datos.'));
-  }
-  tracker.onChange(renderTrackList);
-  renderTrackList();
-
-  function autoSender(source, endpoint, enabled, status) {
-    let sending = false;
-    return async () => {
-      if (sending || !enabled.checked || !endpoint.value || !source.pending.length) return;
-      sending = true;
-      const batch = source.pending.splice(0, source.pending.length);
-      try {
-        const res = await fetch(endpoint.value, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(batch),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        status.textContent = `Enviados ${batch.length} registros`;
-      } catch (err) {
-        source.pending.unshift(...batch);
-        status.textContent = `Error de envío: ${err.message} (${source.pending.length} pendientes)`;
-      } finally {
-        sending = false;
-      }
-    };
-  }
-  const flushSensors = autoSender(sensors, endpointInput, autoSend, sendStatus);
-  const flushParking = autoSender(tracker, trackEndpoint, trackAutoSend, trackSendStatus);
-  setInterval(() => {
-    flushSensors();
-    flushParking();
-  }, 2000);
+    if (getMode() === 'sensor') setMode('navigate');
+  });
 
   let lastUpdate = 0;
   return {
     revealSignal,
-    addServerSensor: serverPanel.addSensor,
+    selectSensor,
+    removeSelectedSensor: () => selectedSensorId && removeSensor(selectedSensorId),
+    toggleParking,
+    // Crea un sensor en el servidor en las coordenadas de escena indicadas.
+    addServerSensor: (x, z) => run((c) => c.addSensor(x, z)),
     update(now) {
       if (now - lastUpdate < 250) return;
       lastUpdate = now;
-      serverPanel.update();
-      const d = simDate(clock.simTime);
-      const day = Math.floor(clock.simTime / 86400) + 1;
+      const active = getMode() === 'sensor';
+      sensorModeButton.textContent = active ? 'Colocando en el servidor… (clic en una calle)' : 'Colocar sensor en el servidor';
+      sensorModeButton.classList.toggle('active', active);
+      sensorModeButton.disabled = !state;
+
+      const t = sync.simTime();
+      if (t === null) {
+        clockLabel.textContent = 'Sin conexión con el servidor';
+        clockNote.textContent = '';
+        return;
+      }
+      const d = simDate(t);
+      const day = Math.floor(t / 86400) + 1;
       const hh = String(d.getUTCHours()).padStart(2, '0');
       const mm = String(d.getUTCMinutes()).padStart(2, '0');
-      clockLabel.textContent = `${WEEKDAYS[d.getUTCDay()]} ${hh}:${mm} (día ${day}) · ×${clock.scale}`;
-      speedButtons.forEach((b, i) => b.classList.toggle('active', SPEEDS[i][1] === clock.scale));
-      carsLabel.textContent = params.maxCars;
-      scenarioLabel.textContent = `Escenario activo: ${scenarioNames[scenarioForTime(clock.simTime, params.scenario)]}`;
-      const st = sim.stats();
-      statsLabel.textContent = `Activos: ${st.active} · Parados: ${st.stopped} · Vel. media: ${st.avgKmh.toFixed(1)} km/h · Demanda: ${(demandFactor(clock.simTime, params.scenario) * 100).toFixed(0)}%`;
-      modeButton.textContent = getMode() === 'sensor' ? 'Colocando sensores… (clic en una calle)' : 'Colocar sensores';
-      modeButton.classList.toggle('active', getMode() === 'sensor');
-      for (const s of sensors.sensors) {
-        const c = document.getElementById(`count-${s.id}`);
-        if (c) c.textContent = `${sensors.currentCount(s)} (${s.total})`;
-        rows.get(s.id)?.classList.toggle('selected', s.id === sensors.selectedId);
-      }
-      recordsLabel.textContent = `Registros: ${sensors.records.length} · intervalo en curso`;
-      const lots = parking.layer.userData.markers ?? [];
-      if (lots.length) {
-        const avg = lots.reduce((sum, m) => sum + m.userData.occupancy, 0) / lots.length;
-        parkingOccupancy.textContent = `Ocupación simulada de los P subterráneos: ${(avg * 100).toFixed(0)}%`;
-        for (const m of lots) {
-          const c = document.getElementById(`track-${m.userData.id}`);
-          if (c) c.textContent = `${Math.round(m.userData.occupancy * 100)}%`;
-        }
-      }
-      trackRecordsLabel.textContent = `Parkings seguidos: ${tracker.tracked.size} · registros: ${tracker.records.length}`;
-      const signalDate = simDate(clock.simTime);
+      clockLabel.textContent = `${WEEKDAYS[d.getUTCDay()]} ${d.toISOString().slice(0, 10)} ${hh}:${mm} (día ${day}) · ×${state.scale.toFixed(1)}`;
+      clockNote.textContent = state.caughtUp ? 'Reloj virtual del servidor' : `Recuperando ${Math.round(state.behindSimSeconds / 3600)} h simuladas tras una parada`;
+      scenarioLabel.textContent = `Escenario activo: ${scenarioNames[scenarioForTime(t, state.params.scenario)]}`;
+      statsLabel.textContent = `Activos: ${state.cars} · Parados: ${state.traffic.stopped} · Vel. media: ${state.traffic.avgKmh.toFixed(1)} km/h · Demanda: ${(demandFactor(t, state.params.scenario) * 100).toFixed(0)}%`;
+      const signalDate = simDate(t);
       for (const signal of signals.signals) {
         const inputs = signalInputs.get(signal.id);
         if (!inputs) continue;
-        const timing = signals.timing(signal, clock.simTime, signalDate);
+        const timing = signals.timing(signal, t, signalDate);
         for (const [key, value] of Object.entries({ greenA: timing.gA, greenB: timing.gB, yellow: timing.y })) {
           if (inputs[key] !== document.activeElement) inputs[key].value = value;
         }

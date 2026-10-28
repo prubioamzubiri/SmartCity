@@ -67,6 +67,7 @@ export const CONFIG = {
     url: import.meta.env?.VITE_API_URL ?? '',
     urlKey: 'smartcity.server.url',
     pollSeconds: 5,
+    carsSeconds: 1,
   },
 
   parkingTracking: {

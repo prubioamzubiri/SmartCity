@@ -42,6 +42,17 @@ export class TrafficSim {
     };
   }
 
+  // Posición actual de los coches (sin el estado interno) para que un visor los dibuje.
+  positions() {
+    const n = this.activeCount;
+    return {
+      activeCount: n,
+      edge: toBase64(this.edge.subarray(0, n)),
+      pos: toBase64(this.pos.subarray(0, n)),
+      speed: toBase64(this.speed.subarray(0, n)),
+    };
+  }
+
   restore(state) {
     const n = state.activeCount;
     this.edge.set(fromBase64(state.edge, Int32Array));

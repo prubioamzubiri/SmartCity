@@ -72,7 +72,8 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 
 | Endpoint | Description |
 | --- | --- |
-| `GET /api/state` | Simulated time, scale, sensors, parkings, params, signal plan, record counts |
+| `GET /api/state` | Simulated time, scale, graph key, traffic stats, sensors (with current count), parkings (with occupancy), params, signal plan, record counts |
+| `GET /api/cars` | Car positions (base64 typed arrays: `edge`, `pos`, `speed`) for the viewer |
 | `GET /api/traffic.csv?from=&to=&id=` | Sensor records (`id` = sensor id, optional) |
 | `GET /api/parking.csv?from=&to=&id=` | Parking occupancy records |
 | `POST /api/sensors` `{x, z, name}` | Create a sensor |
@@ -87,17 +88,13 @@ curl -o trafico.csv "https://<app>.fly.dev/api/traffic.csv?from=2026-01-05T00:00
 
 ## Viewer panel
 
-The **Servidor (datos continuos)** section of the HUD connects the viewer to
-this API: enter the server URL (or build with `VITE_API_URL`, e.g. in the deploy
-workflow) and, to modify data, the token (kept only in `sessionStorage`). It
-shows the server's simulated time, lists and places sensors on the server
-(green markers; the browser's own orange sensors are separate), sends the
-tracked parkings, and downloads the CSV for a date range (the browser streams
-the file, so year-long exports do not fill memory). Set `CORS_ORIGIN` to the
+The viewer keeps no simulation of its own: the clock, traffic parameters, signal
+plan, sensors, tracked parkings and cars all come from the server, so reloading
+the page changes nothing. The clock is extrapolated between `GET /api/state`
+polls (every 5 s); the cars are the snapshot from `GET /api/cars` (every 1 s,
+rejected if its `graphKey` differs from the viewer's map). Changes made in the
+HUD are sent to the server and need the token. Set `CORS_ORIGIN` to the
 viewer's origin.
-
-The viewer's cars are still its own local simulation: **Usar hora del servidor**
-only aligns the clock and speed.
 
 ## Deploying on Fly.io
 
@@ -130,4 +127,8 @@ docker compose up -d --build
 - Con `DOMAIN=:80` solo se sirve HTTP (pruebas); con un dominio real Caddy obtiene el certificado.
 - Backup: copiar el volumen `sim-data`. No escales `sim` a más de una réplica.
 - Parada limpia: `docker compose stop` (deja un checkpoint final); `down -v` borra los datos.
-- Nota: en algunos entornos (p. ej. Codespaces) el tráfico entre contenedores está bloqueado y el proxy devuelve 502; en un VPS normal funciona.
+- Nota: en Codespaces el tráfico entre contenedores está bloqueado (`iptables-legacy` tiene `FORWARD` en `DROP`) y el proxy devuelve 502; en un VPS normal funciona. Solución, que no persiste al reiniciar el Codespace:
+
+  ```sh
+  sudo iptables-legacy -I DOCKER-USER 1 -s 172.16.0.0/12 -d 172.16.0.0/12 -j ACCEPT
+  ```

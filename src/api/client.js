@@ -53,6 +53,18 @@ export class ApiClient {
     return this.request('/api/state');
   }
 
+  cars() {
+    return this.request('/api/cars');
+  }
+
+  setParams(params) {
+    return this.request('/api/params', { method: 'PUT', body: params });
+  }
+
+  setSignalPlan(plan) {
+    return this.request('/api/signals/plan', { method: 'PUT', body: { plan } });
+  }
+
   addSensor(x, z, name = '') {
     return this.request('/api/sensors', { method: 'POST', body: { x, z, name } });
   }

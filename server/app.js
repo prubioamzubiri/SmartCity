@@ -78,15 +78,20 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
 
   const state = () => {
     const { engine } = runtime;
+    const traffic = engine.sim.stats();
     return {
       ...runtime.status(),
+      graphKey: engine.graphKey,
       params: engine.params,
+      traffic: { stopped: traffic.stopped, avgKmh: Math.round(traffic.avgKmh * 10) / 10 },
       signalPlan: engine.signals.plan,
       sensors: engine.sensors.sensors.map((s) => ({
-        id: s.id, name: s.name, x: Math.round(s.x * 10) / 10, z: Math.round(s.z * 10) / 10, total: s.total,
+        id: s.id, name: s.name, x: Math.round(s.x * 10) / 10, z: Math.round(s.z * 10) / 10,
+        total: s.total, current: engine.sensors.currentCount(s),
       })),
       parkings: [...engine.parking.lots.values()].map((l) => ({
         id: l.id, name: l.name, capacity: l.capacity, tracked: engine.parking.isTracked(l.id),
+        occupancy: Math.round(engine.parking.occupancyOf(l, engine.simTime) * 1000) / 1000,
       })),
       records: { traffic: store.count('traffic'), parking: store.count('parking') },
     };
@@ -102,6 +107,10 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
 
     if (method === 'GET' && pathname === '/api/health') return send(200, { ok: true });
     if (method === 'GET' && pathname === '/api/state') return send(200, state());
+    if (method === 'GET' && pathname === '/api/cars') {
+      const { engine } = runtime;
+      return send(200, { graphKey: engine.graphKey, simSeconds: engine.simTime, ...engine.sim.positions() });
+    }
 
     if (method === 'GET' && (pathname === '/api/traffic.csv' || pathname === '/api/parking.csv')) {
       const traffic = pathname === '/api/traffic.csv';

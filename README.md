@@ -66,8 +66,8 @@ In the **Tráfico** panel, choose **Automático (calendario)**, **Laborable**, o
 **Fin de semana**. Automatic mode uses the simulated UTC date: Monday–Friday
 selects the weekday scenario; Saturday–Sunday selects the weekend scenario.
 Forcing a scenario keeps that demand profile across calendar changes without
-changing the clock. A selection takes effect on the next physics step; while
-paused, vehicle counts update when the simulation resumes.
+changing the clock. The selection is sent to the server (it needs the token if one
+is set) and takes effect on its next physics step.
 
 Edit `CONFIG.traffic` in `src/config.js` to configure:
 
@@ -95,17 +95,16 @@ UTC calendar origin and need not be a Monday.
 
 ## Parking occupancy tracking
 
-In **Aparcamiento (OSM) → Seguir ocupación**, tick the public underground
-parkings (the "P" icons) you want to track, or click their icon on the map
-(tracked icons are drawn larger). **Todos**/**Ninguno** select everything or
-nothing; the selection is stored in the browser (`smartcity.parkings`).
+In **Aparcamiento (OSM) → Ocupación registrada por el servidor**, tick the public
+underground parkings (the "P" icons) you want to record, or click their icon on
+the map (tracked icons are drawn larger). **Todos**/**Ninguno** select everything
+or nothing. The selection is stored in the server, not in the browser.
 
-Each sampling interval (1–60 min of simulated time, default 5 min,
-`CONFIG.parkingTracking`) a record is stored per tracked parking with
+Each sampling interval (default 5 min of simulated time, `CONFIG.parkingTracking`)
+the server stores a record per tracked parking with
 `timestamp, weekday, parking_id, parking_name, capacity, occupied, free,
-occupancy_pct`. Export them with **Exportar CSV de ocupación**, or POST them as
-JSON to a separate Big Data URL by enabling **Enviar ocupación
-automáticamente**. Occupancy is simulated from the demand curve, and capacity is
+occupancy_pct`. Download them from **Servidor (datos continuos) → CSV de
+parkings**. Occupancy is simulated from the demand curve, and capacity is
 a default estimate when OSM does not provide it; these are not real measurements.
 
 ## Checks
