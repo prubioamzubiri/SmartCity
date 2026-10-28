@@ -41,6 +41,7 @@ export const CONFIG = {
     laneOffset: 2.2,
     lookAhead: 60,
     stopGap: 3,
+    stuckSeconds: 300, // un coche parado tanto tiempo reaparece en otro punto (rompe bloqueos sin salida)
     // m/s por clase de vía: autovía, primaria, secundaria, terciaria, residencial
     speedByClass: [22, 16, 13, 11, 8],
   },
@@ -49,6 +50,13 @@ export const CONFIG = {
     green: 20,
     yellow: 3,
     clusterDistance: 45, // metros para agrupar semáforos de un mismo cruce
+  },
+
+  // Rotondas: los coches del anillo tienen prioridad y solo entran si hay hueco y el anillo no está lleno.
+  roundabouts: {
+    maxLength: 400, // perímetro máximo del anillo, en metros
+    maxEdges: 64, // tramos máximos del anillo
+    yieldDistance: 20, // un coche del anillo que vaya a pasar por la entrada y esté más cerca que esto tiene prioridad
   },
 
   roads: {

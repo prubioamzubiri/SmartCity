@@ -16,6 +16,7 @@ export class TrafficSim {
     this.speed = new Float32Array(n);
     this.factor = new Float32Array(n);
     this.next = new Int32Array(n * 3).fill(-1);
+    this.stuck = new Float32Array(n);
     this.edgeCars = new Array(graph.edgeCount);
     this.sensorsByEdge = new Map();
     this.activeCount = 0;
@@ -39,6 +40,7 @@ export class TrafficSim {
       speed: toBase64(this.speed.subarray(0, n)),
       next: toBase64(this.next.subarray(0, n * 3)),
       factor: toBase64(this.factor),
+      stuck: toBase64(this.stuck.subarray(0, n)),
     };
   }
 
@@ -60,6 +62,8 @@ export class TrafficSim {
     this.speed.set(fromBase64(state.speed, Float32Array));
     this.next.set(fromBase64(state.next, Int32Array));
     this.factor.set(fromBase64(state.factor, Float32Array));
+    this.stuck.fill(0);
+    if (state.stuck) this.stuck.set(fromBase64(state.stuck, Float32Array));
     this.edgeCars = new Array(this.g.edgeCount);
     this.activeCount = n;
     this.targetCount = state.targetCount;
@@ -135,6 +139,7 @@ export class TrafficSim {
     this.place(i, e);
     this.pos[i] = this.rng() * this.g.len[e];
     this.speed[i] = 0;
+    this.stuck[i] = 0;
     const n0 = this.chooseNext(e);
     const n1 = this.chooseNext(n0);
     const n2 = this.chooseNext(n1);
@@ -153,7 +158,34 @@ export class TrafficSim {
     }
   }
 
-  // Distancia libre hasta el primer obstáculo (coche delante o semáforo no verde).
+  // Un coche de fuera solo entra en la rotonda si no llega por el anillo otro coche que vaya a pasar por la entrada.
+  canEnter(entry) {
+    return !this.ringTraffic(entry, entry, CONFIG.roundabouts.yieldDistance);
+  }
+
+  // Hay un coche del anillo que pasará por `target` y está a menos de `budget` metros del inicio de `e`.
+  ringTraffic(target, e, budget) {
+    const g = this.g;
+    const feeders = g.ringIn[e];
+    if (!feeders) return false;
+    for (const f of feeders) {
+      const list = this.edgeCars[f];
+      if (list) {
+        for (const j of list) {
+          if (g.len[f] - this.pos[j] < budget && this.heads(j, target)) return true;
+        }
+      }
+      if (g.len[f] < budget && this.ringTraffic(target, f, budget - g.len[f])) return true;
+    }
+    return false;
+  }
+
+  // La ruta conocida del coche pasa por `edge` (un coche que sale de la rotonda antes no estorba).
+  heads(i, edge) {
+    return this.next[i * 3] === edge || this.next[i * 3 + 1] === edge || this.next[i * 3 + 2] === edge;
+  }
+
+  // Distancia libre hasta el primer obstáculo (coche delante, semáforo no verde o entrada a rotonda sin hueco).
   freeGap(i) {
     const g = this.g;
     const sig = this.signals;
@@ -180,6 +212,11 @@ export class TrafficSim {
           const mustStop = state === 2 || stopDist > (v * v) / (2 * 6);
           if (mustStop && stopDist < gap) gap = Math.max(0, stopDist);
         }
+      }
+      const entering = step < 3 && dist <= C.lookAhead ? this.next[i * 3 + step] : -1;
+      if (entering >= 0 && g.ringId && g.ringId[entering] >= 0 && g.ringId[e] < 0 && !this.canEnter(entering)) {
+        const stopDist = dist - C.stopGap;
+        if (stopDist >= -1 && stopDist < gap) gap = Math.max(0, stopDist);
       }
       if (step === 3 || dist > C.lookAhead || gap < dist) break;
       const ne = this.next[i * 3 + step];
@@ -210,6 +247,16 @@ export class TrafficSim {
       const safe = gap === Infinity ? vmax : Math.sqrt(2 * C.decel * Math.max(0, gap - C.minGap));
       const v = Math.max(0, Math.min(this.speed[i] + C.accel * dt, vmax, safe));
       this.speed[i] = v;
+      if (v < 0.5) {
+        this.stuck[i] += dt;
+        if (this.stuck[i] > C.stuckSeconds) {
+          this.detach(i);
+          this.spawn(i);
+          continue;
+        }
+      } else {
+        this.stuck[i] = 0;
+      }
       this.advance(i, v * dt, v);
     }
   }
