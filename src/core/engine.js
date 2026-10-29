@@ -6,6 +6,8 @@ import { demandFactor } from '../traffic/demand.js';
 import { SensorManager } from '../sensors/sensorManager.js';
 import { ParkingTracker } from '../sensors/parkingTracker.js';
 import { trackableUndergroundLots, undergroundOccupancy } from '../city/undergroundLots.js';
+import { Pedestrians } from '../pedestrians/pedestrians.js';
+import { toBase64 } from './binary.js';
 import { createRng } from './random.js';
 
 const SNAPSHOT_VERSION = 1;
@@ -33,6 +35,7 @@ export class SimEngine {
       getSimTime: () => this.simTime,
       storage: null,
     });
+    this.pedestrians = new Pedestrians(data.crossings);
     this.graphKey = `${this.graph.edgeCount}:${data.nodes.length}`;
     this.signals.update(this.simTime);
   }
@@ -60,6 +63,20 @@ export class SimEngine {
       steps++;
     }
     return true;
+  }
+
+  // Peatones en este instante: son una función del tiempo simulado (sin estado que guardar), así que
+  // no entran en el snapshot y tras un reinicio salen exactamente igual.
+  pedestrianPositions() {
+    const p = this.pedestrians;
+    p.updateAt(this.simTime, this.params.scenario);
+    const n = p.activeCount;
+    return {
+      activeCount: n,
+      x: toBase64(p.x.subarray(0, n)),
+      z: toBase64(p.z.subarray(0, n)),
+      heading: toBase64(p.heading.subarray(0, n)),
+    };
   }
 
   // Extrae los registros cerrados desde la última llamada (para persistirlos).

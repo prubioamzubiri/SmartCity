@@ -112,6 +112,11 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
       return send(200, { graphKey: engine.graphKey, simSeconds: engine.simTime, ...engine.sim.positions() });
     }
 
+    if (method === 'GET' && pathname === '/api/pedestrians') {
+      const { engine } = runtime;
+      return send(200, { graphKey: engine.graphKey, simSeconds: engine.simTime, ...engine.pedestrianPositions() });
+    }
+
     if (method === 'GET' && (pathname === '/api/traffic.csv' || pathname === '/api/parking.csv')) {
       const traffic = pathname === '/api/traffic.csv';
       const rows = store.iterate(traffic ? 'traffic' : 'parking', exportFilters(url));

@@ -1,5 +1,6 @@
 // Descarga edificios y calles de Donostia desde OpenStreetMap (Overpass) y genera public/data/city.json.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { extractCrossings } from './crossings.mjs';
 
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -150,8 +151,13 @@ async function fetchRoads() {
     if (idx.includes(-1) || idx.length < 2) continue;
     outWays.push([ROAD_CLASS[tags.highway], oneway(tags), ...idx]);
   }
-  console.log(`Calles: ${outWays.length} tramos, ${nodes.length / 2} nodos, ${signals.length / 2} semáforos`);
-  return { nodes, ways: outWays, signals };
+  const keptWays = ways.filter((w) => {
+    const tags = w.tags || {};
+    return !(tags.area === 'yes' || tags.access === 'private' || tags.motor_vehicle === 'no');
+  });
+  const crossings = extractCrossings(keptWays, nodesById, project, (tags) => ROAD_CLASS[tags.highway], round1);
+  console.log(`Calles: ${outWays.length} tramos, ${nodes.length / 2} nodos, ${signals.length / 2} semáforos, ${crossings.length / 5} pasos de peatones`);
+  return { nodes, ways: outWays, signals, crossings };
 }
 
 // Une tramos que comparten extremos en anillos cerrados y cadenas abiertas.
@@ -368,6 +374,11 @@ if (process.argv.includes('--parking-only')) {
   city.parking = await fetchParking();
   await writeFile('public/data/city.json', JSON.stringify(city));
   console.log('Actualizado el aparcamiento en public/data/city.json');
+} else if (process.argv.includes('--crossings-only')) {
+  const city = JSON.parse(await readFile('public/data/city.json', 'utf8'));
+  city.crossings = (await fetchRoads()).crossings;
+  await writeFile('public/data/city.json', JSON.stringify(city));
+  console.log('Actualizados los pasos de peatones en public/data/city.json');
 } else if (process.argv.includes('--water-only')) {
   const city = JSON.parse(await readFile('public/data/city.json', 'utf8'));
   city.water = await fetchWater(city.bounds);
@@ -393,6 +404,7 @@ if (process.argv.includes('--parking-only')) {
     nodes: roads.nodes,
     ways: roads.ways,
     signals: roads.signals,
+    crossings: roads.crossings,
     water: await fetchWater(bounds),
     parking: await fetchParking(),
   };

@@ -12,7 +12,18 @@ npm run dev
 ```
 
 `fetch-osm` downloads the city data required by the viewer into
-`public/data/city.json` (not tracked in Git).
+`public/data/city.json` (not tracked in Git). It includes the OSM pedestrian
+crossings (`highway=crossing` nodes on roads); `npm run fetch-crossings`
+refreshes only those in an existing file.
+
+Pedestrians are small yellow triangles that cross those crossings. The server
+exposes them (`GET /api/pedestrians`) as a pure function of the simulated time, so
+they need no stored state. The viewer evaluates the same function every frame with the
+server clock, so it sees the same pedestrians and they move smoothly. They walk at
+1.4 m/s of *simulated* time (×52 in real time), so each one is only on screen for a
+fraction of a second.
+Their number follows the traffic demand of the simulated hour;
+tune `CONFIG.pedestrians` in `src/config.js`.
 
 ## Simulation server
 

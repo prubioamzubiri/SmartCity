@@ -15,6 +15,8 @@ import { SignalController } from './traffic/signals.js';
 import { createSignalViz } from './traffic/signalViz.js';
 import { CarView } from './traffic/carView.js';
 import { RemoteCars } from './traffic/remoteCars.js';
+import { Pedestrians } from './pedestrians/pedestrians.js';
+import { PedestrianView } from './pedestrians/pedestrianView.js';
 import { SensorView } from './sensors/sensorView.js';
 import { ServerSync } from './api/serverSync.js';
 import { createHud } from './ui/hud.js';
@@ -73,6 +75,9 @@ async function main() {
   const cars = new RemoteCars(graph, graphKey);
   const carView = new CarView(cars);
   scene.add(carView.mesh);
+  const pedestrians = new Pedestrians(data.crossings);
+  const pedestrianView = new PedestrianView(pedestrians);
+  scene.add(pedestrianView.mesh);
   sync.on('cars', (payload) => cars.apply(payload));
   sync.on('disconnect', () => cars.clear());
   const serverView = new SensorView(scene, { color: 0x4caf50 });
@@ -209,9 +214,13 @@ async function main() {
     if (simTime !== null) {
       signals.update(simTime);
       updateParkingOccupancy(parkingLayer, simTime);
+      pedestrians.updateAt(simTime, sync.state.params.scenario);
+    } else {
+      pedestrians.activeCount = 0;
     }
     cars.update(now);
     carView.render();
+    pedestrianView.render();
     signalViz.update();
     controls.update();
     renderer.render(scene, camera);

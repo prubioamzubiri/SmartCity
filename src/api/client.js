@@ -57,6 +57,10 @@ export class ApiClient {
     return this.request('/api/cars');
   }
 
+  pedestrians() {
+    return this.request('/api/pedestrians');
+  }
+
   setParams(params) {
     return this.request('/api/params', { method: 'PUT', body: params });
   }

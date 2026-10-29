@@ -46,6 +46,19 @@ export const CONFIG = {
     speedByClass: [22, 16, 13, 11, 8],
   },
 
+  // Peatones: triángulos que cruzan los pasos de peatones de OSM (solo visual, en el visor).
+  pedestrians: {
+    max: 1500, // con la demanda máxima; los pasos se reparten al azar entre los de la ciudad
+    minDensity: 0.1, // fracción de peatones activos aunque la demanda sea nula
+    speed: 1.4, // m/s reales
+    size: 2.4, // largo del triángulo, en metros
+    margin: 2, // metros de acera que recorren a cada lado de la calzada
+    laneWidth: 3, // ancho del paso por el que se reparten, en metros
+    slotSeconds: 40, // cada peatón elige un paso nuevo en cada ventana de este tamaño
+    height: 0.5,
+    color: 0xffd54a,
+  },
+
   signals: {
     green: 20,
     yellow: 3,
