@@ -88,7 +88,7 @@ test('server exposes its cars and live values for the viewer', async (t) => {
   assert.equal(other.activeCount, 0);
 });
 
-test('server exposes the pedestrians crossing at the simulated time and the viewer computes the same ones', async (t) => {
+test('server exposes the pedestrians (on the sidewalks and crossings) at the simulated time and the viewer computes the same ones', async (t) => {
   let wall = 1_000_000;
   const store = new Store();
   // Paso de peatones en el lado norte del anillo (la calle va por X, se cruza en Z).
@@ -110,11 +110,12 @@ test('server exposes the pedestrians crossing at the simulated time and the view
     const z = fromBase64(payload.z, Float32Array);
     assert.equal(x.length, payload.activeCount);
     for (let j = 0; j < x.length; j++) {
-      assert.ok(Math.abs(x[j]) <= CONFIG.pedestrians.laneWidth / 2 + 1e-3);
-      assert.ok(Math.abs(z[j] + 250) <= CONFIG.roads.halfWidth[4] + CONFIG.pedestrians.margin + 1e-3);
+      // Siempre junto a la calle (el anillo de ±250 m): en la acera o en el paso de peatones.
+      const fromRing = Math.min(Math.abs(Math.abs(x[j]) - 250), Math.abs(Math.abs(z[j]) - 250));
+      assert.ok(fromRing <= CONFIG.roads.halfWidth[4] + CONFIG.pedestrians.margin + 1e-3);
     }
     // El visor calcula con la misma función y la hora del servidor: ve exactamente los mismos peatones.
-    const viewer = new Pedestrians(data.crossings);
+    const viewer = new Pedestrians(data.crossings, { graph: runtime.engine.graph });
     viewer.updateAt(payload.simSeconds, runtime.engine.params.scenario);
     assert.deepEqual([...viewer.x.subarray(0, viewer.activeCount)], [...x]);
     assert.deepEqual([...viewer.z.subarray(0, viewer.activeCount)], [...z]);
@@ -125,8 +126,8 @@ test('server exposes the pedestrians crossing at the simulated time and the view
   // Función del tiempo simulado: el mismo instante da las mismas posiciones.
   const first = runtime.engine.pedestrianPositions();
   assert.deepEqual(runtime.engine.pedestrianPositions(), first);
-  const bare = new SimEngine({ data: city() });
-  assert.equal(bare.pedestrianPositions().activeCount, 0);
+  const bare = new SimEngine({ data: { ...city(), crossings: undefined } });
+  assert.ok(bare.pedestrianPositions().activeCount > 0, 'sin pasos de peatones también caminan por las aceras');
 });
 
 

@@ -6,6 +6,7 @@ import { demandFactor } from '../traffic/demand.js';
 import { SensorManager } from '../sensors/sensorManager.js';
 import { ParkingTracker } from '../sensors/parkingTracker.js';
 import { trackableUndergroundLots, undergroundOccupancy } from '../city/undergroundLots.js';
+import { createWaterMask } from '../city/waterMask.js';
 import { Pedestrians } from '../pedestrians/pedestrians.js';
 import { toBase64 } from './binary.js';
 import { createRng } from './random.js';
@@ -35,7 +36,7 @@ export class SimEngine {
       getSimTime: () => this.simTime,
       storage: null,
     });
-    this.pedestrians = new Pedestrians(data.crossings);
+    this.pedestrians = new Pedestrians(data.crossings, { graph: this.graph, water: createWaterMask(data) });
     this.graphKey = `${this.graph.edgeCount}:${data.nodes.length}`;
     this.signals.update(this.simTime);
   }

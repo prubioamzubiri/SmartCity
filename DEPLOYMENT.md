@@ -74,7 +74,7 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 | --- | --- |
 | `GET /api/state` | Simulated time, scale, graph key, traffic stats, sensors (with current count), parkings (with occupancy), params, signal plan, record counts |
 | `GET /api/cars` | Car positions (base64 typed arrays: `edge`, `pos`, `speed`) for the viewer |
-| `GET /api/pedestrians` | Pedestrians crossing at the current simulated time (base64 `Float32Array`s `x`, `z`, `heading`, in scene metres). The viewer does not poll it: it computes the same pedestrians every frame from the server clock |
+| `GET /api/pedestrians` | Pedestrians (walking along sidewalks or crossing at crossings) at the current simulated time (base64 `Float32Array`s `x`, `z`, `heading`, in scene metres). The viewer does not poll it: it computes the same pedestrians every frame from the server clock |
 | `GET /api/traffic.csv?from=&to=&id=` | Sensor records (`id` = sensor id, optional) |
 | `GET /api/parking.csv?from=&to=&id=` | Parking occupancy records |
 | `POST /api/sensors` `{x, z, name}` | Create a sensor |

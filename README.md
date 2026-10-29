@@ -16,7 +16,11 @@ npm run dev
 crossings (`highway=crossing` nodes on roads); `npm run fetch-crossings`
 refreshes only those in an existing file.
 
-Pedestrians are small yellow triangles that cross those crossings. The server
+Pedestrians are small yellow triangles. Most walk along the sidewalks of the streets
+(not motorways); the rest cross the street at those crossings
+(`CONFIG.pedestrians.walkFraction`). They never step on
+water: where a sidewalk falls into the sea or a river they use the opposite one or are
+hidden, and on bridges they stay on the roadway. The server
 exposes them (`GET /api/pedestrians`) as a pure function of the simulated time, so
 they need no stored state. The viewer evaluates the same function every frame with the
 server clock, so it sees the same pedestrians and they move smoothly. They walk at
