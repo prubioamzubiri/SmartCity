@@ -1,22 +1,7 @@
-import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { simDate } from '../traffic/demand.js';
 
-const COLOR_NORMAL = 0xff8800;
-const COLOR_SELECTED = 0x00e5ff;
-const COLOR_GHOST = 0xffffff;
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-
-function makeMarker(color, opacity = 1) {
-  const group = new THREE.Group();
-  const mat = new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity });
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 30, 8), mat);
-  pole.position.y = 15;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(5, 12, 10), mat);
-  head.position.y = 32;
-  group.add(pole, head);
-  return group;
-}
 
 const csvSafe = (v) => {
   let s = String(v);
@@ -25,7 +10,9 @@ const csvSafe = (v) => {
 };
 
 export class SensorManager {
-  constructor({ scene, graph, sim, getSimTime }) {
+  constructor({ graph, sim, getSimTime, view = null, storage = globalThis.localStorage }) {
+    this.view = view;
+    this.storage = storage;
     this.graph = graph;
     this.sim = sim;
     this.getSimTime = getSimTime;
@@ -37,12 +24,6 @@ export class SensorManager {
     this.bucketStart = Math.floor(getSimTime() / this.bucketSeconds) * this.bucketSeconds;
     this.nextId = 1;
     this.listeners = new Set();
-
-    this.group = new THREE.Group();
-    scene.add(this.group);
-    this.ghost = makeMarker(COLOR_GHOST, 0.5);
-    this.ghost.visible = false;
-    scene.add(this.ghost);
   }
 
   onChange(fn) {
@@ -58,16 +39,15 @@ export class SensorManager {
   }
 
   showGhost(x, z, visible) {
-    this.ghost.visible = visible;
-    if (visible) this.ghost.position.set(x, 0, z);
+    this.view?.showGhost(x, z, visible);
   }
 
-  add(x, z, name) {
+  add(x, z, name, { id, bucket, total, defer = false } = {}) {
     const hit = this.snap(x, z);
     if (!hit) return null;
     const g = this.graph;
     const sensor = {
-      id: `S${this.nextId++}`,
+      id: id ?? `S${this.nextId++}`,
       name: name || '',
       x: hit.x,
       z: hit.z,
@@ -75,28 +55,40 @@ export class SensorManager {
       bwd: g.rev[hit.e],
       sFwd: hit.t * g.len[hit.e],
       sBwd: g.rev[hit.e] >= 0 ? (1 - hit.t) * g.len[g.rev[hit.e]] : 0,
-      bucket: { fwd: 0, bwd: 0, speedSum: 0 },
-      total: 0,
-      marker: makeMarker(COLOR_NORMAL),
+      bucket: bucket ?? { fwd: 0, bwd: 0, speedSum: 0 },
+      total: total ?? 0,
     };
     if (!sensor.name) sensor.name = `Sensor ${sensor.id.slice(1)}`;
-    sensor.marker.position.set(sensor.x, 0, sensor.z);
-    sensor.marker.userData.sensorId = sensor.id;
-    this.group.add(sensor.marker);
+    this.view?.add(sensor);
     this.sensors.push(sensor);
-    this.refresh();
+    if (!defer) this.refresh();
     return sensor;
+  }
+
+  // Estado de configuración y del intervalo en curso (los registros cerrados se persisten aparte).
+  serialize() {
+    return {
+      nextId: this.nextId,
+      bucketSeconds: this.bucketSeconds,
+      bucketStart: this.bucketStart,
+      sensors: this.sensors.map((s) => ({ id: s.id, name: s.name, x: s.x, z: s.z, bucket: s.bucket, total: s.total })),
+    };
+  }
+
+  restore(state) {
+    for (const s of [...this.sensors]) this.remove(s.id);
+    this.bucketSeconds = state.bucketSeconds;
+    this.bucketStart = state.bucketStart;
+    for (const s of state.sensors) this.add(s.x, s.z, s.name, { id: s.id, bucket: s.bucket, total: s.total, defer: true });
+    this.nextId = state.nextId;
+    this.refresh();
   }
 
   remove(id) {
     const i = this.sensors.findIndex((s) => s.id === id);
     if (i < 0) return;
     const [s] = this.sensors.splice(i, 1);
-    this.group.remove(s.marker);
-    s.marker.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) o.material.dispose();
-    });
+    this.view?.remove(s.id);
     if (this.selectedId === id) this.selectedId = null;
     this.refresh();
   }
@@ -111,20 +103,11 @@ export class SensorManager {
 
   select(id) {
     this.selectedId = id;
-    for (const s of this.sensors) {
-      const color = s.id === id ? COLOR_SELECTED : COLOR_NORMAL;
-      s.marker.traverse((o) => o.material && o.material.color.setHex(color));
-    }
+    this.view?.select(id);
   }
 
   pick(raycaster) {
-    const hits = raycaster.intersectObjects(this.group.children, true);
-    for (const h of hits) {
-      let o = h.object;
-      while (o && o.userData.sensorId === undefined) o = o.parent;
-      if (o) return o.userData.sensorId;
-    }
-    return null;
+    return this.view?.pick(raycaster) ?? null;
   }
 
   refresh() {
@@ -193,12 +176,12 @@ export class SensorManager {
 
   save() {
     const data = this.sensors.map((s) => ({ name: s.name, x: Math.round(s.x * 10) / 10, z: Math.round(s.z * 10) / 10 }));
-    localStorage.setItem(CONFIG.sensors.storageKey, JSON.stringify({ version: 1, sensors: data }));
+    this.storage?.setItem(CONFIG.sensors.storageKey, JSON.stringify({ version: 1, sensors: data }));
   }
 
   load() {
     try {
-      const raw = localStorage.getItem(CONFIG.sensors.storageKey);
+      const raw = this.storage?.getItem(CONFIG.sensors.storageKey);
       if (raw) this.importJson(JSON.parse(raw));
     } catch {
       /* datos corruptos: se ignoran */

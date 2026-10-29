@@ -45,7 +45,6 @@ test('scenario changes drive existing population growth, reduction and capacity 
     sim.step(CONFIG.sim.step);
     assert.equal(sim.activeCount, 0);
   } finally {
-    sim.mesh.geometry.dispose();
-    sim.mesh.material.dispose();
+    sim.setTarget(0);
   }
 });

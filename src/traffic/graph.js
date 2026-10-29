@@ -3,6 +3,73 @@ import { CONFIG } from '../config.js';
 const CELL = 100;
 const cellKey = (cx, cz) => cx * 100003 + cz;
 
+// Rotondas: ciclos dirigidos de aristas de sentido único que giran siempre al mismo lado y completan ~360°.
+// Una manzana de calles de un sentido también es un ciclo, pero gira 90° cuatro veces y no cumple el perímetro.
+function findRings({ edgeCount, A, B, len, ux, uz, rev, nx, nz, outStart, outList }) {
+  const { maxLength, maxEdges } = CONFIG.roundabouts;
+  const NEUTRAL = 0.3; // rad: pequeñas irregularidades del trazado no rompen el sentido del giro
+  const MAX_TURN = 2; // rad: ningún giro dentro del anillo es más cerrado que esto
+  const ringId = new Int32Array(edgeCount).fill(-1);
+  const path = [];
+  const turn = (a, b) => Math.atan2(ux[a] * uz[b] - uz[a] * ux[b], ux[a] * ux[b] + uz[a] * uz[b]);
+
+  const walk = (start, e, sign, length, angle) => {
+    for (let k = outStart[B[e]]; k < outStart[B[e] + 1]; k++) {
+      const c = outList[k];
+      if (rev[c] >= 0) continue;
+      const t = turn(e, c);
+      if (t * sign < -NEUTRAL || Math.abs(t) > MAX_TURN) continue;
+      const total = angle + t;
+      if (c === start) {
+        if (total * sign > 5.2 && total * sign < 7.4) return true;
+        continue;
+      }
+      const next = length + len[c];
+      if (next > maxLength || path.length >= maxEdges || Math.abs(total) > 7.4 || path.includes(c)) continue;
+      if (Math.hypot(nx[B[c]] - nx[A[start]], nz[B[c]] - nz[A[start]]) > maxLength / 2) continue;
+      path.push(c);
+      if (walk(start, c, sign, next, total)) return true;
+      path.pop();
+    }
+    return false;
+  };
+
+  // Los ciclos que comparten tramos (el anillo y un atajo por el centro) forman una misma rotonda.
+  let groups = 0;
+  for (let e0 = 0; e0 < edgeCount; e0++) {
+    if (rev[e0] >= 0 || ringId[e0] >= 0) continue;
+    for (const sign of [1, -1]) {
+      path.length = 0;
+      path.push(e0);
+      if (!walk(e0, e0, sign, len[e0], 0)) continue;
+      const touched = new Set(path.map((m) => ringId[m]).filter((r) => r >= 0));
+      const id = touched.size ? Math.min(...touched) : groups++;
+      if (touched.size > 1) for (let e = 0; e < edgeCount; e++) if (touched.has(ringId[e])) ringId[e] = id;
+      for (const m of path) ringId[m] = id;
+      break;
+    }
+  }
+
+  // Numeración compacta de las rotondas.
+  const renumber = new Map();
+  for (let e = 0; e < edgeCount; e++) {
+    if (ringId[e] < 0) continue;
+    if (!renumber.has(ringId[e])) renumber.set(ringId[e], renumber.size);
+    ringId[e] = renumber.get(ringId[e]);
+  }
+
+  // Aristas del anillo que desembocan en el nodo donde empieza cada arista del anillo.
+  const ringIn = new Array(edgeCount);
+  for (let f = 0; f < edgeCount; f++) {
+    if (ringId[f] < 0) continue;
+    for (let k = outStart[B[f]]; k < outStart[B[f] + 1]; k++) {
+      const c = outList[k];
+      if (ringId[c] === ringId[f]) (ringIn[c] ??= []).push(f);
+    }
+  }
+  return { ringId, ringIn };
+}
+
 // Grafo dirigido de aristas (un tramo entre nodos OSM consecutivos) con índice espacial para los sensores.
 export function buildGraph(data) {
   const nodeCount = data.nodes.length / 2;
@@ -71,6 +138,8 @@ export function buildGraph(data) {
   const fill = outStart.slice(0, nodeCount);
   for (let e = 0; e < edgeCount; e++) outList[fill[A[e]]++] = e;
 
+  const rings = findRings({ edgeCount, A, B, len, ux, uz, rev, nx, nz, outStart, outList });
+
   // En OSM los semáforos se mapean en las aproximaciones al cruce: se agrupan por cercanía en un controlador.
   const raw = [];
   for (let i = 0; i < data.signals.length; i += 2) raw.push({ node: data.signals[i], id: data.signals[i + 1] });
@@ -105,9 +174,13 @@ export function buildGraph(data) {
     s.x = s.nodes.reduce((acc, n) => acc + nx[n], 0) / s.nodes.length;
     s.z = s.nodes.reduce((acc, n) => acc + nz[n], 0) / s.nodes.length;
   }
+  const ringNode = new Uint8Array(nodeCount);
+  for (let e = 0; e < edgeCount; e++) if (rings.ringId[e] >= 0) ringNode[A[e]] = ringNode[B[e]] = 1;
   const sig = new Int32Array(edgeCount).fill(-1);
   const grp = new Uint8Array(edgeCount);
   for (let e = 0; e < edgeCount; e++) {
+    // En una rotonda solo regulan las entradas: un rojo en el anillo o en una salida corta bloquea el anillo entero.
+    if (rings.ringId[e] >= 0 || ringNode[A[e]]) continue;
     const s = nodeSignal[B[e]];
     if (s < 0) continue;
     const g = Math.abs(ux[e]) >= Math.abs(uz[e]) ? 0 : 1;
@@ -167,6 +240,8 @@ export function buildGraph(data) {
     A, B, cls, len, ux, uz, speed, rev,
     outStart, outList,
     sig, grp,
+    ringId: rings.ringId,
+    ringIn: rings.ringIn,
     signals,
     nearestSegment,
   };

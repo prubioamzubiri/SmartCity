@@ -14,14 +14,60 @@ npm run dev
 `fetch-osm` downloads the city data required by the viewer into
 `public/data/city.json` (not tracked in Git).
 
+## Simulation server
+
+`npm run serve` runs the simulation headless so that sensors keep recording
+while no browser is open (one real week = one simulated year), with SQLite
+persistence, catch-up after restarts and CSV export by date range. See
+[DEPLOYMENT.md](DEPLOYMENT.md#simulation-server-continuous-sensors) for the API
+and Fly.io.
+
+### Arranque rápido
+
+Requisitos: Node ≥ 24 (usa `node:sqlite`) o Docker con Compose. En ambos casos
+hace falta antes el mapa: `npm ci && npm run fetch-osm`.
+
+**Opción A: Docker Compose (sim + visor web + proxy Caddy)**
+
+```sh
+cp .env.example .env     # DOMAIN=:80 para HTTP en local; HTTP_PORT/HTTPS_PORT si 80/443 están ocupados
+docker compose up -d --build
+```
+
+Abre `http://localhost` (o `http://localhost:<HTTP_PORT>`). La API queda en
+`/api` (comprueba `/api/health`). Los datos persisten en el volumen `sim-data`.
+Comandos útiles: `docker compose logs -f sim`, `docker compose stop`
+(parada limpia), `docker compose down` (conserva datos; `-v` los borra).
+
+**Opción B: sin Docker**
+
+```sh
+npm run serve            # API en http://localhost:8080 (datos en data/smartcity.db)
+npm run dev              # visor en otra terminal
+```
+
+En el visor, abre el panel **Servidor (datos continuos)**, escribe la URL de la
+API (`http://localhost:8080`), conecta y añade sensores. El token es opcional:
+si defines `SMARTCITY_TOKEN`, hay que introducirlo para modificar datos.
+
+**Descargar el CSV** (fechas simuladas, `to` exclusivo):
+
+```sh
+curl -o trafico.csv "http://localhost/api/traffic.csv?from=2026-01-05T00:00:00Z&to=2026-02-01T00:00:00Z"
+curl -o parkings.csv "http://localhost/api/parking.csv"
+```
+
+Variables de entorno principales (`SMARTCITY_TOKEN`, `DB_FILE`, `PORT`,
+`CHECKPOINT_SECONDS`, `CORS_ORIGIN`): ver [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Traffic scenarios
 
 In the **Tráfico** panel, choose **Automático (calendario)**, **Laborable**, or
 **Fin de semana**. Automatic mode uses the simulated UTC date: Monday–Friday
 selects the weekday scenario; Saturday–Sunday selects the weekend scenario.
 Forcing a scenario keeps that demand profile across calendar changes without
-changing the clock. A selection takes effect on the next physics step; while
-paused, vehicle counts update when the simulation resumes.
+changing the clock. The selection is sent to the server (it needs the token if one
+is set) and takes effect on its next physics step.
 
 Edit `CONFIG.traffic` in `src/config.js` to configure:
 
@@ -49,17 +95,16 @@ UTC calendar origin and need not be a Monday.
 
 ## Parking occupancy tracking
 
-In **Aparcamiento (OSM) → Seguir ocupación**, tick the public underground
-parkings (the "P" icons) you want to track, or click their icon on the map
-(tracked icons are drawn larger). **Todos**/**Ninguno** select everything or
-nothing; the selection is stored in the browser (`smartcity.parkings`).
+In **Aparcamiento (OSM) → Ocupación registrada por el servidor**, tick the public
+underground parkings (the "P" icons) you want to record, or click their icon on
+the map (tracked icons are drawn larger). **Todos**/**Ninguno** select everything
+or nothing. The selection is stored in the server, not in the browser.
 
-Each sampling interval (1–60 min of simulated time, default 5 min,
-`CONFIG.parkingTracking`) a record is stored per tracked parking with
+Each sampling interval (default 5 min of simulated time, `CONFIG.parkingTracking`)
+the server stores a record per tracked parking with
 `timestamp, weekday, parking_id, parking_name, capacity, occupied, free,
-occupancy_pct`. Export them with **Exportar CSV de ocupación**, or POST them as
-JSON to a separate Big Data URL by enabling **Enviar ocupación
-automáticamente**. Occupancy is simulated from the demand curve, and capacity is
+occupancy_pct`. Download them from **Servidor (datos continuos) → CSV de
+parkings**. Occupancy is simulated from the demand curve, and capacity is
 a default estimate when OSM does not provide it; these are not real measurements.
 
 ## Checks

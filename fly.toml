@@ -1,0 +1,31 @@
+app = "smartcity-donostia" # cambia el nombre: debe ser único en Fly.io
+primary_region = "mad"
+
+[build]
+
+[env]
+  PORT = "8080"
+  DB_FILE = "/data/smartcity.db"
+  CORS_ORIGIN = "https://rbarrenago.github.io"
+
+# SQLite necesita un volumen persistente; el token se define con "fly secrets set SMARTCITY_TOKEN=...".
+[mounts]
+  source = "smartcity_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off" # la simulación debe seguir corriendo sin visitantes
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/api/health"
+    interval = "30s"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

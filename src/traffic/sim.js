@@ -1,38 +1,74 @@
-import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { createRng } from '../core/random.js';
+import { fromBase64, toBase64 } from '../core/binary.js';
 
 const C = CONFIG.cars;
 
 export class TrafficSim {
-  constructor(graph, signals, onCross) {
+  constructor(graph, signals, onCross, { rng = createRng(CONFIG.sim.seed) } = {}) {
     this.g = graph;
     this.signals = signals;
     this.onCross = onCross;
+    this.rng = rng;
     const n = C.max;
     this.edge = new Int32Array(n);
     this.pos = new Float32Array(n);
     this.speed = new Float32Array(n);
     this.factor = new Float32Array(n);
     this.next = new Int32Array(n * 3).fill(-1);
+    this.stuck = new Float32Array(n);
     this.edgeCars = new Array(graph.edgeCount);
     this.sensorsByEdge = new Map();
     this.activeCount = 0;
     this.targetCount = 0;
-    for (let i = 0; i < n; i++) this.factor[i] = 0.85 + Math.random() * 0.25;
-
-    const geometry = new THREE.SphereGeometry(C.radius, 8, 6);
-    this.mesh = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial({ color: 0xffffff }), n);
-    this.mesh.count = 0;
-    this.mesh.frustumCulled = false;
-    const color = new THREE.Color(1, 1, 1);
-    for (let i = 0; i < n; i++) {
-      this.mesh.setMatrixAt(i, new THREE.Matrix4().identity());
-      this.mesh.setColorAt(i, color);
-    }
+    for (let i = 0; i < n; i++) this.factor[i] = 0.85 + this.rng() * 0.25;
   }
 
   setSensorIndex(map) {
     this.sensorsByEdge = map;
+  }
+
+  // Estado completo de los coches y del PRNG para reanudar la simulación exactamente.
+  serialize() {
+    const n = this.activeCount;
+    return {
+      activeCount: n,
+      targetCount: this.targetCount,
+      rng: this.rng.getState(),
+      edge: toBase64(this.edge.subarray(0, n)),
+      pos: toBase64(this.pos.subarray(0, n)),
+      speed: toBase64(this.speed.subarray(0, n)),
+      next: toBase64(this.next.subarray(0, n * 3)),
+      factor: toBase64(this.factor),
+      stuck: toBase64(this.stuck.subarray(0, n)),
+    };
+  }
+
+  // Posición actual de los coches (sin el estado interno) para que un visor los dibuje.
+  positions() {
+    const n = this.activeCount;
+    return {
+      activeCount: n,
+      edge: toBase64(this.edge.subarray(0, n)),
+      pos: toBase64(this.pos.subarray(0, n)),
+      speed: toBase64(this.speed.subarray(0, n)),
+    };
+  }
+
+  restore(state) {
+    const n = state.activeCount;
+    this.edge.set(fromBase64(state.edge, Int32Array));
+    this.pos.set(fromBase64(state.pos, Float32Array));
+    this.speed.set(fromBase64(state.speed, Float32Array));
+    this.next.set(fromBase64(state.next, Int32Array));
+    this.factor.set(fromBase64(state.factor, Float32Array));
+    this.stuck.fill(0);
+    if (state.stuck) this.stuck.set(fromBase64(state.stuck, Float32Array));
+    this.edgeCars = new Array(this.g.edgeCount);
+    this.activeCount = n;
+    this.targetCount = state.targetCount;
+    for (let i = 0; i < n; i++) this.place(i, this.edge[i]);
+    this.rng.setState(state.rng);
   }
 
   setTarget(n) {
@@ -42,8 +78,8 @@ export class TrafficSim {
   randomEdge() {
     const g = this.g;
     for (let tries = 0; tries < 6; tries++) {
-      const e = (Math.random() * g.edgeCount) | 0;
-      if (Math.random() * 5 < 5 - g.cls[e] || tries === 5) return e;
+      const e = (this.rng() * g.edgeCount) | 0;
+      if (this.rng() * 5 < 5 - g.cls[e] || tries === 5) return e;
     }
     return 0;
   }
@@ -66,7 +102,7 @@ export class TrafficSim {
       total += this.weight(e, c);
     }
     if (total === 0) return fallback;
-    let r = Math.random() * total;
+    let r = this.rng() * total;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
       if (c === rev) continue;
@@ -101,8 +137,9 @@ export class TrafficSim {
   spawn(i) {
     const e = this.randomEdge();
     this.place(i, e);
-    this.pos[i] = Math.random() * this.g.len[e];
+    this.pos[i] = this.rng() * this.g.len[e];
     this.speed[i] = 0;
+    this.stuck[i] = 0;
     const n0 = this.chooseNext(e);
     const n1 = this.chooseNext(n0);
     const n2 = this.chooseNext(n1);
@@ -121,7 +158,34 @@ export class TrafficSim {
     }
   }
 
-  // Distancia libre hasta el primer obstáculo (coche delante o semáforo no verde).
+  // Un coche de fuera solo entra en la rotonda si no llega por el anillo otro coche que vaya a pasar por la entrada.
+  canEnter(entry) {
+    return !this.ringTraffic(entry, entry, CONFIG.roundabouts.yieldDistance);
+  }
+
+  // Hay un coche del anillo que pasará por `target` y está a menos de `budget` metros del inicio de `e`.
+  ringTraffic(target, e, budget) {
+    const g = this.g;
+    const feeders = g.ringIn[e];
+    if (!feeders) return false;
+    for (const f of feeders) {
+      const list = this.edgeCars[f];
+      if (list) {
+        for (const j of list) {
+          if (g.len[f] - this.pos[j] < budget && this.heads(j, target)) return true;
+        }
+      }
+      if (g.len[f] < budget && this.ringTraffic(target, f, budget - g.len[f])) return true;
+    }
+    return false;
+  }
+
+  // La ruta conocida del coche pasa por `edge` (un coche que sale de la rotonda antes no estorba).
+  heads(i, edge) {
+    return this.next[i * 3] === edge || this.next[i * 3 + 1] === edge || this.next[i * 3 + 2] === edge;
+  }
+
+  // Distancia libre hasta el primer obstáculo (coche delante, semáforo no verde o entrada a rotonda sin hueco).
   freeGap(i) {
     const g = this.g;
     const sig = this.signals;
@@ -148,6 +212,11 @@ export class TrafficSim {
           const mustStop = state === 2 || stopDist > (v * v) / (2 * 6);
           if (mustStop && stopDist < gap) gap = Math.max(0, stopDist);
         }
+      }
+      const entering = step < 3 && dist <= C.lookAhead ? this.next[i * 3 + step] : -1;
+      if (entering >= 0 && g.ringId && g.ringId[entering] >= 0 && g.ringId[e] < 0 && !this.canEnter(entering)) {
+        const stopDist = dist - C.stopGap;
+        if (stopDist >= -1 && stopDist < gap) gap = Math.max(0, stopDist);
       }
       if (step === 3 || dist > C.lookAhead || gap < dist) break;
       const ne = this.next[i * 3 + step];
@@ -178,6 +247,16 @@ export class TrafficSim {
       const safe = gap === Infinity ? vmax : Math.sqrt(2 * C.decel * Math.max(0, gap - C.minGap));
       const v = Math.max(0, Math.min(this.speed[i] + C.accel * dt, vmax, safe));
       this.speed[i] = v;
+      if (v < 0.5) {
+        this.stuck[i] += dt;
+        if (this.stuck[i] > C.stuckSeconds) {
+          this.detach(i);
+          this.spawn(i);
+          continue;
+        }
+      } else {
+        this.stuck[i] = 0;
+      }
       this.advance(i, v * dt, v);
     }
   }
@@ -216,32 +295,6 @@ export class TrafficSim {
     for (const entry of list) {
       if (entry.s > from && entry.s <= to) this.onCross(entry.sensor, entry.dir, v);
     }
-  }
-
-  render() {
-    const g = this.g;
-    const m = this.mesh.instanceMatrix.array;
-    const c = this.mesh.instanceColor.array;
-    const n = this.activeCount;
-    for (let i = 0; i < n; i++) {
-      const e = this.edge[i];
-      const a = g.A[e];
-      const p = this.pos[i];
-      const ux = g.ux[e];
-      const uz = g.uz[e];
-      const o = i * 16;
-      m[o] = 1; m[o + 5] = 1; m[o + 10] = 1; m[o + 15] = 1;
-      m[o + 12] = g.nx[a] + ux * p - uz * C.laneOffset;
-      m[o + 13] = C.radius;
-      m[o + 14] = g.nz[a] + uz * p + ux * C.laneOffset;
-      const ratio = Math.min(1, this.speed[i] / (g.speed[e] * 0.8));
-      c[i * 3] = 0.95 - 0.75 * ratio;
-      c[i * 3 + 1] = 0.15 + 0.7 * ratio;
-      c[i * 3 + 2] = 0.12 + 0.25 * ratio;
-    }
-    this.mesh.count = n;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.instanceColor.needsUpdate = true;
   }
 
   stats() {

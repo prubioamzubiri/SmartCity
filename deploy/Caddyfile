@@ -1,0 +1,16 @@
+# DOMAIN=localhost usa un certificado interno de Caddy; con un dominio público obtiene Let's Encrypt.
+# Para HTTP sin TLS (pruebas locales o detrás de otro proxy) usa DOMAIN=:80
+{$DOMAIN:localhost} {
+	encode zstd gzip
+
+	handle /api/* {
+		# Sin buffering: los CSV grandes se transmiten a medida que se generan.
+		reverse_proxy sim:8080 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+}

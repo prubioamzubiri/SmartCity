@@ -2,6 +2,7 @@ export const CONFIG = {
   dataUrl: `${import.meta.env?.BASE_URL ?? '/'}data/city.json`,
 
   sim: {
+    seed: 20260105, // semilla del PRNG de la simulación
     step: 0.25, // segundos simulados por paso de física
     maxStepsPerFrame: 200,
     startSeconds: 7 * 3600, // lunes 07:00
@@ -40,6 +41,7 @@ export const CONFIG = {
     laneOffset: 2.2,
     lookAhead: 60,
     stopGap: 3,
+    stuckSeconds: 300, // un coche parado tanto tiempo reaparece en otro punto (rompe bloqueos sin salida)
     // m/s por clase de vía: autovía, primaria, secundaria, terciaria, residencial
     speedByClass: [22, 16, 13, 11, 8],
   },
@@ -48,6 +50,13 @@ export const CONFIG = {
     green: 20,
     yellow: 3,
     clusterDistance: 45, // metros para agrupar semáforos de un mismo cruce
+  },
+
+  // Rotondas: los coches del anillo tienen prioridad y solo entran si hay hueco y el anillo no está lleno.
+  roundabouts: {
+    maxLength: 400, // perímetro máximo del anillo, en metros
+    maxEdges: 64, // tramos máximos del anillo
+    yieldDistance: 20, // un coche del anillo que vaya a pasar por la entrada y esté más cerca que esto tiene prioridad
   },
 
   roads: {
@@ -59,6 +68,14 @@ export const CONFIG = {
     bucketSeconds: 300,
     snapDistance: 30,
     storageKey: 'smartcity.sensors',
+  },
+
+  // URL de la API del servidor de simulación (VITE_API_URL en la compilación o la que se escriba en el panel).
+  server: {
+    url: import.meta.env?.VITE_API_URL ?? '',
+    urlKey: 'smartcity.server.url',
+    pollSeconds: 5,
+    carsSeconds: 1,
   },
 
   parkingTracking: {

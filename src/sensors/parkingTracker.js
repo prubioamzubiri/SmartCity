@@ -114,6 +114,17 @@ export class ParkingTracker {
     this.emit();
   }
 
+  serialize() {
+    return { tracked: [...this.tracked], intervalSeconds: this.intervalSeconds, nextSample: this.nextSample };
+  }
+
+  restore(state) {
+    this.tracked = new Set(state.tracked.filter((id) => this.lots.has(id)));
+    this.intervalSeconds = state.intervalSeconds;
+    this.nextSample = state.nextSample;
+    this.emit();
+  }
+
   recordsCsv() {
     const lines = [COLUMNS.join(',')];
     for (const r of this.records) lines.push(COLUMNS.map((c) => csvSafe(r[c] ?? '')).join(','));
