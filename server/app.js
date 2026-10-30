@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { PARKING_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
+import { PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
 
 const MAX_BODY = 64 * 1024;
 const TIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/;
@@ -26,6 +26,12 @@ function* csvLines(columns, rows) {
   yield `${columns.join(',')}\n`;
   for (const row of rows) yield `${columns.map((c) => csvSafe(row[c])).join(',')}\n`;
 }
+
+const CSV_EXPORTS = {
+  '/api/traffic.csv': { kind: 'traffic', columns: TRAFFIC_COLUMNS, filename: 'trafico' },
+  '/api/parking.csv': { kind: 'parking', columns: PARKING_COLUMNS, filename: 'ocupacion-parkings' },
+  '/api/pedestrians.csv': { kind: 'pedestrians', columns: PEDESTRIAN_COLUMNS, filename: 'peatones' },
+};
 
 const digest = (s) => createHash('sha256').update(s).digest();
 
@@ -93,7 +99,12 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         id: l.id, name: l.name, capacity: l.capacity, tracked: engine.parking.isTracked(l.id),
         occupancy: Math.round(engine.parking.occupancyOf(l, engine.simTime) * 1000) / 1000,
       })),
-      records: { traffic: store.count('traffic'), parking: store.count('parking') },
+      pedestrians: { expected: Math.round(engine.pedestrians.flowAt(engine.simTime, engine.params.scenario, engine.params.maxPedestrians).onStreet) },
+      pedestrianSensors: engine.pedSensors.sensors.map((s) => ({
+        id: s.id, name: s.name, x: Math.round(s.x * 10) / 10, z: Math.round(s.z * 10) / 10,
+        total: s.total, current: Math.round(engine.pedSensors.presentNow(s, engine.simTime)),
+      })),
+      records: { traffic: store.count('traffic'), parking: store.count('parking'), pedestrians: store.count('pedestrians') },
     };
   };
 
@@ -112,14 +123,19 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
       return send(200, { graphKey: engine.graphKey, simSeconds: engine.simTime, ...engine.sim.positions() });
     }
 
-    if (method === 'GET' && (pathname === '/api/traffic.csv' || pathname === '/api/parking.csv')) {
-      const traffic = pathname === '/api/traffic.csv';
-      const rows = store.iterate(traffic ? 'traffic' : 'parking', exportFilters(url));
+    if (method === 'GET' && pathname === '/api/pedestrians') {
+      const { engine } = runtime;
+      return send(200, { graphKey: engine.graphKey, simSeconds: engine.simTime, ...engine.pedestrianPositions(runtime.scale) });
+    }
+
+    if (method === 'GET' && CSV_EXPORTS[pathname]) {
+      const { kind, columns, filename } = CSV_EXPORTS[pathname];
+      const rows = store.iterate(kind, exportFilters(url));
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${traffic ? 'trafico' : 'ocupacion-parkings'}.csv"`,
+        'Content-Disposition': `attachment; filename="${filename}.csv"`,
       });
-      await pipeline(Readable.from(csvLines(traffic ? TRAFFIC_COLUMNS : PARKING_COLUMNS, rows)), res);
+      await pipeline(Readable.from(csvLines(columns, rows)), res);
       return undefined;
     }
 
@@ -132,6 +148,32 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
       const sensor = runtime.mutate((e) => e.sensors.add(x, z, name));
       if (!sensor) throw new HttpError(422, 'No hay ninguna calle cerca de esa posición');
       return send(201, { id: sensor.id, name: sensor.name, x: sensor.x, z: sensor.z });
+    }
+
+    if (method === 'POST' && pathname === '/api/pedestrian-sensors') {
+      authorize(req);
+      const body = await readJson(req);
+      const x = finite(body.x, 'x');
+      const z = finite(body.z, 'z');
+      const name = typeof body.name === 'string' ? body.name.slice(0, 60) : '';
+      const sensor = runtime.mutate((e) => e.pedSensors.add(x, z, name));
+      if (!sensor) throw new HttpError(422, 'No hay ninguna calle cerca de esa posición');
+      return send(201, { id: sensor.id, name: sensor.name, x: sensor.x, z: sensor.z });
+    }
+
+    const pedestrianSensorMatch = /^\/api\/pedestrian-sensors\/([\w-]{1,40})$/.exec(pathname);
+    if (pedestrianSensorMatch && (method === 'DELETE' || method === 'PATCH')) {
+      authorize(req);
+      const id = pedestrianSensorMatch[1];
+      if (!runtime.engine.pedSensors.sensors.some((s) => s.id === id)) throw new HttpError(404, 'Sensor no encontrado');
+      if (method === 'DELETE') {
+        runtime.mutate((e) => e.pedSensors.remove(id));
+        return send(200, { ok: true });
+      }
+      const body = await readJson(req);
+      if (typeof body.name !== 'string') throw new HttpError(400, 'name debe ser texto');
+      runtime.mutate((e) => e.pedSensors.rename(id, body.name));
+      return send(200, { ok: true });
     }
 
     const sensorMatch = /^\/api\/sensors\/([\w-]{1,40})$/.exec(pathname);
@@ -165,6 +207,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
       const body = await readJson(req);
       const patch = {};
       if (body.maxCars !== undefined) patch.maxCars = finite(body.maxCars, 'maxCars');
+      if (body.maxPedestrians !== undefined) patch.maxPedestrians = finite(body.maxPedestrians, 'maxPedestrians');
       if (body.scenario !== undefined) patch.scenario = body.scenario;
       try {
         runtime.mutate((e) => e.setParams(patch));

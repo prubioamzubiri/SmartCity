@@ -3,6 +3,8 @@ import { DatabaseSync } from 'node:sqlite';
 export const TRAFFIC_COLUMNS = ['timestamp', 'weekday', 'sensor_id', 'sensor_name', 'x', 'z', 'count', 'count_fwd', 'count_bwd', 'avg_speed_kmh'];
 export const PARKING_COLUMNS = ['timestamp', 'weekday', 'parking_id', 'parking_name', 'capacity', 'occupied', 'free', 'occupancy_pct'];
 
+export const PEDESTRIAN_COLUMNS = ['timestamp', 'weekday', 'sensor_id', 'sensor_name', 'x', 'z', 'count', 'count_walk', 'count_cross', 'present'];
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS snapshot (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, saved_at INTEGER NOT NULL);
@@ -20,11 +22,19 @@ CREATE TABLE IF NOT EXISTS parking_records (
 );
 CREATE INDEX IF NOT EXISTS parking_time ON parking_records (timestamp);
 CREATE INDEX IF NOT EXISTS parking_lot ON parking_records (parking_id, timestamp);
+CREATE TABLE IF NOT EXISTS pedestrian_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp TEXT NOT NULL, weekday TEXT NOT NULL, sensor_id TEXT NOT NULL, sensor_name TEXT,
+  x INTEGER, z INTEGER, count INTEGER, count_walk INTEGER, count_cross INTEGER, present INTEGER
+);
+CREATE INDEX IF NOT EXISTS pedestrian_time ON pedestrian_records (timestamp);
+CREATE INDEX IF NOT EXISTS pedestrian_sensor ON pedestrian_records (sensor_id, timestamp);
 `;
 
 const TABLES = {
   traffic: { table: 'traffic_records', columns: TRAFFIC_COLUMNS, idColumn: 'sensor_id' },
   parking: { table: 'parking_records', columns: PARKING_COLUMNS, idColumn: 'parking_id' },
+  pedestrians: { table: 'pedestrian_records', columns: PEDESTRIAN_COLUMNS, idColumn: 'sensor_id' },
 };
 
 export class Store {
@@ -63,12 +73,11 @@ export class Store {
 
   // Registros y snapshot se guardan en una única transacción: tras un fallo el estado y los datos
   // vuelven juntos al último punto guardado y la simulación determinista regenera lo perdido.
-  checkpoint(snapshot, { traffic = [], parking = [] } = {}, wallMs = Date.now()) {
+  checkpoint(snapshot, records = {}, wallMs = Date.now()) {
     this.db.exec('BEGIN');
     try {
-      for (const kind of ['traffic', 'parking']) {
-        const rows = kind === 'traffic' ? traffic : parking;
-        for (const r of rows) this.inserts[kind].run(...TABLES[kind].columns.map((c) => r[c] ?? null));
+      for (const kind of Object.keys(TABLES)) {
+        for (const r of records[kind] ?? []) this.inserts[kind].run(...TABLES[kind].columns.map((c) => r[c] ?? null));
       }
       this.saveSnapshotStmt.run(JSON.stringify(snapshot), wallMs);
       this.db.exec('COMMIT');
