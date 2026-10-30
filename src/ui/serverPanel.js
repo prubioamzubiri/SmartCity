@@ -57,7 +57,7 @@ export function createServerPanel({ section, sync, localGraphKey }) {
   function download(kind) {
     try {
       const to = toInput.value ? nextDay(toInput.value) : undefined;
-      const url = sync.client.csvUrl(kind, { from: fromInput.value || undefined, to, id: kind === 'traffic' ? sensorFilter.value : '' });
+      const url = sync.client.csvUrl(kind, { from: fromInput.value || undefined, to, id: kind === 'parking' ? '' : sensorFilter.value });
       el('a', { href: url, download: '' }).click();
     } catch (err) {
       say(err.message, true);
@@ -71,11 +71,12 @@ export function createServerPanel({ section, sync, localGraphKey }) {
     } else {
       say(s.caughtUp ? 'Conectado · al día' : `Conectado · recuperando ${Math.round(s.behindSimSeconds / 3600)} h simuladas`);
     }
-    info.textContent = `Registros en el servidor: ${s.records.traffic} tráfico, ${s.records.parking} parkings`;
+    info.textContent = `Registros en el servidor: ${s.records.traffic} tráfico, ${s.records.pedestrians} peatones, ${s.records.parking} parkings`;
     const selected = sensorFilter.value;
     sensorFilter.replaceChildren(el('option', { value: '', textContent: 'Todos los sensores' }),
-      ...s.sensors.map((x) => el('option', { value: x.id, textContent: x.name })));
-    sensorFilter.value = s.sensors.some((x) => x.id === selected) ? selected : '';
+      ...s.sensors.map((x) => el('option', { value: x.id, textContent: x.name })),
+      ...s.pedestrianSensors.map((x) => el('option', { value: x.id, textContent: `Peatones: ${x.name}` })));
+    sensorFilter.value = [...s.sensors, ...s.pedestrianSensors].some((x) => x.id === selected) ? selected : '';
   });
   sync.on('error', (err) => say(`Sin conexión: ${err.message}`, true));
   sync.on('disconnect', () => {
@@ -100,6 +101,7 @@ export function createServerPanel({ section, sync, localGraphKey }) {
     el('label', {}, 'Sensor: ', sensorFilter),
     el('div', { class: 'row' },
       guarded(el('button', { textContent: 'CSV de tráfico', onclick: () => download('traffic') })),
+      guarded(el('button', { textContent: 'CSV de peatones', onclick: () => download('pedestrians') })),
       guarded(el('button', { textContent: 'CSV de parkings', onclick: () => download('parking') })),
     ),
   );

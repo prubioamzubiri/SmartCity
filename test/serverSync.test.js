@@ -115,8 +115,8 @@ test('server exposes the pedestrians (on the sidewalks and crossings) at the sim
       assert.ok(fromRing <= CONFIG.roads.halfWidth[4] + CONFIG.pedestrians.margin + 1e-3);
     }
     // El visor calcula con la misma función y la hora del servidor: ve exactamente los mismos peatones.
-    const viewer = new Pedestrians(data.crossings, { graph: runtime.engine.graph });
-    viewer.updateAt(payload.simSeconds, runtime.engine.params.scenario);
+    const viewer = new Pedestrians(data.crossings, { graph: runtime.engine.graph, water: runtime.engine.pedestrians.water });
+    viewer.updateAt(payload.simSeconds, runtime.engine.params.scenario, runtime.scale);
     assert.deepEqual([...viewer.x.subarray(0, viewer.activeCount)], [...x]);
     assert.deepEqual([...viewer.z.subarray(0, viewer.activeCount)], [...z]);
     seen += x.length;

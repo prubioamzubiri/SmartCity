@@ -33,25 +33,74 @@ export class Pedestrians {
     this.z = new Float32Array(max);
     this.heading = new Float32Array(max); // giro sobre Y que apunta el triángulo (+X) hacia donde camina
     this.activeCount = 0;
+    // Caché del paseo de cada peatón (solo acelera: el resultado es el mismo que calculándolo desde cero).
+    this.walkSlot = new Float64Array(max).fill(NaN);
+    this.walkS = new Float64Array(max);
+    this.walkEdge = new Int32Array(max);
+    this.walkStep = new Int32Array(max);
+    this.walkStart = new Float64Array(max);
+    this.walkP0 = new Float64Array(max);
   }
 
   // Posición a una hora simulada: el servidor y el visor usan esta misma función, así que coinciden.
-  updateAt(simSeconds, scenario) {
-    this.update(simSeconds * 1000, pedestrianDensity(demandFactor(simSeconds, scenario)));
+  // Los peatones tienen su propio reloj, a ritmo de tiempo real: la hora simulada dividida por la escala del servidor
+  // (simulada / real), para que caminen a 1,4 m/s en pantalla en vez de a ×52. La densidad sí sigue la hora simulada.
+  updateAt(simSeconds, scenario, scale = 1, limit = this.max) {
+    this.update((simSeconds / scale) * 1000, pedestrianDensity(demandFactor(simSeconds, scenario)), limit);
+  }
+
+  // Flujo esperado de peatones a una hora simulada: el modelo en el que se basan los sensores de peatones y el que
+  // generan en media los agentes de `update` (mismas proporciones, mismo reparto por tramos y mismos pasos).
+  //   walkPerMetre: caminantes por metro de tramo (dirigido) con acera.
+  //   crossPerCrossing: peatones que cruzan cada paso de peatones en una ventana de `slotSeconds`.
+  //   onStreet: peatones en la calle en un instante (caminantes más los que están cruzando).
+  flowAt(simSeconds, scenario, limit = this.max) {
+    const total = Math.min(limit, this.max) * pedestrianDensity(demandFactor(simSeconds, scenario));
+    const hasWalk = !!this.sidewalks;
+    const hasCross = this.count > 0;
+    const walkShare = hasWalk ? (hasCross ? this.walkFraction : 1) : 0;
+    const crossers = hasCross ? total * (1 - walkShare) : 0;
+    const walkers = total * walkShare;
+    const sidewalkLength = hasWalk ? this.sidewalks.cumulative[this.sidewalks.cumulative.length - 1] : 0;
+    return {
+      total: hasWalk || hasCross ? total : 0,
+      walkPerMetre: hasWalk ? walkers / sidewalkLength : 0,
+      crossPerCrossing: hasCross ? crossers / this.count : 0,
+      onStreet: walkers + (hasCross ? (crossers * this.meanCrossSeconds()) / P.slotSeconds : 0),
+    };
+  }
+
+  // Segundos que tarda un peatón en cruzar, de media entre todos los pasos.
+  meanCrossSeconds() {
+    if (this.crossMean === undefined) {
+      let sum = 0;
+      for (let j = 0; j < this.count; j++) sum += this.crossSeconds(j * STRIDE);
+      this.crossMean = this.count ? sum / this.count : 0;
+    }
+    return this.crossMean;
+  }
+
+  // Segundos que tarda un peatón en cruzar el paso que empieza en `c[j]`.
+  crossSeconds(j) {
+    return (2 * (CONFIG.roads.halfWidth[this.crossings[j + 4]] + P.margin)) / P.speed;
   }
 
   // `density` en [0, 1]: fracción de los peatones que pueden estar en la calle.
-  update(nowMs, density = 1) {
+  update(nowMs, density = 1, limit = this.max) {
     const t = nowMs / 1000;
     const crossSlot = Math.floor(t / P.slotSeconds);
     const crossLocal = t - crossSlot * P.slotSeconds;
-    const walkSlot = Math.floor(t / P.walkSeconds);
-    const walkLocal = t - walkSlot * P.walkSeconds;
-    const allowed = this.count || this.sidewalks ? Math.min(this.max, Math.round(this.max * Math.max(0, Math.min(1, density)))) : 0;
+    const allowed = this.count || this.sidewalks ? Math.min(this.max, Math.round(Math.min(limit, this.max) * Math.max(0, Math.min(1, density)))) : 0;
     let n = 0;
     for (let i = 0; i < allowed; i++) {
-      if (this.sidewalks && (this.count === 0 || rand(i, walkSlot, 6) < this.walkFraction)) n = this.walk(i, walkSlot, walkLocal, n);
-      else if (this.count) n = this.cross(i, crossSlot, crossLocal, n);
+      // Cada peatón tiene su propia fase: sus paseos no empiezan ni terminan todos a la vez.
+      const tw = t + rand(i, 0, 11) * P.walkSeconds;
+      const walkSlot = Math.floor(tw / P.walkSeconds);
+      if (this.sidewalks && (this.count === 0 || rand(i, walkSlot, 6) < this.walkFraction)) {
+        n = this.walk(i, walkSlot, tw - walkSlot * P.walkSeconds, n);
+      } else if (this.count) {
+        n = this.cross(i, crossSlot, crossLocal, n);
+      }
     }
     this.activeCount = n;
   }
@@ -88,25 +137,29 @@ export class Pedestrians {
   // de autovía o al terminar el paseo.
   walk(i, k, local, n) {
     const g = this.graph;
-    const { edges, cumulative } = this.sidewalks;
-    const target = rand(i, k, 7) * cumulative[cumulative.length - 1];
-    let lo = 0;
-    let hi = edges.length - 1;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (cumulative[mid] > target) hi = mid;
-      else lo = mid + 1;
+    const s = P.speed * (0.8 + 0.4 * rand(i, k, 2)) * local; // metros recorridos desde la salida
+    if (this.walkSlot[i] !== k || s < this.walkS[i]) this.startWalk(i, k);
+    this.walkS[i] = s;
+    let e = this.walkEdge[i];
+    if (e < 0) return n;
+    let step = this.walkStep[i];
+    let start = this.walkStart[i];
+    const p0 = this.walkP0[i];
+    let end = start + (step === 0 ? g.len[e] - p0 : g.len[e]);
+    while (s > end) {
+      start = end;
+      step++;
+      e = step < MAX_STEPS ? this.nextEdge(e, i, k, step - 1) : -1;
+      if (e < 0) {
+        this.walkEdge[i] = -1;
+        return n;
+      }
+      end = start + g.len[e];
     }
-    let e = edges[lo];
-    let p = rand(i, k, 9) * g.len[e];
-    let dist = P.speed * (0.8 + 0.4 * rand(i, k, 2)) * local;
-    for (let step = 0; p + dist > g.len[e]; step++) {
-      dist -= g.len[e] - p;
-      p = 0;
-      e = step < MAX_STEPS ? this.nextEdge(e, i, k, step) : -1;
-      if (e < 0) return n;
-    }
-    p += dist;
+    this.walkEdge[i] = e;
+    this.walkStep[i] = step;
+    this.walkStart[i] = start;
+    const p = step === 0 ? p0 + s : s - start;
     const dx = g.ux[e];
     const dz = g.uz[e];
     const a = g.A[e];
@@ -128,6 +181,24 @@ export class Pedestrians {
     this.z[n] = z;
     this.heading[n] = Math.atan2(-dz, dx);
     return n + 1;
+  }
+
+  // Elige el tramo y el punto de salida del paseo `k` del peatón `i`.
+  startWalk(i, k) {
+    const { edges, cumulative } = this.sidewalks;
+    const target = rand(i, k, 7) * cumulative[cumulative.length - 1];
+    let lo = 0;
+    let hi = edges.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (cumulative[mid] > target) hi = mid;
+      else lo = mid + 1;
+    }
+    this.walkSlot[i] = k;
+    this.walkEdge[i] = edges[lo];
+    this.walkStep[i] = 0;
+    this.walkStart[i] = 0;
+    this.walkP0[i] = rand(i, k, 9) * this.graph.len[edges[lo]];
   }
 
   inWater(x, z) {

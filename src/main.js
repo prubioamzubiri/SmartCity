@@ -82,14 +82,16 @@ async function main() {
   sync.on('cars', (payload) => cars.apply(payload));
   sync.on('disconnect', () => cars.clear());
   const serverView = new SensorView(scene, { color: 0x4caf50 });
+  const pedestrianSensorView = new SensorView(scene, { color: 0xff5ca8 });
   const simNow = () => sync.simTime() ?? CONFIG.sim.startSeconds;
 
-  // Modo de interacción: navegar o colocar sensores en el servidor
+  // Modo de interacción: navegar o colocar sensores (de tráfico o de peatones) en el servidor
   let mode = 'navigate';
+  const placingViews = { sensor: serverView, pedsensor: pedestrianSensorView };
   const setMode = (m) => {
     mode = m;
-    if (m !== 'sensor') serverView.showGhost(0, 0, false);
-    renderer.domElement.style.cursor = m === 'sensor' ? 'crosshair' : '';
+    for (const [name, view] of Object.entries(placingViews)) if (m !== name) view.showGhost(0, 0, false);
+    renderer.domElement.style.cursor = m in placingViews ? 'crosshair' : '';
   };
   const signalMarker = new THREE.Mesh(
     new THREE.RingGeometry(10, 13, 32).rotateX(-Math.PI / 2),
@@ -113,6 +115,7 @@ async function main() {
     sync, signals, localGraphKey: graphKey, setMode, getMode: () => mode, focusSignal,
     parking: { layer: parkingLayer, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked) },
     server: { view: serverView },
+    pedestrianSensors: { view: pedestrianSensorView },
   });
   const signalTooltip = document.createElement('div');
   signalTooltip.id = 'signal-tooltip';
@@ -133,11 +136,12 @@ async function main() {
   renderer.domElement.addEventListener('pointerdown', (ev) => (down = { x: ev.clientX, y: ev.clientY }));
   renderer.domElement.addEventListener('pointermove', (ev) => {
     setPointer(ev);
-    if (mode === 'sensor') {
+    if (mode in placingViews) {
+      const view = placingViews[mode];
       signalTooltip.hidden = true;
-      if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return serverView.showGhost(0, 0, false);
+      if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return view.showGhost(0, 0, false);
       const hit = graph.nearestSegment(hitPoint.x, hitPoint.z);
-      serverView.showGhost(hit?.x ?? 0, hit?.z ?? 0, !!hit);
+      view.showGhost(hit?.x ?? 0, hit?.z ?? 0, !!hit);
       return;
     }
     const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
@@ -192,12 +196,16 @@ async function main() {
         return;
       }
     }
-    if (mode === 'sensor') {
-      if (raycaster.ray.intersectPlane(groundPlane, hitPoint)) hud.addServerSensor(hitPoint.x, hitPoint.z);
+    if (mode === 'sensor' || mode === 'pedsensor') {
+      if (raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
+        if (mode === 'sensor') hud.addServerSensor(hitPoint.x, hitPoint.z);
+        else hud.addPedestrianSensor(hitPoint.x, hitPoint.z);
+      }
       return;
     }
-    const picked = serverView.pick(raycaster);
-    hud.selectSensor(picked);
+    const pickedPedestrian = pedestrianSensorView.pick(raycaster);
+    if (pickedPedestrian) return hud.selectPedestrianSensor(pickedPedestrian);
+    hud.selectSensor(serverView.pick(raycaster));
   });
   window.addEventListener('keydown', (ev) => {
     if (ev.target instanceof HTMLInputElement) return;
@@ -215,7 +223,7 @@ async function main() {
     if (simTime !== null) {
       signals.update(simTime);
       updateParkingOccupancy(parkingLayer, simTime);
-      pedestrians.updateAt(simTime, sync.state.params.scenario);
+      pedestrians.updateAt(simTime, sync.state.params.scenario, sync.state.scale, sync.state.params.maxPedestrians);
     } else {
       pedestrians.activeCount = 0;
     }

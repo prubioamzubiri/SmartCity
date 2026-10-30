@@ -46,19 +46,25 @@ export const CONFIG = {
     speedByClass: [22, 16, 13, 11, 8],
   },
 
-  // Peatones: triángulos que cruzan los pasos de peatones de OSM (solo visual, en el visor).
+  // Peatones: triángulos que caminan por las aceras y cruzan por los pasos de peatones de OSM (solo visual).
   pedestrians: {
-    max: 2000, // con la demanda máxima
+    max: 12000, // con la demanda máxima
     walkFraction: 0.75, // fracción que camina por las aceras; el resto cruza por los pasos de peatones
-    minDensity: 0.1, // fracción de peatones activos aunque la demanda sea nula
-    speed: 1.4, // m/s reales
+    minDensity: 0.15, // fracción de peatones activos aunque la demanda sea nula
+    speed: 1.4, // m/s en pantalla: los peatones usan un reloj de tiempo real (hora simulada ÷ escala del servidor)
     size: 2.4, // largo del triángulo, en metros
     margin: 2, // metros más allá de la calzada que ocupan: cruzan hasta ahí y caminan a la mitad
     laneWidth: 3, // ancho del paso por el que se reparten, en metros
-    slotSeconds: 40, // cada peatón que cruza elige un paso nuevo en cada ventana de este tamaño
-    walkSeconds: 600, // duración de un paseo por las aceras (≈ 840 m a 1,4 m/s) antes de reaparecer en otro sitio
+    slotSeconds: 40, // segundos reales: cada peatón que cruza elige un paso nuevo en cada ventana de este tamaño
+    walkSeconds: 1200, // segundos reales de un paseo por las aceras (≈ 1,7 km a 1,4 m/s) antes de reaparecer en otro sitio
     height: 0.5,
     color: 0xffd54a,
+  },
+
+  // Sensores de peatones del servidor: cuentan a los que pasan por la acera de una calle o cruzan cerca.
+  pedestrianSensors: {
+    bucketSeconds: 300, // segundos simulados por registro
+    radius: 20, // metros alrededor del sensor: pasos de peatones que cuenta y tramo en el que mide los presentes
   },
 
   signals: {

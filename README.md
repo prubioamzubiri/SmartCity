@@ -23,11 +23,27 @@ water: where a sidewalk falls into the sea or a river they use the opposite one 
 hidden, and on bridges they stay on the roadway. The server
 exposes them (`GET /api/pedestrians`) as a pure function of the simulated time, so
 they need no stored state. The viewer evaluates the same function every frame with the
-server clock, so it sees the same pedestrians and they move smoothly. They walk at
-1.4 m/s of *simulated* time (×52 in real time), so each one is only on screen for a
-fraction of a second.
-Their number follows the traffic demand of the simulated hour;
-tune `CONFIG.pedestrians` in `src/config.js`.
+server clock, so it sees the same pedestrians and they move smoothly. Pedestrians
+have their own real-time clock (simulated time ÷ the server scale), so they walk at
+1.4 m/s on screen; a walk lasts `walkSeconds` (20 min, about 1.7 km) and each
+pedestrian has its own phase, so they do not all respawn together.
+Up to `max` (12,000) pedestrians follow the traffic demand of the simulated hour;
+tune `CONFIG.pedestrians` in `src/config.js`. The maximum is also a server parameter
+(`maxPedestrians`, slider in the **Peatones (servidor)** panel; it needs the token).
+
+### Pedestrian sensors
+
+In the **Peatones (servidor)** panel, *Colocar sensor de peatones* places a sensor on a
+street (Esc cancels, Supr deletes the selected one). Every 5 simulated minutes
+(`CONFIG.pedestrianSensors.bucketSeconds`) the server records, per sensor, how many
+pedestrians walked past on the sidewalks of that street (both directions) and crossed at
+the crossings within `radius` (20 m), and how many were present in that area. They are
+computed from the same flow model that generates the pedestrians in the viewer
+(`Pedestrians.flowAt`), not from the individual agents, so the cost does not depend on
+how many there are, the numbers follow the demand curve and the `maxPedestrians`
+setting, and the records are identical after a restart or a catch-up (Poisson noise
+seeded by sensor and interval). Download them with **CSV de peatones** or
+`GET /api/pedestrians.csv`; see [DEPLOYMENT.md](DEPLOYMENT.md#api).
 
 ## Simulation server
 

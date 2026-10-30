@@ -81,13 +81,25 @@ export class ApiClient {
     return this.request(`/api/sensors/${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
 
+  addPedestrianSensor(x, z, name = '') {
+    return this.request('/api/pedestrian-sensors', { method: 'POST', body: { x, z, name } });
+  }
+
+  renamePedestrianSensor(id, name) {
+    return this.request(`/api/pedestrian-sensors/${encodeURIComponent(id)}`, { method: 'PATCH', body: { name } });
+  }
+
+  removePedestrianSensor(id) {
+    return this.request(`/api/pedestrian-sensors/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
   setTrackedParkings(ids) {
     return this.request('/api/parking/tracked', { method: 'PUT', body: { ids } });
   }
 
   // URL de descarga directa: el navegador hace streaming del CSV sin cargarlo en memoria.
   csvUrl(kind, { from, to, id } = {}) {
-    if (kind !== 'traffic' && kind !== 'parking') throw new Error('Tipo de CSV desconocido');
+    if (!['traffic', 'parking', 'pedestrians'].includes(kind)) throw new Error('Tipo de CSV desconocido');
     const query = new URLSearchParams();
     for (const [key, value] of [['from', from], ['to', to]]) {
       if (!value) continue;

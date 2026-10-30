@@ -107,30 +107,61 @@ test('walkers keep walking through the junctions instead of vanishing at the end
   const W = CONFIG.pedestrians.walkSeconds;
   let previous;
   // Dos paseos completos: el anillo no tiene salida, así que ningún peatón puede desaparecer.
-  for (let t = 5; t < 2 * W - 5; t += 20) {
+  for (let t = 5; t < 2 * W; t += 20) {
     p.update(t * 1000, 1);
     assert.equal(p.activeCount, 200, `se perdió algún peatón en t=${t}`);
     const now = Array.from(p.x.subarray(0, 200), (x, i) => [x, p.z[i]]);
-    if (previous && Math.floor(t / W) === Math.floor((t - 20) / W)) {
-      now.forEach(([x, z], i) => {
-        // 20 s a ≤1,68 m/s ≈ 34 m, más el salto lateral de ±2×4,5 m al girar en una esquina.
-        assert.ok(Math.hypot(x - previous[i][0], z - previous[i][1]) < 34 + 2 * 4.5 * 1.5, `salto en t=${t}`);
-      });
+    if (previous) {
+      // 20 s a ≤1,68 m/s ≈ 34 m, más el salto lateral al girar en una esquina. Solo reaparecen (saltan) los que
+      // acaban su paseo en ese intervalo, que tienen fases repartidas: ~20/W del total.
+      const jumps = now.filter(([x, z], i) => Math.hypot(x - previous[i][0], z - previous[i][1]) > 34 + 2 * 4.5 * 1.5).length;
+      assert.ok(jumps <= 200 * (20 / W) * 3 + 3, `demasiados saltos (${jumps}) en t=${t}`);
     }
     previous = now;
   }
 });
 
-test('walkers cover a long route: a walk lasts several hundred metres', () => {
-  const g = ring();
-  const p = new Pedestrians([], { max: 200, graph: g, walkFraction: 1 });
+test('walks are staggered: not all pedestrians respawn at the same time', () => {
+  const p = new Pedestrians([], { max: 300, graph: ring(), walkFraction: 1 });
   const W = CONFIG.pedestrians.walkSeconds;
-  p.update(W * 1000, 1);
-  const start = Array.from(p.x.subarray(0, 200), (x, i) => [x, p.z[i]]);
-  p.update((2 * W - 1) * 1000, 1);
-  // Un anillo de 2.000 m: tras casi 10 min (~800 m) la mayoría está lejos de donde salió.
-  const far = start.filter(([x, z], i) => Math.hypot(x - p.x[i], z - p.z[i]) > 100).length;
-  assert.ok(far > 150, `solo ${far} se alejaron`);
+  let respawns = [];
+  let previous;
+  for (let t = 0; t < W; t += 5) {
+    p.update(t * 1000, 1);
+    const now = Array.from(p.x.subarray(0, 300), (x, i) => [x, p.z[i]]);
+    if (previous) respawns.push(now.filter(([x, z], i) => Math.hypot(x - previous[i][0], z - previous[i][1]) > 20).length);
+    previous = now;
+  }
+  assert.ok(Math.max(...respawns) < 300 * 0.1, `reaparecen juntos: ${Math.max(...respawns)}`);
+  assert.ok(respawns.reduce((a, b) => a + b, 0) >= 200, 'cada peatón reaparece una vez por paseo');
+});
+
+test('a walk is a long, continuous route and cached results equal those computed from scratch', () => {
+  const g = ring();
+  const cached = new Pedestrians([], { max: 100, graph: g, walkFraction: 1 });
+  const W = CONFIG.pedestrians.walkSeconds;
+  for (let t = 100; t < 3 * W; t += 7) {
+    cached.update(t * 1000, 1);
+    const fresh = new Pedestrians([], { max: 100, graph: g, walkFraction: 1 });
+    fresh.update(t * 1000, 1);
+    assert.deepEqual([...cached.x.subarray(0, cached.activeCount)], [...fresh.x.subarray(0, fresh.activeCount)]);
+    assert.deepEqual([...cached.z.subarray(0, cached.activeCount)], [...fresh.z.subarray(0, fresh.activeCount)]);
+  }
+  // Un caminante recorre ~1,4 m/s: en 10 min avanza cientos de metros por las calles.
+  const one = new Pedestrians([], { max: 1, graph: g, walkFraction: 1 });
+  let travelled = 0;
+  let last;
+  for (let t = 0; t < 600; t++) {
+    one.update(t * 1000, 1);
+    if (one.activeCount === 0) continue;
+    const pos = [one.x[0], one.z[0]];
+    if (last) {
+      const d = Math.hypot(pos[0] - last[0], pos[1] - last[1]);
+      if (d < 20) travelled += d;
+    }
+    last = pos;
+  }
+  assert.ok(travelled > 400, `solo recorrió ${travelled.toFixed(0)} m en 10 min`);
 });
 
 test('walkers turn around in a dead end and vanish only when there is no way on', () => {
