@@ -1,6 +1,7 @@
 // Descarga edificios y calles de Donostia desde OpenStreetMap (Overpass) y genera public/data/city.json.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { extractCrossings } from './crossings.mjs';
+import { extractPois, POI_CATEGORIES, POI_QUERY } from './pois.mjs';
 
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -367,6 +368,15 @@ async function fetchParking() {
   return { areas, points, spaces, street, underground };
 }
 
+// Puntos de interés que atraen peatones (comercios, hostelería, paradas, colegios, servicios, turismo): lista plana [x, z, categoría, ...].
+async function fetchPois() {
+  const json = await overpass(`[out:json][timeout:300];${AREA}(${POI_QUERY});out center;`);
+  const pois = extractPois(json.elements, project, round1);
+  const counts = POI_CATEGORIES.map((name, i) => `${name} ${pois.filter((v, k) => k % 3 === 2 && v === i).length}`);
+  console.log(`Puntos de interés: ${pois.length / 3} (${counts.join(', ')})`);
+  return pois;
+}
+
 await mkdir('public/data', { recursive: true });
 
 if (process.argv.includes('--parking-only')) {
@@ -374,6 +384,11 @@ if (process.argv.includes('--parking-only')) {
   city.parking = await fetchParking();
   await writeFile('public/data/city.json', JSON.stringify(city));
   console.log('Actualizado el aparcamiento en public/data/city.json');
+} else if (process.argv.includes('--pois-only')) {
+  const city = JSON.parse(await readFile('public/data/city.json', 'utf8'));
+  city.pois = await fetchPois();
+  await writeFile('public/data/city.json', JSON.stringify(city));
+  console.log('Actualizados los puntos de interés en public/data/city.json');
 } else if (process.argv.includes('--crossings-only')) {
   const city = JSON.parse(await readFile('public/data/city.json', 'utf8'));
   city.crossings = (await fetchRoads()).crossings;
@@ -405,6 +420,7 @@ if (process.argv.includes('--parking-only')) {
     ways: roads.ways,
     signals: roads.signals,
     crossings: roads.crossings,
+    pois: await fetchPois(),
     water: await fetchWater(bounds),
     parking: await fetchParking(),
   };

@@ -16,6 +16,7 @@ import { createSignalViz } from './traffic/signalViz.js';
 import { CarView } from './traffic/carView.js';
 import { RemoteCars } from './traffic/remoteCars.js';
 import { Pedestrians } from './pedestrians/pedestrians.js';
+import { pedestrianWeights } from './pedestrians/weights.js';
 import { createWaterMask } from './city/waterMask.js';
 import { PedestrianView } from './pedestrians/pedestrianView.js';
 import { SensorView } from './sensors/sensorView.js';
@@ -76,7 +77,7 @@ async function main() {
   const cars = new RemoteCars(graph, graphKey);
   const carView = new CarView(cars);
   scene.add(carView.mesh);
-  const pedestrians = new Pedestrians(data.crossings, { graph, water: createWaterMask(data) });
+  const pedestrians = new Pedestrians(data.crossings, { graph, water: createWaterMask(data), weights: pedestrianWeights(graph, data) });
   const pedestrianView = new PedestrianView(pedestrians);
   scene.add(pedestrianView.mesh);
   sync.on('cars', (payload) => cars.apply(payload));

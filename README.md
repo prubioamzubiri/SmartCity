@@ -14,7 +14,9 @@ npm run dev
 `fetch-osm` downloads the city data required by the viewer into
 `public/data/city.json` (not tracked in Git). It includes the OSM pedestrian
 crossings (`highway=crossing` nodes on roads); `npm run fetch-crossings`
-refreshes only those in an existing file.
+refreshes only those in an existing file. It also downloads the points of interest that
+attract pedestrians (shops, hospitality, bus and tram stops, schools, services and
+tourism, about 3,700 in Donostia); `npm run fetch-pois` refreshes only those.
 
 Pedestrians are small yellow triangles. Most walk along the sidewalks of the streets
 (not motorways); the rest cross the street at those crossings
@@ -30,6 +32,26 @@ pedestrian has its own phase, so they do not all respawn together.
 Up to `max` (12,000) pedestrians follow the traffic demand of the simulated hour;
 tune `CONFIG.pedestrians` in `src/config.js`. The maximum is also a server parameter
 (`maxPedestrians`, slider in the **Peatones (servidor)** panel; it needs the token).
+
+### Where the pedestrians are
+
+Streets do not attract the same number of people. Each street segment has a weight:
+the weight of its road class (`CONFIG.pedestrians.streetWeights`; motorways have none)
+times `1 + Σ weight(POI) × (1 − distance / poiRadius)²` for the points of interest
+within `poiRadius` (60 m, per-category `poiWeights`: bus stops 2.5, schools 2,
+tourism 1.5, hospitality 1.2, shops and services 1), capped at `maxWeight` times the
+class. Pedestrians start their walks on a segment, and cross at a crossing, in
+proportion to its weight (and length), so busy shopping streets and bus stops gather
+about 3 to 5 times as many people as a quiet residential street; the same weights are
+used by the pedestrian sensors, so what they record follows what the viewer shows. The
+weights are computed from `city.json` (85 ms), identically in the server and the viewer.
+A walker that reaches a junction keeps going straight unless the street ends
+(`attraction` can bias the choice towards heavier streets, but it makes the agents
+drift away from the sensors' model, so it is 0 by default). Walks last 20 minutes and
+move through several streets, so the concentration is a tendency, not an exact
+copy of the weights (on the real city, sensors on the 20 heaviest segments see 4.3 times
+the people of those on average segments according to the agents, and 4.8 times
+according to the model).
 
 ### Pedestrian sensors
 

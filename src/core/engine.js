@@ -9,6 +9,7 @@ import { trackableUndergroundLots, undergroundOccupancy } from '../city/undergro
 import { PedestrianSensors } from '../sensors/pedestrianSensors.js';
 import { createWaterMask } from '../city/waterMask.js';
 import { Pedestrians } from '../pedestrians/pedestrians.js';
+import { pedestrianWeights } from '../pedestrians/weights.js';
 import { toBase64 } from './binary.js';
 import { createRng } from './random.js';
 
@@ -38,7 +39,7 @@ export class SimEngine {
       getSimTime: () => this.simTime,
       storage: null,
     });
-    this.pedestrians = new Pedestrians(data.crossings, { graph: this.graph, water: createWaterMask(data) });
+    this.pedestrians = new Pedestrians(data.crossings, { graph: this.graph, water: createWaterMask(data), weights: pedestrianWeights(this.graph, data) });
     this.pedSensors = new PedestrianSensors({
       graph: this.graph,
       pedestrians: this.pedestrians,

@@ -21,13 +21,19 @@ function rand(i, k, salt) {
 // del tiempo y, en cada ventana, elige qué hacer: caminar por la acera de una calle o cruzar por un paso de
 // peatones de OSM (en ese caso solo se ve mientras cruza).
 export class Pedestrians {
-  constructor(crossings = [], { max = P.max, graph = null, walkFraction = P.walkFraction, water = null } = {}) {
+  constructor(crossings = [], { max = P.max, graph = null, walkFraction = P.walkFraction, water = null, weights = null } = {}) {
     this.crossings = crossings;
     this.count = Math.floor(crossings.length / STRIDE);
     this.graph = graph;
     this.water = water;
     this.walkFraction = walkFraction;
-    this.sidewalks = graph ? sidewalkEdges(graph) : null;
+    // Pesos de atracción por tramo y por paso de peatones (ver weights.js); sin ellos todos valen 1.
+    this.edgeWeight = weights?.edge ?? null;
+    this.crossWeight = weights?.crossing ?? null;
+    this.sidewalks = graph ? sidewalkEdges(graph, this.edgeWeight) : null;
+    this.crossCumulative = new Float64Array(this.count);
+    for (let j = 0, total = 0; j < this.count; j++) this.crossCumulative[j] = total += this.crossWeight ? this.crossWeight[j] : 1;
+    this.crossTotal = this.count ? this.crossCumulative[this.count - 1] : 0;
     this.max = max;
     this.x = new Float32Array(max);
     this.z = new Float32Array(max);
@@ -51,8 +57,8 @@ export class Pedestrians {
 
   // Flujo esperado de peatones a una hora simulada: el modelo en el que se basan los sensores de peatones y el que
   // generan en media los agentes de `update` (mismas proporciones, mismo reparto por tramos y mismos pasos).
-  //   walkPerMetre: caminantes por metro de tramo (dirigido) con acera.
-  //   crossPerCrossing: peatones que cruzan cada paso de peatones en una ventana de `slotSeconds`.
+  //   walkPerWeight: caminantes por metro de tramo (dirigido) con acera y peso 1; un tramo de peso w tiene w veces más.
+  //   crossPerWeight: peatones que cruzan un paso de peso 1 en una ventana de `slotSeconds`; uno de peso w, w veces más.
   //   onStreet: peatones en la calle en un instante (caminantes más los que están cruzando).
   flowAt(simSeconds, scenario, limit = this.max) {
     const total = Math.min(limit, this.max) * pedestrianDensity(demandFactor(simSeconds, scenario));
@@ -61,23 +67,32 @@ export class Pedestrians {
     const walkShare = hasWalk ? (hasCross ? this.walkFraction : 1) : 0;
     const crossers = hasCross ? total * (1 - walkShare) : 0;
     const walkers = total * walkShare;
-    const sidewalkLength = hasWalk ? this.sidewalks.cumulative[this.sidewalks.cumulative.length - 1] : 0;
+    const weightedLength = hasWalk ? this.sidewalks.cumulative[this.sidewalks.cumulative.length - 1] : 0;
     return {
       total: hasWalk || hasCross ? total : 0,
-      walkPerMetre: hasWalk ? walkers / sidewalkLength : 0,
-      crossPerCrossing: hasCross ? crossers / this.count : 0,
+      walkPerWeight: hasWalk ? walkers / weightedLength : 0,
+      crossPerWeight: hasCross ? crossers / this.crossTotal : 0,
       onStreet: walkers + (hasCross ? (crossers * this.meanCrossSeconds()) / P.slotSeconds : 0),
     };
   }
 
-  // Segundos que tarda un peatón en cruzar, de media entre todos los pasos.
+  // Segundos que tarda un peatón en cruzar, de media entre todos los pasos (ponderada por su peso).
   meanCrossSeconds() {
     if (this.crossMean === undefined) {
       let sum = 0;
-      for (let j = 0; j < this.count; j++) sum += this.crossSeconds(j * STRIDE);
-      this.crossMean = this.count ? sum / this.count : 0;
+      for (let j = 0; j < this.count; j++) sum += this.crossWeightAt(j * STRIDE) * this.crossSeconds(j * STRIDE);
+      this.crossMean = this.count ? sum / this.crossTotal : 0;
     }
     return this.crossMean;
+  }
+
+  // Peso del tramo `e` y del paso de peatones que empieza en `crossings[j]`.
+  weightOf(e) {
+    return this.edgeWeight ? this.edgeWeight[e] : 1;
+  }
+
+  crossWeightAt(j) {
+    return this.crossWeight ? this.crossWeight[j / STRIDE] : 1;
   }
 
   // Segundos que tarda un peatón en cruzar el paso que empieza en `c[j]`.
@@ -105,11 +120,25 @@ export class Pedestrians {
     this.activeCount = n;
   }
 
+  // Índice de un paso de peatones elegido en proporción a su peso (`u` en [0, 1)).
+  pickCrossing(u) {
+    const target = u * this.crossTotal;
+    const cum = this.crossCumulative;
+    let lo = 0;
+    let hi = this.count - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (cum[mid] > target) hi = mid;
+      else lo = mid + 1;
+    }
+    return lo;
+  }
+
   // Cruza la calle por un paso de peatones; solo se ve mientras cruza.
   cross(i, k, local, n) {
     const c = this.crossings;
     const slot = P.slotSeconds;
-    const j = Math.floor(rand(i, k, 1) * this.count) * STRIDE;
+    const j = this.pickCrossing(rand(i, k, 1)) * STRIDE;
     const road = CONFIG.roads.halfWidth[c[j + 4]];
     // En un puente solo se pisa la calzada: la acera quedaría suspendida sobre el agua.
     const half = this.inWater(c[j], c[j + 1]) ? road : road + P.margin;
@@ -218,8 +247,9 @@ export class Pedestrians {
     let bestScore = -Infinity;
     for (let c = g.outStart[node], j = 0; c < g.outStart[node + 1]; c++, j++) {
       const f = g.outList[c];
-      if (g.cls[f] === 0 || f === g.rev[e]) continue;
-      const score = g.ux[e] * g.ux[f] + g.uz[e] * g.uz[f] + 1.2 * rand(i, k, 1000 + step * 16 + (j & 15));
+      const weight = this.weightOf(f);
+      if (g.cls[f] === 0 || weight <= 0 || f === g.rev[e]) continue;
+      const score = g.ux[e] * g.ux[f] + g.uz[e] * g.uz[f] + 1.2 * rand(i, k, 1000 + step * 16 + (j & 15)) + P.attraction * Math.log(weight);
       if (score > bestScore) {
         bestScore = score;
         best = f;
@@ -229,14 +259,16 @@ export class Pedestrians {
   }
 }
 
-// Tramos con acera (todas las clases menos autovía) y su longitud acumulada, para elegir uno proporcionalmente.
-function sidewalkEdges(g) {
+// Tramos con acera (peso > 0: todas las clases menos autovía) y su longitud ponderada acumulada, para elegir uno en
+// proporción a su longitud y a su peso.
+function sidewalkEdges(g, weights) {
   const edges = [];
   const cumulative = [];
   let total = 0;
   for (let e = 0; e < g.edgeCount; e++) {
-    if (g.cls[e] === 0) continue;
-    total += g.len[e];
+    const weight = weights ? weights[e] : g.cls[e] === 0 ? 0 : 1;
+    if (weight <= 0) continue;
+    total += g.len[e] * weight;
     edges.push(e);
     cumulative.push(total);
   }

@@ -57,6 +57,13 @@ export const CONFIG = {
     laneWidth: 3, // ancho del paso por el que se reparten, en metros
     slotSeconds: 40, // segundos reales: cada peatón que cruza elige un paso nuevo en cada ventana de este tamaño
     walkSeconds: 1200, // segundos reales de un paseo por las aceras (≈ 1,7 km a 1,4 m/s) antes de reaparecer en otro sitio
+    // Atracción de las calles: los peatones empiezan sus paseos, cruzan y cuentan en proporción a un peso por tramo.
+    // peso = pesoDeLaClase × (1 + Σ pesoDelPOI × (1 − distancia / poiRadius)²), con tope en maxWeight veces la clase.
+    streetWeights: [0, 1.3, 1.5, 1.2, 0.8], // por clase de vía: autovía (sin acera), primaria, secundaria, terciaria, residencial
+    poiWeights: [1, 1.2, 2.5, 2, 1, 1.5], // por categoría de POI: comercio, hostelería, transporte, educación, servicios, turismo
+    poiRadius: 60, // metros a los que un POI atrae peatones hacia la calle
+    maxWeight: 8,
+    attraction: 0, // sesgo al elegir calle en un cruce hacia las de más peso (0 = solo siguen recto); con >0 los agentes se desvían del modelo de los sensores (≈15 % con 0, ≈17 % con 0,6, ≈22 % con 3)
     height: 0.5,
     color: 0xffd54a,
   },

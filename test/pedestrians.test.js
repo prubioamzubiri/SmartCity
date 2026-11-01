@@ -4,6 +4,9 @@ import { CONFIG } from '../src/config.js';
 import { Pedestrians, pedestrianDensity } from '../src/pedestrians/pedestrians.js';
 import { extractCrossings } from '../scripts/crossings.mjs';
 import { createWaterMask } from '../src/city/waterMask.js';
+import { pedestrianWeights } from '../src/pedestrians/weights.js';
+import { classifyPoi, extractPois, POI_CATEGORIES } from '../scripts/pois.mjs';
+import { SimEngine } from '../src/core/engine.js';
 
 // Un paso en (100, 50) sobre una calle residencial (clase 4) que va por X: se cruza en dirección Z.
 const CROSSINGS = [100, 50, 0, 1, 4];
@@ -236,4 +239,169 @@ test('a crossing on the water is only used on a bridge, within the roadway', () 
     }
   }
   assert.ok(onLand > 0 && overWater > 0);
+});
+
+// ---- Pesos de atracción de las calles ----
+
+// Los tramos del anillo miden 500 m (los de OSM, decenas): el radio de atracción se escala para que alcance a todo el tramo.
+const WCFG = { ...CONFIG.pedestrians, streetWeights: [0, 2, 1.5, 1.2, 1], poiWeights: [1, 2, 4, 3, 1, 1.5], poiRadius: 400, maxWeight: 8 };
+
+test('street weights follow the road class and the nearby points of interest', () => {
+  const g = ring();
+  const none = pedestrianWeights(g, { crossings: [] }, WCFG);
+  assert.ok([...none.edge].every((w) => w === 1), 'sin POI, el peso es el de la clase');
+
+  // Parada de bus (categoría 2, peso 4) en el centro de la calle superior (z = -250); comercio (peso 1) lejos de todo.
+  const near = pedestrianWeights(g, { crossings: [0, -250, 0, 1, 4, 100, 250, 0, 1, 4], pois: [0, -250, 2, 1000, 1000, 0] }, WCFG);
+  const top = g.A.findIndex((a, e) => g.nz[a] === -250 && g.nz[g.B[e]] === -250);
+  const bottom = g.A.findIndex((a, e) => g.nz[a] === 250 && g.nz[g.B[e]] === 250);
+  assert.ok(near.edge[top] > 1.5 * near.edge[bottom], `${near.edge[top]} frente a ${near.edge[bottom]}`);
+  assert.equal(near.edge[bottom], 1, 'un POI lejos no cambia nada');
+  assert.equal(near.edge[top], near.edge[g.rev[top]], 'los dos sentidos pesan igual');
+  assert.ok(near.crossing[0] > near.crossing[1], 'el paso junto a la parada atrae más');
+  assert.equal(near.crossing[1], 1);
+
+  // Más cerca, más atracción; y hay un tope.
+  const far = pedestrianWeights(g, { crossings: [], pois: [0, -250 + 150, 2] }, WCFG);
+  assert.ok(near.edge[top] > far.edge[top]);
+  const crowded = pedestrianWeights(g, { crossings: [], pois: Array.from({ length: 300 }, () => [0, -250, 2]).flat() }, WCFG);
+  assert.ok(crowded.edge[top] <= WCFG.maxWeight * WCFG.streetWeights[4] + 1e-6);
+
+  const motorway = ring();
+  motorway.cls.fill(0);
+  assert.ok([...pedestrianWeights(motorway, { crossings: [], pois: [0, -250, 2] }, WCFG).edge].every((w) => w === 0), 'las autovías no tienen acera');
+});
+
+// Dos calles de 500 m sin conexión (arriba, z = -250, y abajo, z = 250), en las que los peatones se dan la vuelta al llegar
+// al final: nadie puede pasar de una a otra, así que el reparto depende solo de los pesos de salida.
+function twoStreets() {
+  const n = [[-250, -250], [250, -250], [-250, 250], [250, 250]];
+  const edges = [[0, 1], [1, 0], [2, 3], [3, 2]];
+  const g = {
+    edgeCount: 4, A: [], B: [], cls: [4, 4, 4, 4], len: [500, 500, 500, 500], ux: [], uz: [],
+    nx: n.map((p) => p[0]), nz: n.map((p) => p[1]), rev: [1, 0, 3, 2], outStart: [0, 1, 2, 3, 4], outList: [],
+  };
+  for (const v of [0, 1, 2, 3]) g.outList.push(edges.findIndex(([a]) => a === v));
+  for (const [a, b] of edges) {
+    g.A.push(a); g.B.push(b);
+    g.ux.push(Math.sign(n[b][0] - n[a][0])); g.uz.push(0);
+  }
+  return g;
+}
+
+test('pedestrians start their walks and cross in proportion to the weights', () => {
+  const g = twoStreets();
+  // Tres paradas de bus en la calle de arriba y un paso de peatones en cada calle.
+  const data = { crossings: [0, -250, 0, 1, 4, 0, 250, 0, 1, 4], pois: [0, -250, 2, 0, -250, 2, 0, -250, 2] };
+  const weights = pedestrianWeights(g, data, WCFG);
+  const ratio = weights.edge[0] / weights.edge[2];
+  assert.ok(ratio > 1.5, `peso arriba/abajo ${ratio.toFixed(2)}`);
+
+  const share = (options) => {
+    const p = new Pedestrians(data.crossings, { max: 3000, graph: g, walkFraction: 1, ...options });
+    let top = 0;
+    let all = 0;
+    for (let t = 0; t < 12000; t += 211) {
+      p.update(t * 1000, 1);
+      for (let i = 0; i < p.activeCount; i++) {
+        all++;
+        if (p.z[i] < 0) top++;
+      }
+    }
+    return top / all;
+  };
+  const flat = share({});
+  const weighted = share({ weights });
+  assert.ok(Math.abs(flat - 0.5) < 0.03, `sin pesos ${flat.toFixed(2)}`);
+  // La mitad de los peatones tiene que ir a cada calle en proporción a su peso (longitud × peso).
+  const expected = ratio / (1 + ratio);
+  assert.ok(Math.abs(weighted - expected) < 0.03, `con pesos ${weighted.toFixed(3)} frente a ${expected.toFixed(3)} esperado`);
+
+  // Cruces: el paso de la calle con paradas se usa en proporción a su peso.
+  const crossers = new Pedestrians(data.crossings, { max: 3000, weights, walkFraction: 0 });
+  const expectedCross = weights.crossing[0] / (weights.crossing[0] + weights.crossing[1]);
+  assert.ok(expectedCross > 0.6);
+  let topUsed = 0;
+  let total = 0;
+  for (let t = 0; t < 4000; t += 20) {
+    crossers.update(t * 1000, 1);
+    for (let i = 0; i < crossers.activeCount; i++) {
+      total++;
+      if (crossers.z[i] < 0) topUsed++;
+    }
+  }
+  assert.ok(Math.abs(topUsed / total - expectedCross) < 0.04, `paso con peso ${(topUsed / total).toFixed(3)} frente a ${expectedCross.toFixed(3)}`);
+});
+
+test('the flow model with weights matches the agents and the sensors reflect the attraction', () => {
+  const g = twoStreets();
+  const data = { crossings: [], pois: [0, -250, 2, 0, -250, 2] };
+  const weights = pedestrianWeights(g, data, WCFG);
+  const walkers = new Pedestrians([], { max: 3000, graph: g, weights, walkFraction: 1 });
+  const flow = walkers.flowAt(3 * 86400 + 8 * 3600, 'weekday');
+  // Personas por metro de acera en cada calle según los agentes y según el modelo (walkPerWeight × peso × 2 sentidos).
+  const count = (top) => {
+    let sum = 0;
+    let n = 0;
+    for (let t = 0; t < 12000; t += 97) {
+      walkers.update(t * 1000, 1);
+      for (let i = 0; i < walkers.activeCount; i++) if ((walkers.z[i] < 0) === top) sum++;
+      n++;
+    }
+    return sum / n;
+  };
+  const model = (e) => flow.walkPerWeight * weights.edge[e] * 500 * 2;
+  const full = flow.total * 1; // límite = max: todos caminan
+  for (const [top, e] of [[true, 0], [false, 2]]) {
+    const observed = count(top);
+    assert.ok(Math.abs(observed - model(e)) / model(e) < 0.05, `${top ? 'arriba' : 'abajo'}: agentes ${observed.toFixed(0)} frente a modelo ${model(e).toFixed(0)}`);
+  }
+  assert.ok(Math.abs(model(0) + model(2) - full) < 1e-6 * full);
+});
+
+test('sensors count more where the street attracts more pedestrians', () => {
+  const data = { ...engineCity(), pois: [0, -250, 2, 5, -250, 2, -5, -250, 1] };
+  const engine = new SimEngine({ data });
+  const attracted = engine.pedSensors.add(0, -250);
+  const plain = engine.pedSensors.add(0, 250);
+  assert.ok(attracted.weight > plain.weight * 1.3, `${attracted.weight} frente a ${plain.weight}`);
+  const t = 3 * 86400 + 8 * 3600;
+  const a = engine.pedSensors.expected(attracted, t, 'weekday', 12000);
+  const b = engine.pedSensors.expected(plain, t, 'weekday', 12000);
+  assert.ok(a.walk > b.walk * 1.3 && a.present > b.present * 1.3);
+  // La atracción reparte, no crea gente: la suma ponderada de todas las calles sigue siendo el total.
+  const f = engine.pedestrians.flowAt(t, 'weekday', 12000);
+  const g = engine.graph;
+  let weightedLength = 0;
+  for (let e = 0; e < g.edgeCount; e++) weightedLength += g.len[e] * engine.pedestrians.weightOf(e);
+  assert.ok(Math.abs(f.walkPerWeight * weightedLength - f.total * engine.pedestrians.walkFraction) < 1e-6 * f.total || engine.pedestrians.count === 0);
+});
+
+function engineCity() {
+  return { nodes: [-250, -250, 250, -250, 250, 250, -250, 250], ways: [[4, 0, 0, 1, 2, 3, 0]], signals: [], parking: { underground: [] }, crossings: [] };
+}
+
+test('points of interest are classified and bus stops are merged', () => {
+  assert.equal(classifyPoi({ shop: 'bakery' }), 0);
+  assert.equal(classifyPoi({ amenity: 'cafe' }), 1);
+  assert.equal(classifyPoi({ highway: 'bus_stop' }), 2);
+  assert.equal(classifyPoi({ amenity: 'school' }), 3);
+  assert.equal(classifyPoi({ amenity: 'pharmacy' }), 4);
+  assert.equal(classifyPoi({ tourism: 'museum' }), 5);
+  assert.equal(classifyPoi({ shop: 'vacant' }), -1);
+  assert.equal(classifyPoi({ amenity: 'bench' }), -1);
+  assert.equal(classifyPoi(undefined), -1);
+  assert.equal(POI_CATEGORIES.length, 6);
+
+  const project = (lat, lon) => [lon, lat];
+  const elements = [
+    { type: 'node', lat: 0, lon: 0, tags: { highway: 'bus_stop' } },
+    { type: 'node', lat: 2, lon: 3, tags: { public_transport: 'platform' } }, // misma parada (a 3,6 m)
+    { type: 'node', lat: 0, lon: 100, tags: { highway: 'bus_stop' } },
+    { type: 'way', center: { lat: 5, lon: 5 }, tags: { shop: 'supermarket' } },
+    { type: 'node', lat: 6, lon: 5, tags: { shop: 'bakery' } }, // dos comercios juntos: ambos cuentan
+    { type: 'way', tags: { shop: 'clothes' } }, // sin posición: se ignora
+    { type: 'node', lat: 1, lon: 1, tags: { amenity: 'bench' } },
+  ];
+  assert.deepEqual(extractPois(elements, project), [0, 0, 2, 100, 0, 2, 5, 5, 0, 5, 6, 0]);
 });

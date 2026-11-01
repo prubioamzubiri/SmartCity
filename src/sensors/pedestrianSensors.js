@@ -65,6 +65,8 @@ export class PedestrianSensors {
       if (Math.hypot(c[j] - hit.x, c[j + 1] - hit.z) <= radius) crossings.push(j);
     }
     const sensor = { id: id ?? `P${this.nextId++}`, name: name || '', x: hit.x, z: hit.z, edges, crossings, total };
+    // Atracción de la calle del sensor (suma de sus tramos) y de los pasos que cuenta.
+    sensor.weight = edges.reduce((n, e) => n + this.pedestrians.weightOf(e), 0);
     if (!sensor.name) sensor.name = `Peatones ${sensor.id.slice(1)}`;
     this.sensors.push(sensor);
     this.emit();
@@ -88,11 +90,15 @@ export class PedestrianSensors {
     const P = CONFIG.pedestrians;
     const flow = this.pedestrians.flowAt(simSeconds, scenario, limit);
     const radius = CONFIG.pedestrianSensors.radius;
-    const walk = flow.walkPerMetre * P.speed * bucketSeconds * s.edges.length;
-    const cross = s.crossings.length * flow.crossPerCrossing * (bucketSeconds / P.slotSeconds);
-    const presentWalk = flow.walkPerMetre * 2 * radius * s.edges.length;
+    const walk = flow.walkPerWeight * s.weight * P.speed * bucketSeconds;
+    const presentWalk = flow.walkPerWeight * s.weight * 2 * radius;
+    let cross = 0;
     let presentCross = 0;
-    for (const j of s.crossings) presentCross += (flow.crossPerCrossing / P.slotSeconds) * this.pedestrians.crossSeconds(j);
+    for (const j of s.crossings) {
+      const perSecond = (flow.crossPerWeight * this.pedestrians.crossWeightAt(j)) / P.slotSeconds;
+      cross += perSecond * bucketSeconds;
+      presentCross += perSecond * this.pedestrians.crossSeconds(j);
+    }
     return { walk, cross, present: presentWalk + presentCross };
   }
 
