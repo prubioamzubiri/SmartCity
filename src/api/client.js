@@ -97,9 +97,13 @@ export class ApiClient {
     return this.request('/api/parking/tracked', { method: 'PUT', body: { ids } });
   }
 
+  setTrackedBuses(ids) {
+    return this.request('/api/buses/tracked', { method: 'PUT', body: { ids } });
+  }
+
   // URL de descarga directa: el navegador hace streaming del CSV sin cargarlo en memoria.
   csvUrl(kind, { from, to, id } = {}) {
-    if (!['traffic', 'parking', 'pedestrians'].includes(kind)) throw new Error('Tipo de CSV desconocido');
+    if (!['traffic', 'parking', 'pedestrians', 'buses'].includes(kind)) throw new Error('Tipo de CSV desconocido');
     const query = new URLSearchParams();
     for (const [key, value] of [['from', from], ['to', to]]) {
       if (!value) continue;

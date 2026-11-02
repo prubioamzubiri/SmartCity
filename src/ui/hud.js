@@ -1,6 +1,7 @@
 import { CONFIG } from '../config.js';
 import { el } from './dom.js';
 import { createServerPanel } from './serverPanel.js';
+import { loadColor } from '../transit/buses.js';
 import { demandFactor, scenarioForTime, simDate } from '../traffic/demand.js';
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -21,7 +22,7 @@ function pickFile(accept) {
 }
 
 // Panel de control del visor: muestra el estado del servidor y le envía los cambios; no guarda estado propio.
-export function createHud({ sync, signals, localGraphKey, setMode, getMode, focusSignal, parking, server, pedestrianSensors }) {
+export function createHud({ sync, signals, localGraphKey, setMode, getMode, focusSignal, parking, server, pedestrianSensors, transit }) {
   const root = el('div', { id: 'hud' });
   document.body.append(root);
 
@@ -434,9 +435,78 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
     trackSection,
   );
 
+  // Transporte público: líneas de autobús, ocupación y paradas
+  const hexColor = (c) => `#${c.toString(16).padStart(6, '0')}`;
+  const transitToggle = el('input', { type: 'checkbox', checked: true, onchange: () => transit.view.setVisible(transitToggle.checked) });
+  const transitSummary = el('div', { class: 'status' });
+  const busRows = transit.buses.lines.map((line, li) => {
+    const box = el('input', { type: 'checkbox', checked: true, onchange: () => transit.view.setLineVisible(li, box.checked) });
+    const label = el('span', { class: 'bus-name' }, el('i', { style: `background:${hexColor(line.color)}` }), ` ${line.id} `);
+    const info = el('span', { class: 'count' });
+    const bar = el('span', { class: 'bus-load' }, el('b'));
+    return { node: el('label', { class: 'bus-item' }, box, label, bar, info), info, fill: bar.firstChild };
+  });
+  const loadLegend = el('div', { class: 'legend' },
+    legendItem(hexColor(loadColor(0)), 'Con sitio (< 50%)'),
+    legendItem(hexColor(loadColor(0.5)), 'Bastante gente'),
+    legendItem(hexColor(loadColor(1)), `Lleno (≥ ${Math.round(CONFIG.transit.fullAt * 100)}%)`),
+    legendItem(hexColor(CONFIG.pedestrians.color), 'Esperando en la parada'),
+  );
+  // Líneas cuyo estado registra el servidor (una muestra cada `busTracking.intervalSeconds` simulados)
+  const trackedBusIds = () => (state?.buses?.lines ?? []).filter((l) => l.tracked).map((l) => l.id);
+  const setTrackedBuses = (ids) => run((c) => c.setTrackedBuses(ids));
+  const busTrackBoxes = transit.buses.lines.map((line) => {
+    const box = el('input', {
+      type: 'checkbox',
+      onchange: () => {
+        const ids = new Set(trackedBusIds());
+        if (!ids.delete(line.id)) ids.add(line.id);
+        setTrackedBuses([...ids]);
+      },
+    });
+    return { id: line.id, box, node: el('label', { class: 'bus-track' }, box, ` ${line.id}`) };
+  });
+  const busTracking = el('div', { class: 'parking-tracking' },
+    el('h4', {}, 'Registro en el servidor'),
+    el('div', { class: 'row' },
+      el('button', { textContent: 'Todas', onclick: () => setTrackedBuses(transit.buses.lines.map((l) => l.id)) }),
+      el('button', { textContent: 'Ninguna', onclick: () => setTrackedBuses([]) }),
+    ),
+    el('div', { class: 'bus-track-list' }, ...busTrackBoxes.map((b) => b.node)),
+  );
+  const transitSection = section(
+    'Autobuses',
+    el('label', {}, transitToggle, ' Mostrar líneas, paradas y autobuses'),
+    transitSummary,
+    transit.buses.lines.length ? el('div', { class: 'bus-list' }, ...busRows.map((r) => r.node)) : el('em', {}, 'Sin paradas de autobús en los datos.'),
+    loadLegend,
+    busTracking,
+  );
+  function renderBusTracking() {
+    const tracked = new Set(trackedBusIds());
+    for (const { id, box } of busTrackBoxes) if (box !== document.activeElement) box.checked = tracked.has(id);
+  }
+  function updateTransit() {
+    const b = transit.buses;
+    let buses = 0;
+    let passengers = 0;
+    let full = 0;
+    b.lines.forEach((line, li) => {
+      const st = b.stats[li];
+      const occupancy = st.active ? st.passengers / (st.active * CONFIG.transit.capacity) : 0;
+      busRows[li].info.textContent = `${st.active} bus · ${Math.round(occupancy * 100)}%${st.full ? ` · ${st.full} llenos` : ''}`;
+      busRows[li].fill.style.width = `${Math.round(occupancy * 100)}%`;
+      busRows[li].fill.style.background = hexColor(loadColor(occupancy));
+      buses += st.active;
+      passengers += st.passengers;
+      full += st.full;
+    });
+    transitSummary.textContent = `${b.lines.length} líneas · ${buses} autobuses en servicio · ${passengers} pasajeros · ${full} autobuses llenos`;
+  }
+
   root.append(
     el('h2', {}, 'SmartCity Donostia'),
-    serverPanel.node, clockSection, trafficSection, signalSection, sensorSection, pedestrianSection, parkingSection,
+    serverPanel.node, clockSection, trafficSection, signalSection, sensorSection, pedestrianSection, transitSection, parkingSection,
     el('p', { class: 'help' }, 'Ratón: arrastrar = girar, derecho = mover, rueda = zoom. Esc: salir del modo sensor. Supr: borrar sensor seleccionado.'),
   );
 
@@ -458,6 +528,7 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
       greenInput.value = signals.plan.default.green;
       renderSignalList();
     }
+    renderBusTracking();
     renderSensors(s.sensors);
     renderPedestrianSensors(s.pedestrianSensors);
     renderTracked();
@@ -499,6 +570,7 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
     update(now) {
       if (now - lastUpdate < 250) return;
       lastUpdate = now;
+      updateTransit();
       const active = getMode() === 'sensor';
       sensorModeButton.textContent = active ? 'Colocando en el servidor… (clic en una calle)' : 'Colocar sensor en el servidor';
       sensorModeButton.classList.toggle('active', active);

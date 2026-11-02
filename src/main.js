@@ -20,6 +20,9 @@ import { Pedestrians } from './pedestrians/pedestrians.js';
 import { pedestrianWeights } from './pedestrians/weights.js';
 import { createWaterMask } from './city/waterMask.js';
 import { PedestrianView } from './pedestrians/pedestrianView.js';
+import { buildTransit } from './transit/lines.js';
+import { Buses } from './transit/buses.js';
+import { BusView } from './transit/busView.js';
 import { SensorView } from './sensors/sensorView.js';
 import { ServerSync } from './api/serverSync.js';
 import { createHud } from './ui/hud.js';
@@ -79,9 +82,13 @@ async function main() {
   const cars = new RemoteCars(graph, graphKey);
   const carView = new CarView(cars);
   scene.add(carView.mesh);
-  const pedestrians = new Pedestrians(data.crossings, { graph, water: createWaterMask(data), weights: pedestrianWeights(graph, data), signals });
+  const weights = pedestrianWeights(graph, data);
+  const pedestrians = new Pedestrians(data.crossings, { graph, water: createWaterMask(data), weights, signals });
   const pedestrianView = new PedestrianView(pedestrians);
   scene.add(pedestrianView.mesh);
+  const buses = new Buses(buildTransit(data, graph, { weights: weights.edge }), graph);
+  const busView = new BusView(buses);
+  scene.add(busView.group);
   sync.on('cars', (payload) => cars.apply(payload));
   sync.on('disconnect', () => cars.clear());
   const serverView = new SensorView(scene, { color: 0x4caf50 });
@@ -119,6 +126,7 @@ async function main() {
     parking: { layer: parkingLayer, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked) },
     server: { view: serverView },
     pedestrianSensors: { view: pedestrianSensorView },
+    transit: { buses, view: busView },
   });
   const signalTooltip = document.createElement('div');
   signalTooltip.id = 'signal-tooltip';
@@ -149,9 +157,13 @@ async function main() {
     }
     const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
     const signalId = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
+    const bus = busView.pick(raycaster);
     let label;
     const marker = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
-    if (signalId !== undefined) {
+    if (bus >= 0) {
+      const { line, load, capacity, full, atStop } = buses.describe(bus);
+      label = `Autobús ${line} · ${load}/${capacity} pasajeros (${Math.round((load / capacity) * 100)}%)${full ? ' · LLENO' : ''}${atStop ? ' · en la parada' : ''}`;
+    } else if (signalId !== undefined) {
       label = `Semáforo OSM: ${signalId}`;
     } else if (marker) {
       const { name, capacity, estimatedCapacity, fee, occupancy } = marker.object.userData;
@@ -227,12 +239,15 @@ async function main() {
       signals.update(simTime);
       updateParkingOccupancy(parkingLayer, simTime);
       pedestrians.updateAt(simTime, sync.state.params.scenario, sync.state.scale, sync.state.params.maxPedestrians);
+      buses.updateAt(simTime, sync.state.params.scenario, sync.state.scale);
     } else {
       pedestrians.activeCount = 0;
+      buses.clear();
     }
     cars.update(now);
     carView.render();
     pedestrianView.render();
+    busView.render();
     signalViz.update();
     controls.update();
     renderer.render(scene, camera);

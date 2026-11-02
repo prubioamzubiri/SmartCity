@@ -78,11 +78,14 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 | `GET /api/traffic.csv?from=&to=&id=` | Sensor records (`id` = sensor id, optional) |
 | `GET /api/parking.csv?from=&to=&id=` | Parking occupancy records |
 | `GET /api/pedestrians.csv?from=&to=&id=` | Pedestrian sensor records every 5 simulated minutes: `count` (= `count_walk` on the sidewalks + `count_cross` at crossings), `present` (people in the sensor area) |
+| `GET /api/buses` | Current state of each bus line at the simulated time: `fleet`, `active` buses, `passengers`, `full` buses, `waiting` people at the stops, `tracked` |
+| `GET /api/buses.csv?from=&to=&id=` | Bus line records every 5 simulated minutes for the tracked lines (`id` = line id, e.g. `L1`): `buses` in service, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting` |
 | `POST /api/pedestrian-sensors` `{x, z, name}` | Create a pedestrian sensor (ids `P1`, `P2`…) |
 | `PATCH /api/pedestrian-sensors/:id` `{name}` / `DELETE /api/pedestrian-sensors/:id` | Rename / remove (history is kept) |
 | `POST /api/sensors` `{x, z, name}` | Create a sensor |
 | `PATCH /api/sensors/:id` `{name}` / `DELETE /api/sensors/:id` | Rename / remove (history is kept) |
 | `PUT /api/parking/tracked` `{ids: [...]}` | Parkings to record |
+| `PUT /api/buses/tracked` `{ids: [...]}` | Bus lines to record (none by default) |
 | `PUT /api/params` `{maxCars, maxPedestrians, scenario}` | Traffic and pedestrian parameters |
 | `PUT /api/signals/plan` `{plan}` | Signal timing plan |
 

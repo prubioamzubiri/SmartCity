@@ -111,3 +111,12 @@ html, body {
 .parking-item { display: flex; gap: 4px; align-items: center; font-size: 12px; padding: 1px 2px; }
 .parking-item .count { margin-left: auto; font-variant-numeric: tabular-nums; color: #ffb454; }
 #hud .parking-tracking h4 { margin: 10px 0 4px; font-size: 12px; color: #8fb4dc; }
+
+.bus-list { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; }
+.bus-item { display: flex; gap: 4px; align-items: center; font-size: 12px; padding: 1px 2px; }
+.bus-item .bus-name i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.bus-item .count { margin-left: auto; font-variant-numeric: tabular-nums; color: #ffb454; white-space: nowrap; }
+.bus-load { width: 48px; height: 6px; background: #161a22; border-radius: 3px; overflow: hidden; flex: none; }
+.bus-load b { display: block; height: 100%; width: 0; }
+.bus-track-list { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; margin-top: 4px; }
+.bus-track { display: flex; align-items: center; gap: 2px; }

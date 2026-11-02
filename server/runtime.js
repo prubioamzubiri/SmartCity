@@ -26,6 +26,7 @@ export class Runtime {
     } else if (this.anchor.scale !== scale) {
       log(`SIM_SCALE=${scale} ignorado: la base de datos se creó con escala ${this.anchor.scale}`);
     }
+    engine.scale = this.anchor.scale; // los autobuses dependen de la escala del reloj
     const snapshot = store.loadSnapshot();
     if (snapshot) {
       if (!engine.restore(snapshot)) log('Snapshot incompatible con los datos de la ciudad: los coches se reinician');
