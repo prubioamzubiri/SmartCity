@@ -31,6 +31,41 @@ export const CONFIG = {
     },
   },
 
+  // Eventos de la ciudad (calendario determinista por año). Cada evento atrae gente de fuera y de la ciudad:
+  // suma `asistentes × boostPerPerson` a la demanda (con rampa de llegada antes y de salida después) y los coches
+  // tienden a dirigirse hacia su sede. El calendario es una función de la fecha: servidor y visor generan los mismos.
+  events: {
+    enabled: true,
+    docsUrl: 'https://github.com/prubioamzubiri/SmartCity/blob/main/DEPLOYMENT.md#api', // documentación de la API que enlaza el calendario
+    seed: 20260105,
+    origin: { lat: 43.3183, lon: -1.9812 }, // origen de la proyección (el mismo que scripts/fetch-osm.mjs)
+    boostPerPerson: 1 / 100000, // 100.000 asistentes = +100 % de demanda
+    maxBoost: 1, // tope de la demanda extra sumada por todos los eventos a la vez
+    steering: 6, // sesgo de los coches hacia la sede de un evento en su pico (0 = ninguno)
+    spawnShare: 0.6, // fracción máxima de los coches nuevos que aparecen cerca de la sede de un evento
+    // Coordenadas aproximadas de las sedes.
+    venues: {
+      anoeta: { name: 'Reale Arena (Anoeta)', lat: 43.3014, lon: -1.9737, radius: 700 },
+      illunbe: { name: 'Donostia Arena 2016', lat: 43.3021, lon: -1.9617, radius: 500 },
+      kursaal: { name: 'Kursaal', lat: 43.3238, lon: -1.9764, radius: 450 },
+      trinidad: { name: 'Plaza de la Trinidad', lat: 43.3243, lon: -1.9864, radius: 350 },
+      constitucion: { name: 'Plaza de la Constitución', lat: 43.3232, lon: -1.9853, radius: 350 },
+      concha: { name: 'Bahía de La Concha', lat: 43.3199, lon: -1.9895, radius: 700 },
+      alderdi: { name: 'Alderdi Eder', lat: 43.3225, lon: -1.9866, radius: 450 },
+      boulevard: { name: 'Boulevard', lat: 43.3226, lon: -1.9846, radius: 450 },
+    },
+    // Tipos: duración (h), horas de llegada previa y de salida posterior, y aspecto en el calendario.
+    types: {
+      football: { label: 'Fútbol', icon: '⚽', color: '#4fc3f7', duration: 2, lead: 3, trail: 1.5 },
+      basketball: { label: 'Baloncesto', icon: '🏀', color: '#ff9800', duration: 2, lead: 2, trail: 1 },
+      concert: { label: 'Concierto', icon: '🎤', color: '#ba68c8', duration: 3, lead: 2.5, trail: 1.5 },
+      film: { label: 'Festival de Cine', icon: '🎬', color: '#ffd54f', duration: 8, lead: 2, trail: 1 },
+      fiesta: { label: 'Fiestas', icon: '🎆', color: '#ef5350', duration: 6, lead: 2, trail: 2 },
+      jazz: { label: 'Jazzaldia', icon: '🎷', color: '#26a69a', duration: 8, lead: 2, trail: 1 },
+      protest: { label: 'Manifestación', icon: '📢', color: '#e0e0e0', duration: 2, lead: 1, trail: 1 },
+    },
+  },
+
   cars: {
     max: 3000,
     initialMax: 1500,

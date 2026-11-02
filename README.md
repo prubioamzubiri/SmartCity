@@ -217,6 +217,40 @@ unchanged. Configuration is validated and copied when the demand model is
 created; reload after editing it. `CONFIG.sim.baseDate` defines the simulation's
 UTC calendar origin and need not be a Monday.
 
+## City events
+
+Events make people come to the city. The **Calendario de eventos** button (top right) opens a
+month view with the events of each day (colored dots by type), the ones in progress and the
+details of the selected day, with a button that centers the map on the venue. While an event
+is in progress its venue is marked on the map with a ring (its zone of influence) and a beam.
+
+The calendar (`src/events/calendar.js`, configured in `CONFIG.events`) is a pure function of the
+date and of `events.seed`, so each year has the same events in the server and in the viewer and
+there is no state to store. A year has about 100: Real Sociedad home games at Anoeta and
+Gipuzkoa Basket games at Donostia Arena 2016 (mostly on weekends), concerts (more in summer;
+the big ones at Anoeta in June and July), the Festival de Cine (nine days from the first Friday
+from 18 September), Semana Grande (eight days up to 15 August, with fireworks on the Concha),
+Jazzaldia (five days ending the last Sunday of July), Tamborrada, Santo Tomás, the Reyes
+parade and protests (8M, 1 May and about 22 more at random). Dates, attendances and venue
+coordinates are illustrative (venue positions are approximate).
+
+Each event has an `attendance` and an effect that ramps up while people arrive (`lead` hours
+before it starts), stays at its maximum during it and fades as they leave (`trail` hours):
+
+- The traffic demand is increased by `attendance × boostPerPerson` (100,000 people = +100 %),
+  added on top of the daily profile (events at night matter too) with the total capped at `maxBoost`.
+  Parking, buses and bike sharing follow the same demand, so they also fill up. Pedestrians
+  already saturate at their maximum during the peak hours.
+- Cars gravitate to the venue: new cars appear within its radius (up to `spawnShare` of them)
+  and the others prefer streets that bring them closer (`steering`), until they are within
+  half the radius of it. Around a big match the area fills up and slows down, which is what the
+  students have to anticipate (cutting streets, longer greens, ...).
+
+`GET /api/events?from=2026-08-01&to=2026-09-01` returns the events of a range (by default,
+the next 30 simulated days, up to 366 days) with start and end, venue, attendance and extra
+demand; `GET /api/state` has `events.active` and `events.boost` for the ones in progress.
+Set `CONFIG.events.enabled = false` to run without events.
+
 ## Parking occupancy tracking
 
 In **Aparcamiento (OSM) → Ocupación registrada por el servidor**, tick the public

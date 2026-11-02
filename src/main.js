@@ -27,6 +27,8 @@ import { BikeStationView } from './bikes/stationView.js';
 import { SensorView } from './sensors/sensorView.js';
 import { ServerSync } from './api/serverSync.js';
 import { createHud } from './ui/hud.js';
+import { createEventCalendarPanel } from './ui/eventCalendar.js';
+import { EventView } from './events/eventView.js';
 
 const loading = document.getElementById('loading');
 
@@ -124,13 +126,16 @@ async function main() {
     camera.position.copy(controls.target).add(offset);
     controls.update();
   };
-  const focusBikeStation = (station) => {
+  const focusPoint = (x, z, distance = 250) => {
     const offset = camera.position.clone().sub(controls.target);
-    offset.setLength(Math.max(controls.minDistance, Math.min(offset.length(), 250)));
-    controls.target.set(station.x, 0, station.z);
+    offset.setLength(Math.max(controls.minDistance, Math.min(offset.length(), distance)));
+    controls.target.set(x, 0, z);
     camera.position.copy(controls.target).add(offset);
     controls.update();
   };
+  const focusBikeStation = (station) => focusPoint(station.x, station.z);
+  const eventView = new EventView(scene);
+  const eventPanel = createEventCalendarPanel({ focus: (x, z) => focusPoint(x, z, 900) });
   const hud = createHud({
     sync, signals, localGraphKey: graphKey, setMode, getMode: () => mode, focusSignal,
     parking: { layer: parkingLayer, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked) },
@@ -265,6 +270,8 @@ async function main() {
       bikeStationView.update(null);
       pedestrians.setBikeRiders(0);
     }
+    eventView.update(simTime);
+    eventPanel.update(simTime);
     cars.update(now);
     carView.render();
     pedestrianView.render();

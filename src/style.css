@@ -127,3 +127,28 @@ html, body {
 .bike-capacity { width: 52px; }
 .bike-json { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 11px; background: #101820; color: #dce6f0; border: 1px solid #243244; }
 .bike-item .count { min-width: 92px; text-align: right; font-variant-numeric: tabular-nums; color: #ffb454; }
+
+#event-calendar { position: fixed; top: 8px; right: 8px; z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; font-size: 13px; }
+#event-calendar button { padding: 4px 8px; background: #22364d; color: #e8edf3; border: 1px solid #36506d; border-radius: 4px; cursor: pointer; }
+#event-calendar button:hover { background: #2c4663; }
+#event-calendar button.active { background: #ff8800; border-color: #ff8800; color: #111; }
+#event-calendar .event-toggle { padding: 7px 12px; font-weight: 600; background: rgba(14, 22, 32, 0.92); }
+.event-panel { width: 320px; max-height: calc(100vh - 70px); overflow-y: auto; box-sizing: border-box; padding: 10px 12px; background: rgba(14, 22, 32, 0.92); border: 1px solid #2a3a4d; border-radius: 8px; }
+.event-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; text-transform: capitalize; }
+.event-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.event-weekday { text-align: center; color: #8fb4dc; font-size: 11px; padding: 2px 0; }
+#event-calendar button.event-day { display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 38px; padding: 3px 0 4px; background: #16222f; border-color: #243244; }
+#event-calendar button.event-day.outside { opacity: 0.4; }
+#event-calendar button.event-day.today { border-color: #4fc3f7; }
+#event-calendar button.event-day.selected { background: #12394a; border-color: #ffb454; }
+.event-dots { display: flex; gap: 2px; height: 6px; }
+.event-dots i { width: 6px; height: 6px; border-radius: 50%; }
+.event-panel .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; color: #9fb2c8; font-size: 12px; margin-top: 8px; }
+.event-panel .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.event-panel h4 { margin: 10px 0 4px; font-size: 12px; color: #8fb4dc; }
+.event-panel .status { color: #9fb2c8; font-size: 12px; margin-top: 2px; }
+.event-item { padding: 6px 0; border-bottom: 1px solid #243244; }
+.event-title { display: flex; gap: 6px; align-items: center; }
+.event-item button { margin-top: 4px; }
+.event-docs { display: block; margin-top: 10px; padding-top: 8px; border-top: 1px solid #243244; color: #8fb4dc; font-size: 12px; }
+.event-docs:hover { color: #bcd6f2; }
