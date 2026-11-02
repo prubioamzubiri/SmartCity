@@ -123,7 +123,11 @@ Tres servicios: `sim` (simulación + API + SQLite en el volumen `sim-data`),
 `web` (nginx con el visor) y `proxy` (Caddy, único punto de entrada: `/api` → `sim`, `/` → `web`, HTTPS automático).
 
 ```sh
-npm run fetch-osm              # la imagen web necesita public/data/city.json
+```sh
+npm run fetch-osm              # opcional: actualiza public/data/city.json (necesario si aún no existe)
+```
+
+```sh
 cp .env.example .env           # editar DOMAIN (y SMARTCITY_TOKEN si quieres proteger las escrituras) (p. ej. smartcity.midominio.com)
 docker compose up -d --build
 ```
