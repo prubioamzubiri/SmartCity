@@ -127,8 +127,9 @@ test('capacity changes are validated, can be cancelled and survive a snapshot', 
 test('API: schedule capacities, all-or-nothing, and see them applied', async (t) => {
   const now = clock();
   const store = new Store();
-  const runtime = new Runtime({ engine: new SimEngine({ data: city(), maxCars: 5 }), store, now, checkpointMs: 1e9 });
+  const runtime = new Runtime({ engine: new SimEngine({ data: city(), maxCars: 0 }), store, now, checkpointMs: 1e9 });
   const server = http.createServer(createApp({ runtime, store, token: 'secreto' }));
+  server.keepAliveTimeout = 120_000; // el catch-up bloquea el servidor más que el timeout por defecto
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
