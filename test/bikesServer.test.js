@@ -85,3 +85,74 @@ test('bike state survives a snapshot', () => {
   assert.ok(b.restore(JSON.parse(JSON.stringify(a.snapshot()))));
   assert.deepEqual(b.bikes.state(), a.bikes.state());
 });
+
+const DELAY = 30 * 86400;
+
+test('a capacity change only takes effect after 30 simulated days', () => {
+  const net = new SimEngine({ data: city(), maxCars: 5 }).bikes;
+  const start = net.nextStep;
+  net.scheduleCapacity('node/0', 20, start);
+  net.scheduleCapacity('node/1', 4, start);
+  net.tick(start + DELAY - 300);
+  assert.equal(net.state().stations[0].capacity, 10);
+  assert.equal(net.state().stations[0].pending.capacity, 20);
+  const fleet = net.state().stations.reduce((n, s) => n + s.available, 0) + net.inUse;
+  net.tick(start + DELAY + 300);
+  const [a, b] = net.state().stations;
+  assert.equal(a.capacity, 20);
+  assert.equal(a.pending, null);
+  assert.equal(b.capacity, 4);
+  assert.ok(b.available <= 4);
+  assert.equal(net.state().stations.reduce((n, s) => n + s.available, 0) + net.inUse, fleet);
+});
+
+test('capacity changes are validated, can be cancelled and survive a snapshot', () => {
+  const net = new SimEngine({ data: city(), maxCars: 5 }).bikes;
+  assert.throws(() => net.scheduleCapacity('node/0', 0, 0), /entero/);
+  assert.throws(() => net.scheduleCapacity('node/0', 2.5, 0), /entero/);
+  assert.throws(() => net.scheduleCapacity('nope', 5, 0), /desconocida/);
+  net.scheduleCapacity('node/0', 15, 100);
+  net.scheduleCapacity('node/2', 15, 100);
+  net.scheduleCapacity('node/2', null, 100);
+  const copy = new SimEngine({ data: city(), maxCars: 5 }).bikes;
+  copy.restore(JSON.parse(JSON.stringify(net.serialize())));
+  assert.deepEqual(copy.state().stations[0].pending, { capacity: 15, effectiveAt: 100 + DELAY });
+  assert.equal(copy.state().stations[2].pending, null);
+  copy.tick(copy.nextStep + DELAY + 600);
+  const again = new SimEngine({ data: city(), maxCars: 5 }).bikes;
+  again.restore(JSON.parse(JSON.stringify(copy.serialize())));
+  assert.equal(again.state().stations[0].capacity, 15);
+});
+
+test('API: schedule capacities, all-or-nothing, and see them applied', async (t) => {
+  const now = clock();
+  const store = new Store();
+  const runtime = new Runtime({ engine: new SimEngine({ data: city(), maxCars: 5 }), store, now, checkpointMs: 1e9 });
+  const server = http.createServer(createApp({ runtime, store, token: 'secreto' }));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const put = (body, auth = 'secreto') => fetch(`${base}/api/bikes/capacity`, {
+    method: 'PUT',
+    headers: { ...(auth ? { Authorization: `Bearer ${auth}` } : {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  assert.equal((await put({ changes: { 'node/0': 20 } }, null)).status, 401);
+  assert.equal((await put({ changes: [] })).status, 400);
+  assert.equal((await put({ changes: { 'node/9': 20 } })).status, 400);
+  assert.equal((await put({ changes: { 'node/0': 20, 'node/1': 0 } })).status, 400);
+  const none = await (await fetch(`${base}/api/bikes`)).json();
+  assert.ok(none.stations.every((s) => !s.pending), 'a rejected request schedules nothing');
+
+  const ok = await put({ changes: { 'node/0': 20 } });
+  assert.equal(ok.status, 200);
+  const [first] = (await ok.json()).stations;
+  assert.equal(first.capacity, 10);
+  assert.equal(first.pending.capacity, 20);
+
+  now.advance(16 * 3600 * 1000); // ≈ 34 días simulados
+  while (!runtime.tick()) { /* recuperación por tramos */ }
+  const after = (await (await fetch(`${base}/api/bikes`)).json()).stations[0];
+  assert.equal(after.capacity, 20);
+  assert.equal(after.pending, null);
+});

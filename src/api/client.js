@@ -101,6 +101,10 @@ export class ApiClient {
     return this.request('/api/buses/tracked', { method: 'PUT', body: { ids } });
   }
 
+  setBikeCapacities(changes) {
+    return this.request('/api/bikes/capacity', { method: 'PUT', body: { changes } });
+  }
+
   setTrackedBikes(ids) {
     return this.request('/api/bikes/tracked', { method: 'PUT', body: { ids } });
   }

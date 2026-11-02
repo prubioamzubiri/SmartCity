@@ -88,6 +88,7 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 | `PATCH /api/sensors/:id` `{name}` / `DELETE /api/sensors/:id` | Rename / remove (history is kept) |
 | `PUT /api/parking/tracked` `{ids: [...]}` | Parkings to record |
 | `PUT /api/buses/tracked` `{ids: [...]}` | Bus lines to record (none by default) |
+| `PUT /api/bikes/capacity` `{changes: {"<station id>": docks, "<id>": null}}` | Change the docks (1-60) of stations; it takes effect after 30 simulated days (`pending` in `GET /api/bikes`), `null` cancels a pending change. Requires the token; all-or-nothing |
 | `PUT /api/bikes/tracked` `{ids: [...]}` | Bike stations to record (none by default) |
 | `PUT /api/params` `{maxCars, maxPedestrians, scenario}` | Traffic and pedestrian parameters |
 | `PUT /api/signals/plan` `{plan}` | Signal timing plan |

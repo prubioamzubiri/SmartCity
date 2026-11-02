@@ -82,6 +82,8 @@ export const CONFIG = {
     tripSeconds: 900, // duración media de un trayecto en bici (segundos simulados)
     initialFill: 0.6, // fracción de los anclajes con bicicleta al empezar
     stepSeconds: 300, // paso de la simulación de la red
+    capacityDelaySeconds: 30 * 86400, // un cambio de anclajes tarda 30 días simulados en hacer efecto
+    maxCapacity: 60,
     intervalSeconds: 900, // una muestra por estación registrada cada tantos segundos simulados
   },
 

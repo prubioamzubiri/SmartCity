@@ -56,6 +56,11 @@ export class BikeStationView {
     for (const station of this.stations) {
       const live = byId.get(station.id);
       station.available = live?.available;
+      if (live) {
+        station.capacity = live.capacity;
+        station.estimatedCapacity = live.estimated;
+      }
+      station.pending = live?.pending ?? null;
       station.tracked = live?.tracked ?? false;
     }
     this.updateColors();

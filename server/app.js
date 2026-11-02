@@ -1,3 +1,4 @@
+import { CONFIG } from '../src/config.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -223,6 +224,35 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
 
     // Estado actual de las estaciones de bicicletas compartidas (bicicletas disponibles y en circulación).
     if (method === 'GET' && pathname === '/api/bikes') return send(200, runtime.engine.bikes.state());
+
+    // Cambia los anclajes de varios puestos: { changes: { "<id>": 20, "<id>": null } } (null cancela el cambio pendiente).
+    // El cambio tarda `capacityDelaySeconds` (30 días simulados) en hacer efecto.
+    if (method === 'PUT' && pathname === '/api/bikes/capacity') {
+      authorize(req);
+      const { changes } = await readJson(req);
+      if (!changes || typeof changes !== 'object' || Array.isArray(changes) || !Object.keys(changes).length) {
+        throw new HttpError(400, 'changes debe ser un objeto { id: anclajes }');
+      }
+      const bikes = runtime.engine.bikes;
+      const known = new Set(bikes.state().stations.map((s) => s.id));
+      const unknown = Object.keys(changes).find((id) => !known.has(id));
+      if (unknown) throw new HttpError(400, `Estación desconocida: ${unknown}`);
+      try {
+        runtime.mutate((e) => {
+          // Se valida todo antes de aplicar nada: o entran todos los cambios o ninguno.
+          const probe = Object.entries(changes);
+          for (const [, capacity] of probe) {
+            if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1 || capacity > CONFIG.bicycles.maxCapacity)) {
+              throw new Error(`La capacidad debe ser un entero entre 1 y ${CONFIG.bicycles.maxCapacity}`);
+            }
+          }
+          for (const [id, capacity] of probe) e.bikes.scheduleCapacity(id, capacity, e.simTime);
+        });
+      } catch (err) {
+        throw new HttpError(400, err.message);
+      }
+      return send(200, runtime.engine.bikes.state());
+    }
 
     if (method === 'PUT' && pathname === '/api/bikes/tracked') {
       authorize(req);

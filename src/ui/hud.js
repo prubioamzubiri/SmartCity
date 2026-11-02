@@ -535,13 +535,59 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
       title: station.source === 'osm' ? 'Abrir esta estación en OpenStreetMap' : 'Abrir el catálogo municipal Dbizi',
     });
     const count = el('span', { class: 'count' });
-    const node = el('div', { class: 'bike-item' }, focus, sourceLink, count);
-    bikeRows.set(station.id, { node, count });
+    const capacityInput = el('input', { type: 'number', min: 1, max: CONFIG.bicycles.maxCapacity, step: 1, class: 'bike-capacity', title: 'Anclajes de este puesto' });
+    const schedule = el('button', {
+      textContent: 'Programar',
+      title: `Cambiar los anclajes: tarda ${CONFIG.bicycles.capacityDelaySeconds / 86400} días simulados en hacer efecto`,
+      onclick: () => scheduleBikeCapacities({ [station.id]: Number(capacityInput.value) }),
+    });
+    const pendingLabel = el('span', { class: 'status' });
+    const node = el('div', { class: 'bike-item' }, focus, sourceLink, count, capacityInput, schedule, pendingLabel);
+    bikeRows.set(station.id, { node, count, capacityInput, pendingLabel });
     bikeList.append(node);
   }
   if (!bikeStations.length) {
     bikeList.append(el('em', {}, 'Sin estaciones en los datos. Ejecuta "npm run fetch-bikes".'));
   }
+  const bikeJson = el('textarea', {
+    class: 'bike-json', rows: 4, spellcheck: false,
+    placeholder: '{ "municipal/0": 20, "municipal/5": 8 }',
+  });
+  const bikeCapacityNotice = el('div', { class: 'status' });
+  const scheduleBikeCapacities = async (changes) => {
+    try {
+      await sync.act((client) => client.setBikeCapacities(changes));
+      bikeCapacityNotice.textContent = `Cambio programado: se aplicará en ${CONFIG.bicycles.capacityDelaySeconds / 86400} días simulados.`;
+      bikeCapacityNotice.style.color = '';
+    } catch (err) {
+      bikeCapacityNotice.textContent = err.message;
+      bikeCapacityNotice.style.color = '#ff8a80';
+    }
+  };
+  const bikeCapacityEditor = el('div', { class: 'parking-tracking' },
+    el('h4', {}, `Anclajes por puesto (efecto en ${CONFIG.bicycles.capacityDelaySeconds / 86400} días simulados)`),
+    bikeJson,
+    el('div', { class: 'row' },
+      el('button', {
+        textContent: 'Cargar actuales',
+        onclick: () => { bikeJson.value = JSON.stringify(Object.fromEntries(bikeStations.map((b) => [b.id, b.capacity])), null, 1); },
+      }),
+      el('button', {
+        textContent: 'Aplicar JSON',
+        onclick: () => {
+          try {
+            const changes = JSON.parse(bikeJson.value);
+            scheduleBikeCapacities(changes);
+          } catch {
+            bikeCapacityNotice.textContent = 'JSON no válido. Formato: { "id del puesto": anclajes }';
+            bikeCapacityNotice.style.color = '#ff8a80';
+          }
+        },
+      }),
+      el('button', { textContent: 'Cancelar pendientes', onclick: () => scheduleBikeCapacities(Object.fromEntries((state?.bikes?.stations ?? []).filter((b) => b.pending).map((b) => [b.id, null])) ) }),
+    ),
+    bikeCapacityNotice,
+  );
   const trackedBikeIds = () => (state?.bikes?.stations ?? []).filter((b) => b.tracked).map((b) => b.id);
   const setTrackedBikes = (ids) => run((c) => c.setTrackedBikes(ids));
   const bikeTracking = el('div', { class: 'parking-tracking' },
@@ -557,6 +603,7 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
     el('label', {}, bikeToggle, ' Mostrar estaciones'),
     bikeSummary,
     bikeList,
+    bikeCapacityEditor,
     bikeTracking,
     el('div', { class: 'status' },
       el('span', {}, el('i', { style: 'background:#4fc3f7' }), ' Peatones en bici: ×4 de velocidad. '),
@@ -589,6 +636,10 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
       available += station.available;
       capacity += station.capacity;
       row.count.textContent = `${station.available}/${station.capacity}${station.estimatedCapacity ? ' · cap. est.' : ''}`;
+      if (row.capacityInput !== document.activeElement) row.capacityInput.value = station.pending?.capacity ?? station.capacity;
+      const t = sync.simTime();
+      const days = station.pending && t !== null ? Math.max(0, Math.ceil((station.pending.effectiveAt - t) / 86400)) : null;
+      row.pendingLabel.textContent = station.pending ? `→ ${station.pending.capacity} en ${days} d` : '';
     }
     bikeSummary.textContent = !bikeStations.length
       ? 'Sin puestos cargados.'

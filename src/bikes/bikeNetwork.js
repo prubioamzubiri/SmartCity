@@ -40,7 +40,9 @@ export class BikeNetwork {
         z: s.z,
         capacity: Number.isInteger(s.capacity) && s.capacity > 0 ? s.capacity : DEFAULT_CAPACITY,
         weight: 0.5 + hash(`w${s.id}`) / 4294967296, // popularidad fija en [0.5, 1.5)
+        estimated: Boolean(s.estimatedCapacity),
       }));
+    this.changes = new Map(); // id -> { capacity, effectiveAt }: cambios de anclajes pendientes
     this.index = new Map(this.stationList.map((s, i) => [s.id, i]));
     const C = CONFIG.bicycles;
     this.docked = this.stationList.map((s) => Math.round(s.capacity * C.initialFill));
@@ -72,6 +74,36 @@ export class BikeNetwork {
     this.tracked = on ? new Set(this.index.keys()) : new Set();
   }
 
+  // Programa un cambio de anclajes que se aplica `capacityDelaySeconds` después de `now`; `null` cancela el pendiente.
+  scheduleCapacity(id, capacity, now) {
+    if (!this.index.has(id)) throw new Error(`Estación desconocida: ${id}`);
+    if (capacity === null) {
+      this.changes.delete(id);
+      return;
+    }
+    if (!Number.isInteger(capacity) || capacity < 1 || capacity > CONFIG.bicycles.maxCapacity) {
+      throw new Error(`La capacidad debe ser un entero entre 1 y ${CONFIG.bicycles.maxCapacity}`);
+    }
+    if (capacity === this.stationList[this.index.get(id)].capacity) this.changes.delete(id);
+    else this.changes.set(id, { capacity, effectiveAt: now + CONFIG.bicycles.capacityDelaySeconds });
+  }
+
+  applyChanges(time) {
+    for (const [id, change] of this.changes) {
+      if (change.effectiveAt > time) continue;
+      const i = this.index.get(id);
+      const station = this.stationList[i];
+      station.capacity = change.capacity;
+      station.estimated = false;
+      // Las bicicletas que ya no caben salen a circulación y se dejan en otro puesto.
+      if (this.docked[i] > station.capacity) {
+        this.inUse += this.docked[i] - station.capacity;
+        this.docked[i] = station.capacity;
+      }
+      this.changes.delete(id);
+    }
+  }
+
   tick(simTime) {
     while (simTime >= this.nextStep) {
       this.step(this.nextStep);
@@ -82,10 +114,11 @@ export class BikeNetwork {
   step(time) {
     if (!this.count) return;
     const C = CONFIG.bicycles;
+    this.applyChanges(time);
     const rng = createRng(hash(`${Math.round(time / this.stepSeconds)}:${CONFIG.sim.seed}`));
     const demand = demandFactor(time, this.getParams().scenario);
     for (let i = 0; i < this.count; i++) {
-      const lambda = (C.takesPerHour * this.stationList[i].weight * demand * this.stepSeconds) / 3600;
+      const lambda = (C.takesPerHour * this.stationList[i].weight * (this.stationList[i].capacity / DEFAULT_CAPACITY) * demand * this.stepSeconds) / 3600;
       const taken = Math.min(this.docked[i], poisson(lambda, rng));
       this.docked[i] -= taken;
       this.takes[i] += taken;
@@ -106,7 +139,7 @@ export class BikeNetwork {
   // Estación donde deja la bicicleta: probabilidad ∝ popularidad × anclajes libres.
   pickReturn(u) {
     let total = 0;
-    for (let i = 0; i < this.count; i++) total += this.stationList[i].weight * (this.stationList[i].capacity - this.docked[i]);
+    for (let i = 0; i < this.count; i++) total += (this.stationList[i].capacity - this.docked[i]) * this.stationList[i].weight;
     if (total <= 0) return -1;
     let target = u * total;
     for (let i = 0; i < this.count; i++) {
@@ -155,6 +188,8 @@ export class BikeNetwork {
         capacity: s.capacity,
         available: this.docked[i],
         tracked: this.tracked.has(s.id),
+        estimated: s.estimated,
+        pending: this.changes.has(s.id) ? { ...this.changes.get(s.id) } : null,
       })),
     };
   }
@@ -164,7 +199,8 @@ export class BikeNetwork {
       nextStep: this.nextStep,
       inUse: this.inUse,
       tracked: [...this.tracked],
-      stations: this.stationList.map((s, i) => [s.id, this.docked[i], this.takes[i], this.returns[i]]),
+      changes: [...this.changes].map(([id, c]) => [id, c.capacity, c.effectiveAt]),
+      stations: this.stationList.map((s, i) => [s.id, this.docked[i], this.takes[i], this.returns[i], s.capacity]),
     };
   }
 
@@ -172,9 +208,14 @@ export class BikeNetwork {
     this.nextStep = state.nextStep;
     this.inUse = state.inUse;
     this.tracked = new Set(state.tracked.filter((id) => this.index.has(id)));
-    for (const [id, docked, takes, returns] of state.stations) {
+    this.changes = new Map((state.changes ?? []).filter(([id]) => this.index.has(id)).map(([id, capacity, effectiveAt]) => [id, { capacity, effectiveAt }]));
+    for (const [id, docked, takes, returns, capacity] of state.stations) {
       const i = this.index.get(id);
       if (i === undefined) continue;
+      if (Number.isInteger(capacity) && capacity !== this.stationList[i].capacity) {
+        this.stationList[i].capacity = capacity;
+        this.stationList[i].estimated = false;
+      }
       this.docked[i] = Math.min(docked, this.stationList[i].capacity);
       this.takes[i] = takes;
       this.returns[i] = returns;

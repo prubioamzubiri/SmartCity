@@ -37,6 +37,14 @@ station sensors. `GET /api/bikes` returns the live counts, and the stations you 
 in **Bicicletas compartidas → Registro en el servidor** are recorded every 15 simulated
 minutes (`GET /api/bikes.csv`).
 
+You can change the docks (`capacity`) of each station, either per station in the panel
+or by pasting a JSON such as `{ "municipal/0": 20, "municipal/5": 8 }` (**Aplicar JSON**),
+or with `PUT /api/bikes/capacity`. The change is queued and only takes effect after
+30 simulated days (`CONFIG.bicycles.capacityDelaySeconds`, about 14 hours at the default
+clock scale); the panel shows what is pending and it can be cancelled. Capacity is
+1-60 and larger stations get proportionally more traffic. If a station shrinks, the
+bikes that no longer fit go back into circulation and are left at other stations.
+
 Pedestrians are small yellow triangles. Most walk along the sidewalks of the streets
 (not motorways); the rest cross the street at those crossings
 (`CONFIG.pedestrians.walkFraction`). They never step on
