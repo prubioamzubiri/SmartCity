@@ -7,6 +7,7 @@ import { createWaterMask } from '../src/city/waterMask.js';
 import { pedestrianWeights } from '../src/pedestrians/weights.js';
 import { classifyPoi, extractPois, POI_CATEGORIES } from '../scripts/pois.mjs';
 import { SimEngine } from '../src/core/engine.js';
+import { SignalController } from '../src/traffic/signals.js';
 
 // Un paso en (100, 50) sobre una calle residencial (clase 4) que va por X: se cruza en dirección Z.
 const CROSSINGS = [100, 50, 0, 1, 4];
@@ -404,4 +405,29 @@ test('points of interest are classified and bus stops are merged', () => {
     { type: 'node', lat: 1, lon: 1, tags: { amenity: 'bench' } },
   ];
   assert.deepEqual(extractPois(elements, project), [0, 0, 2, 100, 0, 2, 5, 5, 0, 5, 6, 0]);
+});
+
+test('pedestrians cross at a signalled crosswalk only while the cars on that street are red', () => {
+  const controller = new SignalController({ signals: [{ id: 1, active: true, x: 100, z: 50 }], sig: [], grp: [] });
+  controller.states = new Uint8Array(2);
+  const p = new Pedestrians(CROSSINGS, { max: 300, signals: controller });
+  assert.equal(p.crossSignal[0], 0);
+  assert.equal(p.crossGroup[0], 0); // calle por X = grupo 0 (E-O)
+  const scale = 52.14;
+  let crossing = 0;
+  let waiting = 0;
+  for (let sim = 100000; sim < 103000; sim += 1) {
+    controller.update(sim);
+    p.updateAt(sim, 'auto', scale);
+    for (let i = 0; i < p.activeCount; i++) {
+      if (Math.abs(Math.abs(p.z[i] - 50) - HALF) < 1e-3) {
+        waiting++; // esperando en el bordillo, puede ser con verde para los coches
+        continue;
+      }
+      crossing++;
+      assert.equal(controller.states[0], 2, `cars must be red at ${sim}`);
+    }
+  }
+  assert.ok(crossing > 0);
+  assert.ok(waiting > 0);
 });
