@@ -97,6 +97,20 @@ test('pedestrians also walk along the sidewalks of the streets', () => {
   assert.ok(seen > 0);
 });
 
+test('a rented bicycle makes its pedestrian walk four times faster', () => {
+  const walking = new Pedestrians([], { max: 1, graph: ring(), walkFraction: 1 });
+  const cycling = new Pedestrians([], { max: 1, graph: ring(), walkFraction: 1 });
+  cycling.setBikeRiders(1);
+  const positionsAfter = (pedestrian) => {
+    pedestrian.update(50_000, 1);
+    const before = [pedestrian.x[0], pedestrian.z[0]];
+    pedestrian.update(50_100, 1);
+    return Math.hypot(pedestrian.x[0] - before[0], pedestrian.z[0] - before[1]);
+  };
+  assert.ok(positionsAfter(cycling) > positionsAfter(walking) * 3.5);
+  assert.throws(() => cycling.setBikeRiders(Infinity), /finite number/);
+});
+
 test('walkers and crossers are mixed and walkers do not walk on the motorway', () => {
   const mixed = new Pedestrians(CROSSINGS, { max: 300, graph: ring() });
   mixed.update(5000, 1);

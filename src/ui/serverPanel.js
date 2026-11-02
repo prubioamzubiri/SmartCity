@@ -57,7 +57,7 @@ export function createServerPanel({ section, sync, localGraphKey }) {
   function download(kind) {
     try {
       const to = toInput.value ? nextDay(toInput.value) : undefined;
-      const url = sync.client.csvUrl(kind, { from: fromInput.value || undefined, to, id: kind === 'parking' || kind === 'buses' ? '' : sensorFilter.value });
+      const url = sync.client.csvUrl(kind, { from: fromInput.value || undefined, to, id: kind === 'parking' || kind === 'buses' || kind === 'bikes' ? '' : sensorFilter.value });
       el('a', { href: url, download: '' }).click();
     } catch (err) {
       say(err.message, true);
@@ -71,7 +71,7 @@ export function createServerPanel({ section, sync, localGraphKey }) {
     } else {
       say(s.caughtUp ? 'Conectado · al día' : `Conectado · recuperando ${Math.round(s.behindSimSeconds / 3600)} h simuladas`);
     }
-    info.textContent = `Registros en el servidor: ${s.records.traffic} tráfico, ${s.records.pedestrians} peatones, ${s.records.parking} parkings, ${s.records.buses ?? 0} autobuses`;
+    info.textContent = `Registros en el servidor: ${s.records.traffic} tráfico, ${s.records.pedestrians} peatones, ${s.records.parking} parkings, ${s.records.buses ?? 0} autobuses, ${s.records.bikes ?? 0} bicicletas`;
     const selected = sensorFilter.value;
     sensorFilter.replaceChildren(el('option', { value: '', textContent: 'Todos los sensores' }),
       ...s.sensors.map((x) => el('option', { value: x.id, textContent: x.name })),
@@ -104,6 +104,7 @@ export function createServerPanel({ section, sync, localGraphKey }) {
       guarded(el('button', { textContent: 'CSV de peatones', onclick: () => download('pedestrians') })),
       guarded(el('button', { textContent: 'CSV de parkings', onclick: () => download('parking') })),
       guarded(el('button', { textContent: 'CSV de autobuses', onclick: () => download('buses') })),
+      guarded(el('button', { textContent: 'CSV de bicicletas', onclick: () => download('bikes') })),
     ),
   );
 

@@ -1,5 +1,6 @@
 export const CONFIG = {
   dataUrl: `${import.meta.env?.BASE_URL ?? '/'}data/city.json`,
+  municipalDataUrl: `${import.meta.env?.BASE_URL ?? '/'}data/municipal.json`,
 
   sim: {
     seed: 20260105, // semilla del PRNG de la simulación
@@ -72,6 +73,16 @@ export const CONFIG = {
     redMargin: 1.5, // segundos simulados de seguridad tras ponerse en rojo y antes de volver el verde
     minRedWindow: 6, // segundos simulados mínimos de rojo útil; con menos, nadie cruza
     zebra: { stripe: 0.5, gap: 0.5, length: 3.2, color: 0xf2f2f2 }, // franjas del paso de cebra, en metros
+  },
+
+  bicycles: {
+    speedFactor: 4, // factor de velocidad de los peatones que van en bicicleta
+    color: 0x4fc3f7,
+    takesPerHour: 4, // bicicletas que coge por hora una estación de peso 1 con la demanda al máximo
+    tripSeconds: 900, // duración media de un trayecto en bici (segundos simulados)
+    initialFill: 0.6, // fracción de los anclajes con bicicleta al empezar
+    stepSeconds: 300, // paso de la simulación de la red
+    intervalSeconds: 900, // una muestra por estación registrada cada tantos segundos simulados
   },
 
   // Transporte público: líneas de autobús circulares (ida y vuelta) que cruzan la ciudad entre paradas de OSM (solo visual).

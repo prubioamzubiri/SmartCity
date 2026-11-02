@@ -13,9 +13,13 @@ export class PedestrianView {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute([l / 2, 0, 0, -l / 2, 0, -w / 2, -l / 2, 0, w / 2], 3));
     this.mesh = new THREE.InstancedMesh(
       geometry,
-      new THREE.MeshBasicMaterial({ color: P.color, side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }),
       pedestrians.max,
     );
+    this.colors = new Float32Array(pedestrians.max * 3);
+    this.pedestrianColor = new THREE.Color(P.color);
+    this.bikeColor = new THREE.Color(CONFIG.bicycles.color);
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(this.colors, 3);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
   }
@@ -32,8 +36,14 @@ export class PedestrianView {
       m[o + 4] = 0; m[o + 5] = 1; m[o + 6] = 0; m[o + 7] = 0;
       m[o + 8] = sin; m[o + 9] = 0; m[o + 10] = cos; m[o + 11] = 0;
       m[o + 12] = p.x[i]; m[o + 13] = P.height; m[o + 14] = p.z[i]; m[o + 15] = 1;
+      const color = p.bike[i] ? this.bikeColor : this.pedestrianColor;
+      const colorOffset = i * 3;
+      this.colors[colorOffset] = color.r;
+      this.colors[colorOffset + 1] = color.g;
+      this.colors[colorOffset + 2] = color.b;
     }
     this.mesh.count = n;
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.instanceColor.needsUpdate = true;
   }
 }

@@ -27,6 +27,7 @@ export class Pedestrians {
     this.graph = graph;
     this.water = water;
     this.walkFraction = walkFraction;
+    this.bikeRiders = 0;
     // Pesos de atracción por tramo y por paso de peatones (ver weights.js); sin ellos todos valen 1.
     this.edgeWeight = weights?.edge ?? null;
     this.crossWeight = weights?.crossing ?? null;
@@ -46,6 +47,7 @@ export class Pedestrians {
     this.x = new Float32Array(max);
     this.z = new Float32Array(max);
     this.heading = new Float32Array(max); // giro sobre Y que apunta el triángulo (+X) hacia donde camina
+    this.bike = new Uint8Array(max);
     this.activeCount = 0;
     // Caché del paseo de cada peatón (solo acelera: el resultado es el mismo que calculándolo desde cero).
     this.walkSlot = new Float64Array(max).fill(NaN);
@@ -64,6 +66,11 @@ export class Pedestrians {
     this.simNow = simSeconds;
     this.simPerSecond = scale / clock;
     this.update(((simSeconds * clock) / scale) * 1000, pedestrianDensity(demandFactor(simSeconds, scenario)), limit);
+  }
+
+  setBikeRiders(count) {
+    if (!Number.isFinite(count)) throw new Error('Bike rider count must be a finite number');
+    this.bikeRiders = Math.max(0, Math.min(this.max, Math.round(count)));
   }
 
   // Asocia cada paso al semáforo activo más cercano (dentro de `signalRadius`) y al eje de la calle que cruza.
@@ -166,11 +173,14 @@ export class Pedestrians {
       // Cada peatón tiene su propia fase: sus paseos no empiezan ni terminan todos a la vez.
       const tw = t + rand(i, 0, 11) * P.walkSeconds;
       const walkSlot = Math.floor(tw / P.walkSeconds);
-      if (this.sidewalks && (this.count === 0 || rand(i, walkSlot, 6) < this.walkFraction)) {
-        n = this.walk(i, walkSlot, tw - walkSlot * P.walkSeconds, n);
+      const byBike = i < this.bikeRiders;
+      const before = n;
+      if (this.sidewalks && (byBike || this.count === 0 || rand(i, walkSlot, 6) < this.walkFraction)) {
+        n = this.walk(i, walkSlot, tw - walkSlot * P.walkSeconds, n, byBike);
       } else if (this.count) {
         n = this.cross(i, crossSlot, crossLocal, n);
       }
+      if (n > before) this.bike[before] = byBike ? 1 : 0;
     }
     this.activeCount = n;
   }
@@ -244,9 +254,10 @@ export class Pedestrians {
   // Camina por la acera desde un punto de salida aleatorio (tramo elegido en proporción a su longitud) y en cada
   // cruce sigue por una calle conectada, con preferencia por seguir recto. Solo desaparece en un callejón sin salida
   // de autovía o al terminar el paseo.
-  walk(i, k, local, n) {
+  walk(i, k, local, n, byBike = false) {
     const g = this.graph;
-    const s = P.speed * (0.8 + 0.4 * rand(i, k, 2)) * local; // metros recorridos desde la salida
+    const speedFactor = byBike ? CONFIG.bicycles.speedFactor : 1;
+    const s = P.speed * speedFactor * (0.8 + 0.4 * rand(i, k, 2)) * local; // metros recorridos desde la salida
     if (this.walkSlot[i] !== k || s < this.walkS[i]) this.startWalk(i, k);
     this.walkS[i] = s;
     let e = this.walkEdge[i];

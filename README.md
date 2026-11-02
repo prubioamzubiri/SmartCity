@@ -18,6 +18,25 @@ refreshes only those in an existing file. It also downloads the points of intere
 attract pedestrians (shops, hospitality, bus and tram stops, schools, services and
 tourism, about 3,700 in Donostia); `npm run fetch-pois` refreshes only those.
 
+OSM bicycle-rental stations are included as well. Run `npm run fetch-bikes` to
+refresh just those stations in an existing city dataset. If OSM stations are
+missing, the viewer uses the bundled municipal Dbizi station catalogue in
+`public/data/municipal.json` (the server applies the same fallback, so both agree).
+The **Bicicletas compartidas** panel shows the stations on the map with the bikes
+left at each one; capacities missing from the source are estimated.
+
+Pedestrians take the bikes on their own: the server (`BikeNetwork`, `CONFIG.bicycles`)
+simulates the stations. In every step, pedestrians take bikes at each station
+(more in the popular stations and in the busy hours), ride them for about 15
+simulated minutes and leave them at another station with free docks, so the bikes
+are conserved. The bikes that are out are shown as blue pedestrians moving four
+times faster (`speedFactor`). The state is saved in the snapshot and the counts are
+reproducible after a restart. They are simulation estimates, not readings from physical
+sensors; real availability requires an operator API (for example, GBFS) or deployed
+station sensors. `GET /api/bikes` returns the live counts, and the stations you choose
+in **Bicicletas compartidas → Registro en el servidor** are recorded every 15 simulated
+minutes (`GET /api/bikes.csv`).
+
 Pedestrians are small yellow triangles. Most walk along the sidewalks of the streets
 (not motorways); the rest cross the street at those crossings
 (`CONFIG.pedestrians.walkFraction`). They never step on

@@ -13,6 +13,7 @@ import { pedestrianWeights } from '../pedestrians/weights.js';
 import { buildTransit } from '../transit/lines.js';
 import { Buses } from '../transit/buses.js';
 import { BusTracker } from '../sensors/busTracker.js';
+import { BikeNetwork } from '../bikes/bikeNetwork.js';
 import { toBase64 } from './binary.js';
 import { createRng } from './random.js';
 
@@ -63,6 +64,7 @@ export class SimEngine {
         return this.buses.stats;
       },
     });
+    this.bikes = new BikeNetwork({ stations: data.bicycleStations, getSimTime: () => this.simTime, getParams: () => this.params });
     this.graphKey = `${this.graph.edgeCount}:${data.nodes.length}`;
     this.signals.update(this.simTime);
   }
@@ -90,6 +92,7 @@ export class SimEngine {
       this.parking.tick(this.simTime);
       this.pedSensors.tick(this.simTime);
       this.busTracker.tick(this.simTime);
+      this.bikes.tick(this.simTime);
       steps++;
     }
     return true;
@@ -99,6 +102,7 @@ export class SimEngine {
   // no entran en el snapshot y tras un reinicio salen exactamente igual.
   pedestrianPositions(scale = 1) {
     const p = this.pedestrians;
+    p.setBikeRiders(this.bikes.inUse);
     p.updateAt(this.simTime, this.params.scenario, scale, this.params.maxPedestrians);
     const n = p.activeCount;
     return {
@@ -115,10 +119,11 @@ export class SimEngine {
     const parking = this.parking.pending.splice(0);
     const pedestrians = this.pedSensors.pending.splice(0);
     const buses = this.busTracker.pending.splice(0);
+    const bikes = this.bikes.pending.splice(0);
     this.sensors.records.length = 0;
     this.parking.records.length = 0;
     this.pedSensors.records.length = 0;
-    return { traffic, parking, pedestrians, buses };
+    return { traffic, parking, pedestrians, buses, bikes };
   }
 
   snapshot() {
@@ -133,6 +138,7 @@ export class SimEngine {
       parking: this.parking.serialize(),
       pedSensors: this.pedSensors.serialize(),
       buses: this.busTracker.serialize(),
+      bikes: this.bikes.serialize(),
     };
   }
 
@@ -146,6 +152,7 @@ export class SimEngine {
     this.parking.restore(state.parking);
     this.pedSensors.restore(state.pedSensors, this.simTime);
     if (state.buses) this.busTracker.restore(state.buses); // los snapshots anteriores a los autobuses no lo traen
+    if (state.bikes) this.bikes.restore(state.bikes);
     const compatible = state.graphKey === this.graphKey;
     if (compatible) this.sim.restore(state.sim);
     this.signals.update(this.simTime);

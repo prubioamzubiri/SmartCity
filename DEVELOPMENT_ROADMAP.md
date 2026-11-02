@@ -24,6 +24,7 @@ The following features are present in the source; browser acceptance checks rema
 - [x] Production build passed on 2026-10-15.
 - [x] Headless simulation server with SQLite persistence, restart catch-up and CSV export (`server/`, Docker Compose, Fly.io).
 - [x] Viewer driven by the server: clock, traffic parameters, signal plan, sensors, tracked parkings and cars all come from the API and survive a page reload.
+- [x] OSM bicycle-rental stations shown on the map with modeled availability; bundled GeoDonostia Dbizi locations are the offline fallback.
 
 The build currently reports a JavaScript chunk above 500 kB. Existing automated tests do not establish browser usability, sensor accuracy, signal correctness, or backend delivery reliability. Traffic profiles are illustrative, not calibrated measurements.
 
@@ -94,5 +95,7 @@ The build currently reports a JavaScript chunk above 500 kB. Existing automated 
 | --- | --- | --- |
 | 2026-10-15 | Established the roadmap and reviewed the existing implementation. | `npm test`: 10 passed. `npm run build`: passed with a chunk-size warning. Browser acceptance and backend integration remain to be verified. |
 | 2026-10-28 | Viewer made server-driven (`ServerSync`, `GET /api/cars`, live sensor/parking values in `GET /api/state`); cars glide between server snapshots. Compose stack tested in Codespaces. | `npm test`: 34 passed. `npm run build`: passed. Compose: `/api/health`, `/`, `/data/city.json` return 200 through the proxy; clock, params and a sensor survive `docker compose restart sim`. Codespaces needs `iptables-legacy` forwarding between containers (see DEPLOYMENT.md). Local sensors, sensor import/export and the Big Data POST from the browser were removed; browser acceptance (rendering, console errors, car motion at ×52) is still unverified. |
+| 2026-11-02 | Pedestrians now take the bikes by themselves: server-side `BikeNetwork` (snapshot, `/api/bikes`, `/api/bikes.csv`, tracked stations); manual loan buttons removed. | Tests (`bikeStations`, `bikesServer`), build and a Docker Compose run (69 stations, riders, CSV). Counts remain simulated, not physical sensors. |
+| 2026-11-02 | Added OSM bicycle-rental station extraction and a map layer with modeled availability counters. | Focused extraction and inventory tests plus build; live station data must be refreshed with `npm run fetch-bikes`. Counts are not connected to physical sensors or an operator API. |
 
 For each future update, record the completed work, relevant tests or manual checks, and any remaining limitation. Keep unfinished tasks unchecked and revise this roadmap when requirements change.

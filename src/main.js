@@ -23,6 +23,7 @@ import { PedestrianView } from './pedestrians/pedestrianView.js';
 import { buildTransit } from './transit/lines.js';
 import { Buses } from './transit/buses.js';
 import { BusView } from './transit/busView.js';
+import { BikeStationView } from './bikes/stationView.js';
 import { SensorView } from './sensors/sensorView.js';
 import { ServerSync } from './api/serverSync.js';
 import { createHud } from './ui/hud.js';
@@ -60,6 +61,8 @@ async function main() {
   const parkingLayer = createParking(data);
   scene.add(parkingLayer);
   const pickParking = createParkingPicker(data);
+  const bicycleStations = data.bicycleStations ?? [];
+  const bikeStationView = new BikeStationView(scene, bicycleStations);
 
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 5, 40000);
   const center = new THREE.Vector3(0, 0, 0); // centro de Donostia (origen de la proyección)
@@ -121,12 +124,20 @@ async function main() {
     camera.position.copy(controls.target).add(offset);
     controls.update();
   };
+  const focusBikeStation = (station) => {
+    const offset = camera.position.clone().sub(controls.target);
+    offset.setLength(Math.max(controls.minDistance, Math.min(offset.length(), 250)));
+    controls.target.set(station.x, 0, station.z);
+    camera.position.copy(controls.target).add(offset);
+    controls.update();
+  };
   const hud = createHud({
     sync, signals, localGraphKey: graphKey, setMode, getMode: () => mode, focusSignal,
     parking: { layer: parkingLayer, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked) },
     server: { view: serverView },
     pedestrianSensors: { view: pedestrianSensorView },
     transit: { buses, view: busView },
+    bikes: { stations: bicycleStations, view: bikeStationView, focus: focusBikeStation },
   });
   const signalTooltip = document.createElement('div');
   signalTooltip.id = 'signal-tooltip';
@@ -158,11 +169,15 @@ async function main() {
     const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
     const signalId = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
     const bus = busView.pick(raycaster);
+    const bikeStationId = bikeStationView.pick(raycaster);
     let label;
     const marker = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
     if (bus >= 0) {
       const { line, load, capacity, full, atStop } = buses.describe(bus);
       label = `Autobús ${line} · ${load}/${capacity} pasajeros (${Math.round((load / capacity) * 100)}%)${full ? ' · LLENO' : ''}${atStop ? ' · en la parada' : ''}`;
+    } else if (bikeStationId) {
+      const station = bicycleStations.find((item) => item.id === bikeStationId);
+      if (station) label = `${station.name} · ${station.available === undefined ? 'sin datos del servidor' : `${station.available}/${station.capacity} bicicletas (estimación simulada)`}`;
     } else if (signalId !== undefined) {
       label = `Semáforo OSM: ${signalId}`;
     } else if (marker) {
@@ -200,6 +215,8 @@ async function main() {
     if (!down || ev.button !== 0 || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
     setPointer(ev);
     if (mode === 'navigate') {
+      const bikeStationId = bikeStationView.pick(raycaster);
+      if (bikeStationId) return hud.revealBikeStation(bikeStationId);
       const parkingHit = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
       if (parkingHit) return hud.toggleParking(parkingHit.object.userData.id);
       const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
@@ -238,11 +255,15 @@ async function main() {
     if (simTime !== null) {
       signals.update(simTime);
       updateParkingOccupancy(parkingLayer, simTime);
+      bikeStationView.update(sync.state?.bikes ?? null);
+      pedestrians.setBikeRiders(sync.state?.bikes?.inUse ?? 0);
       pedestrians.updateAt(simTime, sync.state.params.scenario, sync.state.scale, sync.state.params.maxPedestrians);
       buses.updateAt(simTime, sync.state.params.scenario, sync.state.scale);
     } else {
       pedestrians.activeCount = 0;
       buses.clear();
+      bikeStationView.update(null);
+      pedestrians.setBikeRiders(0);
     }
     cars.update(now);
     carView.render();

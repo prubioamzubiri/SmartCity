@@ -22,7 +22,7 @@ function pickFile(accept) {
 }
 
 // Panel de control del visor: muestra el estado del servidor y le envía los cambios; no guarda estado propio.
-export function createHud({ sync, signals, localGraphKey, setMode, getMode, focusSignal, parking, server, pedestrianSensors, transit }) {
+export function createHud({ sync, signals, localGraphKey, setMode, getMode, focusSignal, parking, server, pedestrianSensors, transit, bikes }) {
   const root = el('div', { id: 'hud' });
   document.body.append(root);
 
@@ -504,9 +504,106 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
     transitSummary.textContent = `${b.lines.length} líneas · ${buses} autobuses en servicio · ${passengers} pasajeros · ${full} autobuses llenos`;
   }
 
+  // Estaciones OSM y disponibilidad estimada por el modelo de la simulación.
+  const bikeToggle = el('input', {
+    type: 'checkbox', checked: true,
+    onchange: () => bikes.view.setVisible(bikeToggle.checked),
+  });
+  const bikeSummary = el('div', { class: 'status' });
+  const bikeList = el('div', { class: 'bike-list' });
+  const bikeRows = new Map();
+  const bikeStations = bikes.stations ?? [];
+  for (const station of bikeStations) {
+    const focus = el('button', {
+      class: 'bike-station-name',
+      textContent: station.name,
+      title: 'Ir a esta estación en el mapa',
+      onclick: () => {
+        bikes.focus(station);
+        bikeRows.get(station.id)?.node.scrollIntoView({ block: 'nearest' });
+      },
+    });
+    const osmId = station.id.split('/');
+    const sourceLink = el('a', {
+      class: 'signal-osm',
+      textContent: station.source === 'osm' ? 'OSM' : 'GeoDonostia',
+      href: station.source === 'osm'
+        ? `https://www.openstreetmap.org/${encodeURIComponent(osmId[0])}/${encodeURIComponent(osmId[1])}`
+        : 'https://www.donostia.eus/datuirekiak/katalogoa/bizikleta_dbizi',
+      target: '_blank',
+      rel: 'noopener noreferrer',
+      title: station.source === 'osm' ? 'Abrir esta estación en OpenStreetMap' : 'Abrir el catálogo municipal Dbizi',
+    });
+    const count = el('span', { class: 'count' });
+    const node = el('div', { class: 'bike-item' }, focus, sourceLink, count);
+    bikeRows.set(station.id, { node, count });
+    bikeList.append(node);
+  }
+  if (!bikeStations.length) {
+    bikeList.append(el('em', {}, 'Sin estaciones en los datos. Ejecuta "npm run fetch-bikes".'));
+  }
+  const trackedBikeIds = () => (state?.bikes?.stations ?? []).filter((b) => b.tracked).map((b) => b.id);
+  const setTrackedBikes = (ids) => run((c) => c.setTrackedBikes(ids));
+  const bikeTracking = el('div', { class: 'parking-tracking' },
+    el('h4', {}, 'Registro en el servidor'),
+    el('div', { class: 'row' },
+      el('button', { textContent: 'Todas', onclick: () => setTrackedBikes(bikeStations.map((b) => b.id)) }),
+      el('button', { textContent: 'Ninguna', onclick: () => setTrackedBikes([]) }),
+    ),
+    el('div', { class: 'status' }, 'Una muestra cada 15 min simulados por puesto (bicicletas, anclajes libres, cogidas y devueltas).'),
+  );
+  const bikeSection = section(
+    'Bicicletas compartidas',
+    el('label', {}, bikeToggle, ' Mostrar estaciones'),
+    bikeSummary,
+    bikeList,
+    bikeTracking,
+    el('div', { class: 'status' },
+      el('span', {}, el('i', { style: 'background:#4fc3f7' }), ' Peatones en bici: ×4 de velocidad. '),
+      'Los peatones cogen y dejan las bicicletas por sí solos; el servidor lleva la cuenta de cada puesto. Son estimaciones de la simulación, no sensores físicos. Ubicaciones OSM o del catálogo GeoDonostia; para lecturas reales hay que integrar al operador o instalar sensores.'),
+    el('a', {
+      class: 'signal-osm',
+      textContent: '© OpenStreetMap contributors',
+      href: 'https://www.openstreetmap.org/copyright',
+      target: '_blank',
+      rel: 'noopener noreferrer',
+    }),
+    el('a', {
+      class: 'signal-osm',
+      textContent: '© Ayuntamiento de Donostia / GeoDonostia (CC BY 4.0)',
+      href: 'https://www.donostia.eus/datuirekiak/katalogoa/bizikleta_dbizi',
+      target: '_blank',
+      rel: 'noopener noreferrer',
+    }),
+  );
+  const updateBikes = () => {
+    const live = state?.bikes;
+    let available = 0;
+    let capacity = 0;
+    for (const station of bikeStations) {
+      const row = bikeRows.get(station.id);
+      if (station.available === undefined) {
+        row.count.textContent = 'sin datos';
+        continue;
+      }
+      available += station.available;
+      capacity += station.capacity;
+      row.count.textContent = `${station.available}/${station.capacity}${station.estimatedCapacity ? ' · cap. est.' : ''}`;
+    }
+    bikeSummary.textContent = !bikeStations.length
+      ? 'Sin puestos cargados.'
+      : live
+        ? `${bikeStations.length} puestos · ${available}/${capacity} bicicletas disponibles · ${live.inUse} en circulación (peatones)`
+        : `${bikeStations.length} puestos · sin conexión con el servidor`;
+  };
+  const revealBikeStation = (id) => {
+    bikeSection.open = true;
+    bikeRows.get(id)?.node.scrollIntoView({ block: 'nearest' });
+  };
+
   root.append(
     el('h2', {}, 'SmartCity Donostia'),
-    serverPanel.node, clockSection, trafficSection, signalSection, sensorSection, pedestrianSection, transitSection, parkingSection,
+    serverPanel.node, clockSection, trafficSection, signalSection, sensorSection, pedestrianSection, transitSection, bikeSection, parkingSection,
     el('p', { class: 'help' }, 'Ratón: arrastrar = girar, derecho = mover, rueda = zoom. Esc: salir del modo sensor. Supr: borrar sensor seleccionado.'),
   );
 
@@ -557,6 +654,7 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
   let lastUpdate = 0;
   return {
     revealSignal,
+    revealBikeStation,
     selectSensor,
     selectPedestrianSensor,
     removeSelectedSensor: () => {
@@ -582,10 +680,12 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
 
       const t = sync.simTime();
       if (t === null) {
+        updateBikes();
         clockLabel.textContent = 'Sin conexión con el servidor';
         clockNote.textContent = '';
         return;
       }
+      updateBikes();
       const d = simDate(t);
       const day = Math.floor(t / 86400) + 1;
       const hh = String(d.getUTCHours()).padStart(2, '0');
