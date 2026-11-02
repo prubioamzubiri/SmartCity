@@ -249,6 +249,9 @@ before it starts), stays at its maximum during it and fades as they leave (`trai
 `GET /api/events?from=2026-08-01&to=2026-09-01` returns the events of a range (by default,
 the next 30 simulated days, up to 366 days) with start and end, venue, attendance and extra
 demand; `GET /api/state` has `events.active` and `events.boost` for the ones in progress.
+The `attendance` and `extraDemand` of an event are `null` (also in the panel) until it has ended, so
+the models have to predict it; the events' effect on the demand is measurable while it happens.
+The calendar panel links to the API documentation (`CONFIG.events.docsUrl`, [DEPLOYMENT.md](DEPLOYMENT.md#api)).
 Set `CONFIG.events.enabled = false` to run without events.
 
 ## Parking occupancy tracking

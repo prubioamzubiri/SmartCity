@@ -193,6 +193,7 @@ test('the API lists the events of a date range and the state reports those in pr
     const first = body.events[0];
     assert.deepEqual(Object.keys(first).sort(), ['attendance', 'end', 'extraDemand', 'id', 'name', 'series', 'start', 'type', 'venue', 'venueName', 'x', 'z']);
     assert.match(first.start, /^2026-08-08T\d\d:\d\d:\d\d$/);
+    assert.ok(body.events.every((e) => e.attendance === null && e.extraDemand === null), 'future events do not reveal their attendance');
     assert.ok(body.events.every((e) => e.start < '2026-08-16T00:00:00'));
 
     const defaults = await get('/api/events');
@@ -206,6 +207,14 @@ test('the API lists the events of a date range and the state reports those in pr
     const state = (await get('/api/state')).body;
     assert.ok(state.events.boost > 0.5);
     assert.ok(state.events.active.some((e) => e.id === fireworks.id && e.intensity === 1));
+    assert.equal(state.events.active.find((e) => e.id === fireworks.id).attendance, null, 'in progress: attendance still unknown');
+
+    runtime.engine.simTime = fireworks.end + 600;
+    const over = (await get('/api/events?from=2026-08-09T23:00&to=2026-08-10T00:00')).body.events.find((e) => e.id === fireworks.id);
+    assert.equal(over.attendance, fireworks.attendance);
+    assert.equal(over.extraDemand, Math.round(fireworks.boost * 1000) / 1000);
+    const trail = (await get('/api/state')).body.events.active.find((e) => e.id === fireworks.id);
+    assert.equal(trail.attendance, fireworks.attendance, 'once over, the attendance is public');
     runtime.engine.simTime = calendar.secondsOf(2026, 1, 3, 4);
     assert.deepEqual((await get('/api/state')).body.events, { boost: 0, active: [] });
   });
