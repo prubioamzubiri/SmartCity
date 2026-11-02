@@ -96,6 +96,19 @@ Abre `http://localhost` (o `http://localhost:<HTTP_PORT>`). La API queda en
 Comandos útiles: `docker compose logs -f sim`, `docker compose stop`
 (parada limpia), `docker compose down` (conserva datos; `-v` los borra).
 
+**Reiniciar la simulación desde cero (borrando los volúmenes)**
+
+```sh
+docker compose down -v          # para los contenedores y borra sim-data, caddy-data y caddy-config
+docker compose up -d --build    # arranca con una base de datos vacía
+```
+
+Se pierden todos los sensores y el histórico. `-v` también borra los
+certificados de Caddy (se regeneran solos). Para borrar solo los datos de la
+simulación: `docker compose down && docker volume rm smartcity_sim-data`
+(el prefijo es el nombre de la carpeta del proyecto; consúltalo con
+`docker volume ls`).
+
 **Opción B: sin Docker**
 
 ```sh
