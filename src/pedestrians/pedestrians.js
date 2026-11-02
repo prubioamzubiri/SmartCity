@@ -49,10 +49,10 @@ export class Pedestrians {
   }
 
   // Posición a una hora simulada: el servidor y el visor usan esta misma función, así que coinciden.
-  // Los peatones tienen su propio reloj, a ritmo de tiempo real: la hora simulada dividida por la escala del servidor
-  // (simulada / real), para que caminen a 1,4 m/s en pantalla en vez de a ×52. La densidad sí sigue la hora simulada.
+  // Los peatones tienen su propio reloj: la hora simulada se divide por la escala del servidor (simulada / real) y se
+  // multiplica por `clockScale` (tope: la escala del servidor), así que van a ×clockScale en vez de a ×52. La densidad sí sigue la hora simulada.
   updateAt(simSeconds, scenario, scale = 1, limit = this.max) {
-    this.update((simSeconds / scale) * 1000, pedestrianDensity(demandFactor(simSeconds, scenario)), limit);
+    this.update(((simSeconds * Math.min(P.clockScale, scale)) / scale) * 1000, pedestrianDensity(demandFactor(simSeconds, scenario)), limit);
   }
 
   // Flujo esperado de peatones a una hora simulada: el modelo en el que se basan los sensores de peatones y el que

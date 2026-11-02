@@ -26,8 +26,8 @@ hidden, and on bridges they stay on the roadway. The server
 exposes them (`GET /api/pedestrians`) as a pure function of the simulated time, so
 they need no stored state. The viewer evaluates the same function every frame with the
 server clock, so it sees the same pedestrians and they move smoothly. Pedestrians
-have their own real-time clock (simulated time ÷ the server scale), so they walk at
-1.4 m/s on screen; a walk lasts `walkSeconds` (20 min, about 1.7 km) and each
+have their own clock (simulated time ÷ the server scale × `pedestrians.clockScale`, capped at the server scale; ×1 = real time, ×52.1 = same as cars), so they walk at
+`speed × clockScale` m/s on screen (1.4 × 10 = 14 m/s by default); a walk lasts `walkSeconds` (20 min, pedestrian-clock time) and each
 pedestrian has its own phase, so they do not all respawn together.
 Up to `max` (12,000) pedestrians follow the traffic demand of the simulated hour;
 tune `CONFIG.pedestrians` in `src/config.js`. The maximum is also a server parameter
