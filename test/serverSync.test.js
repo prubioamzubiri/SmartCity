@@ -8,6 +8,9 @@ import { createApp } from '../server/app.js';
 import { ApiClient } from '../src/api/client.js';
 import { ServerSync } from '../src/api/serverSync.js';
 import { RemoteCars } from '../src/traffic/remoteCars.js';
+import { Pedestrians } from '../src/pedestrians/pedestrians.js';
+import { fromBase64 } from '../src/core/binary.js';
+import { CONFIG } from '../src/config.js';
 
 const city = () => ({
   nodes: [-250, -250, 250, -250, 250, 250, -250, 250],
@@ -84,6 +87,49 @@ test('server exposes its cars and live values for the viewer', async (t) => {
   assert.equal(other.apply(payload), false);
   assert.equal(other.activeCount, 0);
 });
+
+test('server exposes the pedestrians (on the sidewalks and crossings) at the simulated time and the viewer computes the same ones', async (t) => {
+  let wall = 1_000_000;
+  const store = new Store();
+  // Paso de peatones en el lado norte del anillo (la calle va por X, se cruza en Z).
+  const data = { ...city(), crossings: [0, -250, 0, 1, 4] };
+  const runtime = new Runtime({ engine: new SimEngine({ data, maxCars: 10 }), store, now: () => wall, checkpointMs: 1e9 });
+  const server = http.createServer(createApp({ runtime, store }));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const api = new ApiClient({ baseUrl: `http://127.0.0.1:${server.address().port}` });
+
+  let seen = 0;
+  for (let i = 0; i < 40; i++) {
+    wall += 7_000;
+    while (!runtime.tick());
+    const payload = await api.pedestrians();
+    assert.equal(payload.graphKey, runtime.engine.graphKey);
+    assert.equal(payload.simSeconds, runtime.engine.simTime);
+    const x = fromBase64(payload.x, Float32Array);
+    const z = fromBase64(payload.z, Float32Array);
+    assert.equal(x.length, payload.activeCount);
+    for (let j = 0; j < x.length; j++) {
+      // Siempre junto a la calle (el anillo de ±250 m): en la acera o en el paso de peatones.
+      const fromRing = Math.min(Math.abs(Math.abs(x[j]) - 250), Math.abs(Math.abs(z[j]) - 250));
+      assert.ok(fromRing <= CONFIG.roads.halfWidth[4] + CONFIG.pedestrians.margin + 1e-3);
+    }
+    // El visor calcula con la misma función y la hora del servidor: ve exactamente los mismos peatones.
+    const viewer = new Pedestrians(data.crossings, { graph: runtime.engine.graph, water: runtime.engine.pedestrians.water });
+    viewer.updateAt(payload.simSeconds, runtime.engine.params.scenario, runtime.scale);
+    assert.deepEqual([...viewer.x.subarray(0, viewer.activeCount)], [...x]);
+    assert.deepEqual([...viewer.z.subarray(0, viewer.activeCount)], [...z]);
+    seen += x.length;
+  }
+  assert.ok(seen > 0);
+
+  // Función del tiempo simulado: el mismo instante da las mismas posiciones.
+  const first = runtime.engine.pedestrianPositions();
+  assert.deepEqual(runtime.engine.pedestrianPositions(), first);
+  const bare = new SimEngine({ data: { ...city(), crossings: undefined } });
+  assert.ok(bare.pedestrianPositions().activeCount > 0, 'sin pasos de peatones también caminan por las aceras');
+});
+
 
 test('cars follow the roads between snapshots and end on the server position', () => {
   const engine = new SimEngine({ data: city(), maxCars: 40 });

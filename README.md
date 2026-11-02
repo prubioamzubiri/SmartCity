@@ -12,7 +12,64 @@ npm run dev
 ```
 
 `fetch-osm` downloads the city data required by the viewer into
-`public/data/city.json` (not tracked in Git).
+`public/data/city.json` (not tracked in Git). It includes the OSM pedestrian
+crossings (`highway=crossing` nodes on roads); `npm run fetch-crossings`
+refreshes only those in an existing file. It also downloads the points of interest that
+attract pedestrians (shops, hospitality, bus and tram stops, schools, services and
+tourism, about 3,700 in Donostia); `npm run fetch-pois` refreshes only those.
+
+Pedestrians are small yellow triangles. Most walk along the sidewalks of the streets
+(not motorways); the rest cross the street at those crossings
+(`CONFIG.pedestrians.walkFraction`). They never step on
+water: where a sidewalk falls into the sea or a river they use the opposite one or are
+hidden, and on bridges they stay on the roadway. The server
+exposes them (`GET /api/pedestrians`) as a pure function of the simulated time, so
+they need no stored state. The viewer evaluates the same function every frame with the
+server clock, so it sees the same pedestrians and they move smoothly. Pedestrians
+have their own clock (simulated time ÷ the server scale × `pedestrians.clockScale`, capped at the server scale; ×1 = real time, ×52.1 = same as cars), so they walk at
+`speed × clockScale` m/s on screen (1.4 × 10 = 14 m/s by default); a walk lasts `walkSeconds` (20 min, pedestrian-clock time) and each
+pedestrian has its own phase, so they do not all respawn together.
+Crosswalks are drawn as zebra stripes (`pedestrians.zebra`). A crosswalk within
+`pedestrians.signalRadius` (40 m) of an active traffic signal is regulated by it: pedestrians
+wait at the curb and cross only while the cars on that street are red, shortening the crossing
+if the red is short.
+Up to `max` (12,000) pedestrians follow the traffic demand of the simulated hour;
+tune `CONFIG.pedestrians` in `src/config.js`. The maximum is also a server parameter
+(`maxPedestrians`, slider in the **Peatones (servidor)** panel; it needs the token).
+
+### Where the pedestrians are
+
+Streets do not attract the same number of people. Each street segment has a weight:
+the weight of its road class (`CONFIG.pedestrians.streetWeights`; motorways have none)
+times `1 + Σ weight(POI) × (1 − distance / poiRadius)²` for the points of interest
+within `poiRadius` (60 m, per-category `poiWeights`: bus stops 2.5, schools 2,
+tourism 1.5, hospitality 1.2, shops and services 1), capped at `maxWeight` times the
+class. Pedestrians start their walks on a segment, and cross at a crossing, in
+proportion to its weight (and length), so busy shopping streets and bus stops gather
+about 3 to 5 times as many people as a quiet residential street; the same weights are
+used by the pedestrian sensors, so what they record follows what the viewer shows. The
+weights are computed from `city.json` (85 ms), identically in the server and the viewer.
+A walker that reaches a junction keeps going straight unless the street ends
+(`attraction` can bias the choice towards heavier streets, but it makes the agents
+drift away from the sensors' model, so it is 0 by default). Walks last 20 minutes and
+move through several streets, so the concentration is a tendency, not an exact
+copy of the weights (on the real city, sensors on the 20 heaviest segments see 4.3 times
+the people of those on average segments according to the agents, and 4.8 times
+according to the model).
+
+### Pedestrian sensors
+
+In the **Peatones (servidor)** panel, *Colocar sensor de peatones* places a sensor on a
+street (Esc cancels, Supr deletes the selected one). Every 5 simulated minutes
+(`CONFIG.pedestrianSensors.bucketSeconds`) the server records, per sensor, how many
+pedestrians walked past on the sidewalks of that street (both directions) and crossed at
+the crossings within `radius` (20 m), and how many were present in that area. They are
+computed from the same flow model that generates the pedestrians in the viewer
+(`Pedestrians.flowAt`), not from the individual agents, so the cost does not depend on
+how many there are, the numbers follow the demand curve and the `maxPedestrians`
+setting, and the records are identical after a restart or a catch-up (Poisson noise
+seeded by sensor and interval). Download them with **CSV de peatones** or
+`GET /api/pedestrians.csv`; see [DEPLOYMENT.md](DEPLOYMENT.md#api).
 
 ## Simulation server
 
@@ -38,6 +95,19 @@ Abre `http://localhost` (o `http://localhost:<HTTP_PORT>`). La API queda en
 `/api` (comprueba `/api/health`). Los datos persisten en el volumen `sim-data`.
 Comandos útiles: `docker compose logs -f sim`, `docker compose stop`
 (parada limpia), `docker compose down` (conserva datos; `-v` los borra).
+
+**Reiniciar la simulación desde cero (borrando los volúmenes)**
+
+```sh
+docker compose down -v          # para los contenedores y borra sim-data, caddy-data y caddy-config
+docker compose up -d --build    # arranca con una base de datos vacía
+```
+
+Se pierden todos los sensores y el histórico. `-v` también borra los
+certificados de Caddy (se regeneran solos). Para borrar solo los datos de la
+simulación: `docker compose down && docker volume rm smartcity_sim-data`
+(el prefijo es el nombre de la carpeta del proyecto; consúltalo con
+`docker volume ls`).
 
 **Opción B: sin Docker**
 

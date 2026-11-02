@@ -46,6 +46,40 @@ export const CONFIG = {
     speedByClass: [22, 16, 13, 11, 8],
   },
 
+  // Peatones: triángulos que caminan por las aceras y cruzan por los pasos de peatones de OSM (solo visual).
+  pedestrians: {
+    max: 12000, // con la demanda máxima
+    walkFraction: 0.75, // fracción que camina por las aceras; el resto cruza por los pasos de peatones
+    minDensity: 0.15, // fracción de peatones activos aunque la demanda sea nula
+    speed: 1.4, // m/s de paseo real (en pantalla: speed × clockScale m/s)
+    clockScale: 10, // ritmo del reloj de los peatones respecto al tiempo real (×1 = real, ×52,1 = igual que los coches); nunca supera la escala del servidor
+    size: 2.4, // largo del triángulo, en metros
+    margin: 2, // metros más allá de la calzada que ocupan: cruzan hasta ahí y caminan a la mitad
+    laneWidth: 3, // ancho del paso por el que se reparten, en metros
+    slotSeconds: 40, // segundos reales: cada peatón que cruza elige un paso nuevo en cada ventana de este tamaño
+    walkSeconds: 1200, // segundos reales de un paseo por las aceras (≈ 1,7 km a 1,4 m/s de reloj de peatón) antes de reaparecer en otro sitio
+    // Atracción de las calles: los peatones empiezan sus paseos, cruzan y cuentan en proporción a un peso por tramo.
+    // peso = pesoDeLaClase × (1 + Σ pesoDelPOI × (1 − distancia / poiRadius)²), con tope en maxWeight veces la clase.
+    streetWeights: [0, 1.3, 1.5, 1.2, 0.8], // por clase de vía: autovía (sin acera), primaria, secundaria, terciaria, residencial
+    poiWeights: [1, 1.2, 2.5, 2, 1, 1.5], // por categoría de POI: comercio, hostelería, transporte, educación, servicios, turismo
+    poiRadius: 60, // metros a los que un POI atrae peatones hacia la calle
+    maxWeight: 8,
+    attraction: 0, // sesgo al elegir calle en un cruce hacia las de más peso (0 = solo siguen recto); con >0 los agentes se desvían del modelo de los sensores (≈15 % con 0, ≈17 % con 0,6, ≈22 % con 3)
+    height: 0.5,
+    color: 0xffd54a,
+    // Pasos de peatones con semáforo: los peatones solo cruzan con el rojo de los coches de esa calle.
+    signalRadius: 40, // metros: un paso a menos de esta distancia de un semáforo activo queda regulado por él
+    redMargin: 1.5, // segundos simulados de seguridad tras ponerse en rojo y antes de volver el verde
+    minRedWindow: 6, // segundos simulados mínimos de rojo útil; con menos, nadie cruza
+    zebra: { stripe: 0.5, gap: 0.5, length: 3.2, color: 0xf2f2f2 }, // franjas del paso de cebra, en metros
+  },
+
+  // Sensores de peatones del servidor: cuentan a los que pasan por la acera de una calle o cruzan cerca.
+  pedestrianSensors: {
+    bucketSeconds: 300, // segundos simulados por registro
+    radius: 20, // metros alrededor del sensor: pasos de peatones que cuenta y tramo en el que mide los presentes
+  },
+
   signals: {
     green: 20,
     yellow: 3,

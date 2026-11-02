@@ -21,7 +21,7 @@ function pickFile(accept) {
 }
 
 // Panel de control del visor: muestra el estado del servidor y le envía los cambios; no guarda estado propio.
-export function createHud({ sync, signals, localGraphKey, setMode, getMode, focusSignal, parking, server }) {
+export function createHud({ sync, signals, localGraphKey, setMode, getMode, focusSignal, parking, server, pedestrianSensors }) {
   const root = el('div', { id: 'hud' });
   document.body.append(root);
 
@@ -262,13 +262,27 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
   const recordsLabel = el('div', { class: 'status' });
   const sensorSection = section('Sensores (servidor)', sensorModeButton, sensorList, recordsLabel);
 
+  // Solo hay un sensor seleccionado a la vez, de tráfico o de peatones.
   let selectedSensorId = null;
+  let selectedPedestrianSensorId = null;
   let sensorKey = null;
   const sensorRows = new Map();
+  const pedestrianRows = new Map();
+  const applySelection = () => {
+    server.view.select(selectedSensorId);
+    pedestrianSensors.view.select(selectedPedestrianSensorId);
+    sensorRows.forEach((r, key) => r.row.classList.toggle('selected', key === selectedSensorId));
+    pedestrianRows.forEach((r, key) => r.row.classList.toggle('selected', key === selectedPedestrianSensorId));
+  };
   const selectSensor = (id) => {
     selectedSensorId = id;
-    server.view.select(id);
-    sensorRows.forEach((r, key) => r.row.classList.toggle('selected', key === id));
+    selectedPedestrianSensorId = null;
+    applySelection();
+  };
+  const selectPedestrianSensor = (id) => {
+    selectedPedestrianSensorId = id;
+    selectedSensorId = null;
+    applySelection();
   };
   const removeSensor = (id) => run((c) => c.removeSensor(id));
   function renderSensors(list) {
@@ -302,7 +316,57 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
       if (!list.length) sensorList.append(el('em', {}, 'Sin sensores en el servidor. Activa el modo y haz clic sobre una calle.'));
     }
     for (const s of list) sensorRows.get(s.id).count.textContent = `${s.current} (${s.total})`;
-    selectSensor(selectedSensorId);
+    applySelection();
+  }
+
+  // Sensores de peatones
+  const pedestrianLabel = el('span', { textContent: CONFIG.pedestrians.max });
+  const pedestrianInput = el('input', {
+    type: 'range', min: 0, max: CONFIG.pedestrians.max, step: 500, value: CONFIG.pedestrians.max,
+    oninput: () => (pedestrianLabel.textContent = pedestrianInput.value),
+    onchange: () => run((c) => c.setParams({ maxPedestrians: Number(pedestrianInput.value) })),
+  });
+  const pedestrianStats = el('div', { class: 'stats' });
+  const pedestrianModeButton = el('button', { class: 'primary', onclick: () => setMode(getMode() === 'pedsensor' ? 'navigate' : 'pedsensor') });
+  const pedestrianList = el('div', { class: 'sensor-list' });
+  const pedestrianRecords = el('div', { class: 'status' });
+  const pedestrianSection = section('Peatones (servidor)',
+    el('label', {}, 'Peatones en hora punta: ', pedestrianLabel), pedestrianInput, pedestrianStats,
+    pedestrianModeButton, pedestrianList, pedestrianRecords);
+  let pedestrianKey = null;
+  const removePedestrianSensor = (id) => run((c) => c.removePedestrianSensor(id));
+  function renderPedestrianSensors(list) {
+    const view = pedestrianSensors.view;
+    const ids = new Set(list.map((s) => s.id));
+    for (const id of [...view.markers.keys()]) if (!ids.has(id)) view.remove(id);
+    for (const s of list) if (!view.markers.has(s.id)) view.add(s);
+    if (selectedPedestrianSensorId && !ids.has(selectedPedestrianSensorId)) selectedPedestrianSensorId = null;
+    const key = JSON.stringify(list.map((s) => [s.id, s.name]));
+    if (key !== pedestrianKey) {
+      pedestrianKey = key;
+      pedestrianRows.clear();
+      pedestrianList.replaceChildren();
+      for (const s of list) {
+        const name = el('input', {
+          type: 'text', value: s.name, maxLength: 60,
+          onchange: () => run((c) => c.renamePedestrianSensor(s.id, name.value)),
+        });
+        const count = el('span', { class: 'count' });
+        const del = el('button', {
+          textContent: '✕', title: 'Borrar del servidor (el histórico se conserva)',
+          onclick: (event) => {
+            event.stopPropagation();
+            removePedestrianSensor(s.id);
+          },
+        });
+        const row = el('div', { class: 'sensor', onclick: () => selectPedestrianSensor(s.id) }, name, count, del);
+        pedestrianRows.set(s.id, { row, count });
+        pedestrianList.append(row);
+      }
+      if (!list.length) pedestrianList.append(el('em', {}, 'Sin sensores de peatones. Activa el modo y haz clic sobre una calle.'));
+    }
+    for (const s of list) pedestrianRows.get(s.id).count.textContent = `${s.current} (${s.total})`;
+    applySelection();
   }
 
   // Aparcamiento
@@ -372,7 +436,7 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
 
   root.append(
     el('h2', {}, 'SmartCity Donostia'),
-    serverPanel.node, clockSection, trafficSection, signalSection, sensorSection, parkingSection,
+    serverPanel.node, clockSection, trafficSection, signalSection, sensorSection, pedestrianSection, parkingSection,
     el('p', { class: 'help' }, 'Ratón: arrastrar = girar, derecho = mover, rueda = zoom. Esc: salir del modo sensor. Supr: borrar sensor seleccionado.'),
   );
 
@@ -381,6 +445,10 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
     if (document.activeElement !== carsInput) {
       carsInput.value = s.params.maxCars;
       carsLabel.textContent = s.params.maxCars;
+    }
+    if (document.activeElement !== pedestrianInput) {
+      pedestrianInput.value = s.params.maxPedestrians;
+      pedestrianLabel.textContent = s.params.maxPedestrians;
     }
     if (document.activeElement !== scenarioSelect) scenarioSelect.value = s.params.scenario;
     signals.setPlan(s.signalPlan);
@@ -391,6 +459,7 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
       renderSignalList();
     }
     renderSensors(s.sensors);
+    renderPedestrianSensors(s.pedestrianSensors);
     renderTracked();
     parking.highlight((id) => s.parkings.some((p) => p.id === id && p.tracked));
     if (s.parkings.length) {
@@ -398,25 +467,35 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
       parkingOccupancy.textContent = `Ocupación simulada de los P subterráneos: ${(avg * 100).toFixed(0)}%`;
     }
     recordsLabel.textContent = `Registros guardados: ${s.records.traffic} · cruces en el intervalo en curso y total entre paréntesis`;
+    pedestrianStats.textContent = `En la calle (esperados): ${s.pedestrians.expected}`;
+    pedestrianRecords.textContent = `Registros guardados: ${s.records.pedestrians} · presentes ahora cerca del sensor y total contado entre paréntesis`;
   });
   sync.on('disconnect', () => {
     state = null;
     sensorKey = null;
+    pedestrianKey = null;
     trackKey = null;
     for (const id of [...server.view.markers.keys()]) server.view.remove(id);
+    for (const id of [...pedestrianSensors.view.markers.keys()]) pedestrianSensors.view.remove(id);
     sensorList.replaceChildren();
+    pedestrianList.replaceChildren();
     trackList.replaceChildren();
-    if (getMode() === 'sensor') setMode('navigate');
+    if (getMode() === 'sensor' || getMode() === 'pedsensor') setMode('navigate');
   });
 
   let lastUpdate = 0;
   return {
     revealSignal,
     selectSensor,
-    removeSelectedSensor: () => selectedSensorId && removeSensor(selectedSensorId),
+    selectPedestrianSensor,
+    removeSelectedSensor: () => {
+      if (selectedSensorId) removeSensor(selectedSensorId);
+      else if (selectedPedestrianSensorId) removePedestrianSensor(selectedPedestrianSensorId);
+    },
     toggleParking,
     // Crea un sensor en el servidor en las coordenadas de escena indicadas.
     addServerSensor: (x, z) => run((c) => c.addSensor(x, z)),
+    addPedestrianSensor: (x, z) => run((c) => c.addPedestrianSensor(x, z)),
     update(now) {
       if (now - lastUpdate < 250) return;
       lastUpdate = now;
@@ -424,6 +503,10 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
       sensorModeButton.textContent = active ? 'Colocando en el servidor… (clic en una calle)' : 'Colocar sensor en el servidor';
       sensorModeButton.classList.toggle('active', active);
       sensorModeButton.disabled = !state;
+      const placingPedestrian = getMode() === 'pedsensor';
+      pedestrianModeButton.textContent = placingPedestrian ? 'Colocando en el servidor… (clic en una calle)' : 'Colocar sensor de peatones';
+      pedestrianModeButton.classList.toggle('active', placingPedestrian);
+      pedestrianModeButton.disabled = !state;
 
       const t = sync.simTime();
       if (t === null) {

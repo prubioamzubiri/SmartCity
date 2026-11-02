@@ -11,6 +11,8 @@
     "fetch-osm": "node scripts/fetch-osm.mjs",
     "fetch-water": "node scripts/fetch-osm.mjs --water-only",
     "fetch-parking": "node scripts/fetch-osm.mjs --parking-only",
+    "fetch-crossings": "node scripts/fetch-osm.mjs --crossings-only",
+    "fetch-pois": "node scripts/fetch-osm.mjs --pois-only",
     "serve": "node server/index.js"
   },
   "dependencies": {
