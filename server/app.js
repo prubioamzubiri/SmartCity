@@ -1,7 +1,8 @@
+import { CONFIG } from '../src/config.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { BUS_COLUMNS, PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
+import { BIKE_COLUMNS, BUS_COLUMNS, PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
 
 const MAX_BODY = 64 * 1024;
 const TIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/;
@@ -32,6 +33,7 @@ const CSV_EXPORTS = {
   '/api/parking.csv': { kind: 'parking', columns: PARKING_COLUMNS, filename: 'ocupacion-parkings' },
   '/api/pedestrians.csv': { kind: 'pedestrians', columns: PEDESTRIAN_COLUMNS, filename: 'peatones' },
   '/api/buses.csv': { kind: 'buses', columns: BUS_COLUMNS, filename: 'autobuses' },
+  '/api/bikes.csv': { kind: 'bikes', columns: BIKE_COLUMNS, filename: 'bicicletas' },
 };
 
 const digest = (s) => createHash('sha256').update(s).digest();
@@ -110,7 +112,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
           id: l.id, color: l.color, stops: l.stops.length, fleet: l.buses, tracked: engine.busTracker.isTracked(l.id),
         })),
       },
-      records: { traffic: store.count('traffic'), parking: store.count('parking'), pedestrians: store.count('pedestrians'), buses: store.count('buses') },
+      bikes: engine.bikes.state(),
+      records: { traffic: store.count('traffic'), parking: store.count('parking'), pedestrians: store.count('pedestrians'), buses: store.count('buses'), bikes: store.count('bikes') },
     };
   };
 
@@ -217,6 +220,49 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         for (const id of ids) e.parking.setTracked(id, true);
       });
       return send(200, { tracked: [...runtime.engine.parking.tracked] });
+    }
+
+    // Estado actual de las estaciones de bicicletas compartidas (bicicletas disponibles y en circulación).
+    if (method === 'GET' && pathname === '/api/bikes') return send(200, runtime.engine.bikes.state());
+
+    // Cambia los anclajes de varios puestos: { changes: { "<id>": 20, "<id>": null } } (null cancela el cambio pendiente).
+    // El cambio tarda `capacityDelaySeconds` (30 días simulados) en hacer efecto.
+    if (method === 'PUT' && pathname === '/api/bikes/capacity') {
+      authorize(req);
+      const { changes } = await readJson(req);
+      if (!changes || typeof changes !== 'object' || Array.isArray(changes) || !Object.keys(changes).length) {
+        throw new HttpError(400, 'changes debe ser un objeto { id: anclajes }');
+      }
+      const bikes = runtime.engine.bikes;
+      const known = new Set(bikes.state().stations.map((s) => s.id));
+      const unknown = Object.keys(changes).find((id) => !known.has(id));
+      if (unknown) throw new HttpError(400, `Estación desconocida: ${unknown}`);
+      try {
+        runtime.mutate((e) => {
+          // Se valida todo antes de aplicar nada: o entran todos los cambios o ninguno.
+          const probe = Object.entries(changes);
+          for (const [, capacity] of probe) {
+            if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1 || capacity > CONFIG.bicycles.maxCapacity)) {
+              throw new Error(`La capacidad debe ser un entero entre 1 y ${CONFIG.bicycles.maxCapacity}`);
+            }
+          }
+          for (const [id, capacity] of probe) e.bikes.scheduleCapacity(id, capacity, e.simTime);
+        });
+      } catch (err) {
+        throw new HttpError(400, err.message);
+      }
+      return send(200, runtime.engine.bikes.state());
+    }
+
+    if (method === 'PUT' && pathname === '/api/bikes/tracked') {
+      authorize(req);
+      const { ids } = await readJson(req);
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) throw new HttpError(400, 'ids debe ser una lista de textos');
+      runtime.mutate((e) => {
+        e.bikes.setAll(false);
+        for (const id of ids) e.bikes.setTracked(id, true);
+      });
+      return send(200, { tracked: [...runtime.engine.bikes.tracked] });
     }
 
     if (method === 'PUT' && pathname === '/api/buses/tracked') {

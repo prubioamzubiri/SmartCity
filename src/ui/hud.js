@@ -22,7 +22,7 @@ function pickFile(accept) {
 }
 
 // Panel de control del visor: muestra el estado del servidor y le envía los cambios; no guarda estado propio.
-export function createHud({ sync, signals, localGraphKey, setMode, getMode, focusSignal, parking, server, pedestrianSensors, transit }) {
+export function createHud({ sync, signals, localGraphKey, setMode, getMode, focusSignal, parking, server, pedestrianSensors, transit, bikes }) {
   const root = el('div', { id: 'hud' });
   document.body.append(root);
 
@@ -504,9 +504,157 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
     transitSummary.textContent = `${b.lines.length} líneas · ${buses} autobuses en servicio · ${passengers} pasajeros · ${full} autobuses llenos`;
   }
 
+  // Estaciones OSM y disponibilidad estimada por el modelo de la simulación.
+  const bikeToggle = el('input', {
+    type: 'checkbox', checked: true,
+    onchange: () => bikes.view.setVisible(bikeToggle.checked),
+  });
+  const bikeSummary = el('div', { class: 'status' });
+  const bikeList = el('div', { class: 'bike-list' });
+  const bikeRows = new Map();
+  const bikeStations = bikes.stations ?? [];
+  for (const station of bikeStations) {
+    const focus = el('button', {
+      class: 'bike-station-name',
+      textContent: station.name,
+      title: 'Ir a esta estación en el mapa',
+      onclick: () => {
+        bikes.focus(station);
+        bikeRows.get(station.id)?.node.scrollIntoView({ block: 'nearest' });
+      },
+    });
+    const osmId = station.id.split('/');
+    const sourceLink = el('a', {
+      class: 'signal-osm',
+      textContent: station.source === 'osm' ? 'OSM' : 'GeoDonostia',
+      href: station.source === 'osm'
+        ? `https://www.openstreetmap.org/${encodeURIComponent(osmId[0])}/${encodeURIComponent(osmId[1])}`
+        : 'https://www.donostia.eus/datuirekiak/katalogoa/bizikleta_dbizi',
+      target: '_blank',
+      rel: 'noopener noreferrer',
+      title: station.source === 'osm' ? 'Abrir esta estación en OpenStreetMap' : 'Abrir el catálogo municipal Dbizi',
+    });
+    const count = el('span', { class: 'count' });
+    const capacityInput = el('input', { type: 'number', min: 1, max: CONFIG.bicycles.maxCapacity, step: 1, class: 'bike-capacity', title: 'Anclajes de este puesto' });
+    const schedule = el('button', {
+      textContent: 'Programar',
+      title: `Cambiar los anclajes: tarda ${CONFIG.bicycles.capacityDelaySeconds / 86400} días simulados en hacer efecto`,
+      onclick: () => scheduleBikeCapacities({ [station.id]: Number(capacityInput.value) }),
+    });
+    const pendingLabel = el('span', { class: 'status' });
+    const node = el('div', { class: 'bike-item' }, focus, sourceLink, count, capacityInput, schedule, pendingLabel);
+    bikeRows.set(station.id, { node, count, capacityInput, pendingLabel });
+    bikeList.append(node);
+  }
+  if (!bikeStations.length) {
+    bikeList.append(el('em', {}, 'Sin estaciones en los datos. Ejecuta "npm run fetch-bikes".'));
+  }
+  const bikeJson = el('textarea', {
+    class: 'bike-json', rows: 4, spellcheck: false,
+    placeholder: '{ "municipal/0": 20, "municipal/5": 8 }',
+  });
+  const bikeCapacityNotice = el('div', { class: 'status' });
+  const scheduleBikeCapacities = async (changes) => {
+    try {
+      await sync.act((client) => client.setBikeCapacities(changes));
+      bikeCapacityNotice.textContent = `Cambio programado: se aplicará en ${CONFIG.bicycles.capacityDelaySeconds / 86400} días simulados.`;
+      bikeCapacityNotice.style.color = '';
+    } catch (err) {
+      bikeCapacityNotice.textContent = err.message;
+      bikeCapacityNotice.style.color = '#ff8a80';
+    }
+  };
+  const bikeCapacityEditor = el('div', { class: 'parking-tracking' },
+    el('h4', {}, `Anclajes por puesto (efecto en ${CONFIG.bicycles.capacityDelaySeconds / 86400} días simulados)`),
+    bikeJson,
+    el('div', { class: 'row' },
+      el('button', {
+        textContent: 'Cargar actuales',
+        onclick: () => { bikeJson.value = JSON.stringify(Object.fromEntries(bikeStations.map((b) => [b.id, b.capacity])), null, 1); },
+      }),
+      el('button', {
+        textContent: 'Aplicar JSON',
+        onclick: () => {
+          try {
+            const changes = JSON.parse(bikeJson.value);
+            scheduleBikeCapacities(changes);
+          } catch {
+            bikeCapacityNotice.textContent = 'JSON no válido. Formato: { "id del puesto": anclajes }';
+            bikeCapacityNotice.style.color = '#ff8a80';
+          }
+        },
+      }),
+      el('button', { textContent: 'Cancelar pendientes', onclick: () => scheduleBikeCapacities(Object.fromEntries((state?.bikes?.stations ?? []).filter((b) => b.pending).map((b) => [b.id, null])) ) }),
+    ),
+    bikeCapacityNotice,
+  );
+  const trackedBikeIds = () => (state?.bikes?.stations ?? []).filter((b) => b.tracked).map((b) => b.id);
+  const setTrackedBikes = (ids) => run((c) => c.setTrackedBikes(ids));
+  const bikeTracking = el('div', { class: 'parking-tracking' },
+    el('h4', {}, 'Registro en el servidor'),
+    el('div', { class: 'row' },
+      el('button', { textContent: 'Todas', onclick: () => setTrackedBikes(bikeStations.map((b) => b.id)) }),
+      el('button', { textContent: 'Ninguna', onclick: () => setTrackedBikes([]) }),
+    ),
+    el('div', { class: 'status' }, 'Una muestra cada 15 min simulados por puesto (bicicletas, anclajes libres, cogidas y devueltas).'),
+  );
+  const bikeSection = section(
+    'Bicicletas compartidas',
+    el('label', {}, bikeToggle, ' Mostrar estaciones'),
+    bikeSummary,
+    bikeList,
+    bikeCapacityEditor,
+    bikeTracking,
+    el('div', { class: 'status' },
+      el('span', {}, el('i', { style: 'background:#4fc3f7' }), ' Peatones en bici: ×4 de velocidad. '),
+      'Los peatones cogen y dejan las bicicletas por sí solos; el servidor lleva la cuenta de cada puesto. Son estimaciones de la simulación, no sensores físicos. Ubicaciones OSM o del catálogo GeoDonostia; para lecturas reales hay que integrar al operador o instalar sensores.'),
+    el('a', {
+      class: 'signal-osm',
+      textContent: '© OpenStreetMap contributors',
+      href: 'https://www.openstreetmap.org/copyright',
+      target: '_blank',
+      rel: 'noopener noreferrer',
+    }),
+    el('a', {
+      class: 'signal-osm',
+      textContent: '© Ayuntamiento de Donostia / GeoDonostia (CC BY 4.0)',
+      href: 'https://www.donostia.eus/datuirekiak/katalogoa/bizikleta_dbizi',
+      target: '_blank',
+      rel: 'noopener noreferrer',
+    }),
+  );
+  const updateBikes = () => {
+    const live = state?.bikes;
+    let available = 0;
+    let capacity = 0;
+    for (const station of bikeStations) {
+      const row = bikeRows.get(station.id);
+      if (station.available === undefined) {
+        row.count.textContent = 'sin datos';
+        continue;
+      }
+      available += station.available;
+      capacity += station.capacity;
+      row.count.textContent = `${station.available}/${station.capacity}${station.estimatedCapacity ? ' · cap. est.' : ''}`;
+      if (row.capacityInput !== document.activeElement) row.capacityInput.value = station.pending?.capacity ?? station.capacity;
+      const t = sync.simTime();
+      const days = station.pending && t !== null ? Math.max(0, Math.ceil((station.pending.effectiveAt - t) / 86400)) : null;
+      row.pendingLabel.textContent = station.pending ? `→ ${station.pending.capacity} en ${days} d` : '';
+    }
+    bikeSummary.textContent = !bikeStations.length
+      ? 'Sin puestos cargados.'
+      : live
+        ? `${bikeStations.length} puestos · ${available}/${capacity} bicicletas disponibles · ${live.inUse} en circulación (peatones)`
+        : `${bikeStations.length} puestos · sin conexión con el servidor`;
+  };
+  const revealBikeStation = (id) => {
+    bikeSection.open = true;
+    bikeRows.get(id)?.node.scrollIntoView({ block: 'nearest' });
+  };
+
   root.append(
     el('h2', {}, 'SmartCity Donostia'),
-    serverPanel.node, clockSection, trafficSection, signalSection, sensorSection, pedestrianSection, transitSection, parkingSection,
+    serverPanel.node, clockSection, trafficSection, signalSection, sensorSection, pedestrianSection, transitSection, bikeSection, parkingSection,
     el('p', { class: 'help' }, 'Ratón: arrastrar = girar, derecho = mover, rueda = zoom. Esc: salir del modo sensor. Supr: borrar sensor seleccionado.'),
   );
 
@@ -557,6 +705,7 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
   let lastUpdate = 0;
   return {
     revealSignal,
+    revealBikeStation,
     selectSensor,
     selectPedestrianSensor,
     removeSelectedSensor: () => {
@@ -582,10 +731,12 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
 
       const t = sync.simTime();
       if (t === null) {
+        updateBikes();
         clockLabel.textContent = 'Sin conexión con el servidor';
         clockNote.textContent = '';
         return;
       }
+      updateBikes();
       const d = simDate(t);
       const day = Math.floor(t / 86400) + 1;
       const hh = String(d.getUTCHours()).padStart(2, '0');

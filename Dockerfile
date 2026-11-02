@@ -7,5 +7,6 @@ COPY src ./src
 COPY server ./server
 # El servidor necesita el mapa: ejecuta "npm run fetch-osm" antes de construir la imagen.
 COPY public/data/city.json ./public/data/city.json
+COPY public/data/municipal.json ./public/data/municipal.json
 EXPOSE 8080
 CMD ["node", "--disable-warning=ExperimentalWarning", "server/index.js"]

@@ -80,12 +80,16 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 | `GET /api/pedestrians.csv?from=&to=&id=` | Pedestrian sensor records every 5 simulated minutes: `count` (= `count_walk` on the sidewalks + `count_cross` at crossings), `present` (people in the sensor area) |
 | `GET /api/buses` | Current state of each bus line at the simulated time: `fleet`, `active` buses, `passengers`, `full` buses, `waiting` people at the stops, `tracked` |
 | `GET /api/buses.csv?from=&to=&id=` | Bus line records every 5 simulated minutes for the tracked lines (`id` = line id, e.g. `L1`): `buses` in service, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting` |
+| `GET /api/bikes` | Bike stations at the simulated time: `available` bikes, `capacity`, `tracked`, and `inUse` bikes ridden by pedestrians (simulated estimates) |
+| `GET /api/bikes.csv?from=&to=&id=` | Records every 15 simulated minutes for the tracked stations (`id` = station id): `bikes`, `free_docks`, `takes`, `returns`, `occupancy_pct` |
 | `POST /api/pedestrian-sensors` `{x, z, name}` | Create a pedestrian sensor (ids `P1`, `P2`…) |
 | `PATCH /api/pedestrian-sensors/:id` `{name}` / `DELETE /api/pedestrian-sensors/:id` | Rename / remove (history is kept) |
 | `POST /api/sensors` `{x, z, name}` | Create a sensor |
 | `PATCH /api/sensors/:id` `{name}` / `DELETE /api/sensors/:id` | Rename / remove (history is kept) |
 | `PUT /api/parking/tracked` `{ids: [...]}` | Parkings to record |
 | `PUT /api/buses/tracked` `{ids: [...]}` | Bus lines to record (none by default) |
+| `PUT /api/bikes/capacity` `{changes: {"<station id>": docks, "<id>": null}}` | Change the docks (1-60) of stations; it takes effect after 30 simulated days (`pending` in `GET /api/bikes`), `null` cancels a pending change. Requires the token; all-or-nothing |
+| `PUT /api/bikes/tracked` `{ids: [...]}` | Bike stations to record (none by default) |
 | `PUT /api/params` `{maxCars, maxPedestrians, scenario}` | Traffic and pedestrian parameters |
 | `PUT /api/signals/plan` `{plan}` | Signal timing plan |
 

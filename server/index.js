@@ -5,11 +5,13 @@ import { SimEngine } from '../src/core/engine.js';
 import { Store } from './store.js';
 import { DEFAULT_SCALE, Runtime } from './runtime.js';
 import { createApp } from './app.js';
+import { withBikeStations } from '../src/bikes/sharing.js';
 
 const env = process.env;
 const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
 
 const cityFile = env.CITY_FILE ?? 'public/data/city.json';
+const municipalFile = env.MUNICIPAL_FILE ?? path.join(path.dirname(cityFile), 'municipal.json');
 const dbFile = env.DB_FILE ?? 'data/smartcity.db';
 const port = Number(env.PORT ?? 8080);
 
@@ -20,6 +22,9 @@ if (!fs.existsSync(cityFile)) {
 fs.mkdirSync(path.dirname(dbFile), { recursive: true });
 
 const data = JSON.parse(fs.readFileSync(cityFile, 'utf8'));
+// Sin puestos de OSM en el mapa, usa el catálogo municipal igual que el visor.
+const municipal = fs.existsSync(municipalFile) ? JSON.parse(fs.readFileSync(municipalFile, 'utf8')) : null;
+withBikeStations(data, municipal);
 const store = new Store(dbFile);
 const runtime = new Runtime({
   engine: new SimEngine({ data }),

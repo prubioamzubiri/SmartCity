@@ -2,6 +2,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { extractCrossings } from './crossings.mjs';
 import { extractPois, POI_CATEGORIES, POI_QUERY } from './pois.mjs';
+import { extractBikeStations } from './bike-stations.mjs';
 
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -377,9 +378,25 @@ async function fetchPois() {
   return pois;
 }
 
+async function fetchBikeStations() {
+  const json = await overpass(
+    `[out:json][timeout:180];${AREA}(` +
+      `nwr["amenity"="bicycle_rental"](area.city);` +
+      `nwr["bicycle_rental"~"^(station|docking_station)$"](area.city););out center tags;`,
+  );
+  const stations = extractBikeStations(json.elements, project, round1);
+  console.log(`Estaciones de bicicletas: ${stations.length}`);
+  return stations;
+}
+
 await mkdir('public/data', { recursive: true });
 
-if (process.argv.includes('--parking-only')) {
+if (process.argv.includes('--bikes-only')) {
+  const city = JSON.parse(await readFile('public/data/city.json', 'utf8'));
+  city.bicycleStations = await fetchBikeStations();
+  await writeFile('public/data/city.json', JSON.stringify(city));
+  console.log('Actualizadas las estaciones de bicicletas en public/data/city.json');
+} else if (process.argv.includes('--parking-only')) {
   const city = JSON.parse(await readFile('public/data/city.json', 'utf8'));
   city.parking = await fetchParking();
   await writeFile('public/data/city.json', JSON.stringify(city));
@@ -423,6 +440,7 @@ if (process.argv.includes('--parking-only')) {
     pois: await fetchPois(),
     water: await fetchWater(bounds),
     parking: await fetchParking(),
+    bicycleStations: await fetchBikeStations(),
   };
   await writeFile('public/data/city.json', JSON.stringify(city));
   console.log('Generado public/data/city.json');

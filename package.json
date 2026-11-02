@@ -13,6 +13,7 @@
     "fetch-parking": "node scripts/fetch-osm.mjs --parking-only",
     "fetch-crossings": "node scripts/fetch-osm.mjs --crossings-only",
     "fetch-pois": "node scripts/fetch-osm.mjs --pois-only",
+    "fetch-bikes": "node scripts/fetch-osm.mjs --bikes-only",
     "serve": "node server/index.js"
   },
   "dependencies": {

@@ -5,6 +5,7 @@ export const PARKING_COLUMNS = ['timestamp', 'weekday', 'parking_id', 'parking_n
 
 export const PEDESTRIAN_COLUMNS = ['timestamp', 'weekday', 'sensor_id', 'sensor_name', 'x', 'z', 'count', 'count_walk', 'count_cross', 'present'];
 export const BUS_COLUMNS = ['timestamp', 'weekday', 'line_id', 'stops', 'buses', 'passengers', 'capacity', 'occupancy_pct', 'full_buses', 'waiting'];
+export const BIKE_COLUMNS = ['timestamp', 'weekday', 'station_id', 'station_name', 'x', 'z', 'capacity', 'bikes', 'free_docks', 'takes', 'returns', 'occupancy_pct'];
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -37,6 +38,13 @@ CREATE TABLE IF NOT EXISTS bus_records (
 );
 CREATE INDEX IF NOT EXISTS bus_time ON bus_records (timestamp);
 CREATE INDEX IF NOT EXISTS bus_line ON bus_records (line_id, timestamp);
+CREATE TABLE IF NOT EXISTS bike_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp TEXT NOT NULL, weekday TEXT NOT NULL, station_id TEXT NOT NULL, station_name TEXT,
+  x INTEGER, z INTEGER, capacity INTEGER, bikes INTEGER, free_docks INTEGER, takes INTEGER, returns INTEGER, occupancy_pct REAL
+);
+CREATE INDEX IF NOT EXISTS bike_time ON bike_records (timestamp);
+CREATE INDEX IF NOT EXISTS bike_station ON bike_records (station_id, timestamp);
 `;
 
 const TABLES = {
@@ -44,6 +52,7 @@ const TABLES = {
   parking: { table: 'parking_records', columns: PARKING_COLUMNS, idColumn: 'parking_id' },
   pedestrians: { table: 'pedestrian_records', columns: PEDESTRIAN_COLUMNS, idColumn: 'sensor_id' },
   buses: { table: 'bus_records', columns: BUS_COLUMNS, idColumn: 'line_id' },
+  bikes: { table: 'bike_records', columns: BIKE_COLUMNS, idColumn: 'station_id' },
 };
 
 export class Store {

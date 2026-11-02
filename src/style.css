@@ -120,3 +120,10 @@ html, body {
 .bus-load b { display: block; height: 100%; width: 0; }
 .bus-track-list { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; margin-top: 4px; }
 .bus-track { display: flex; align-items: center; gap: 2px; }
+
+.bike-list { max-height: 180px; overflow-y: auto; margin: 6px 0; }
+.bike-item { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 3px 2px; border-bottom: 1px solid #243244; }
+.bike-station-name { flex: 1; min-width: 70px; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.bike-capacity { width: 52px; }
+.bike-json { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 11px; background: #101820; color: #dce6f0; border: 1px solid #243244; }
+.bike-item .count { min-width: 92px; text-align: right; font-variant-numeric: tabular-nums; color: #ffb454; }
