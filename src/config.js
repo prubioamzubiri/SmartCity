@@ -74,6 +74,46 @@ export const CONFIG = {
     zebra: { stripe: 0.5, gap: 0.5, length: 3.2, color: 0xf2f2f2 }, // franjas del paso de cebra, en metros
   },
 
+  // Transporte público: líneas de autobús circulares (ida y vuelta) que cruzan la ciudad entre paradas de OSM (solo visual).
+  // Los autobuses son una función del tiempo, como los peatones: no hace falta estado en el servidor.
+  transit: {
+    lines: 10, // líneas que se generan
+    terminals: 12, // extremos candidatos repartidos por la ciudad
+    minTerminalRadius: 1500, // metros al centro: ni demasiado cerca...
+    maxTerminalRadius: 6000, // ...ni demasiado lejos
+    minTerminalDensity: 6, // paradas de OSM en un cuadrado de 400 m para que un extremo esté en una zona urbana
+    roadPenalty: [Infinity, 1, 1.1, 1.4, 2.2], // coste por metro según clase de vía: autovía (prohibida), primaria, ... residencial
+    speedFactor: 0.7, // fracción de la velocidad de la vía a la que circulan
+    maxSpeed: 11, // m/s
+    stopSnap: 40, // metros: una parada de OSM sirve a una línea si está a menos de esto de su recorrido
+    minStopSpacing: 300, // metros mínimos entre paradas
+    maxStopSpacing: 700, // si hay más, se añade una parada intermedia
+    terminalMargin: 150, // metros alrededor de una terminal sin otras paradas
+    kerbOffset: 1.5, // metros más allá de la calzada a los que se dibuja la parada
+    laneOffset: 3, // metros a la derecha del eje por los que circula el autobús
+    dwell: 20, // segundos de reloj de autobús parado en una parada
+    terminalDwell: 90, // y en las terminales
+    headway: 300, // segundos entre autobuses que se buscan (sale el nº de autobuses por línea)
+    minBuses: 4,
+    maxBuses: 16,
+    clockScale: 12, // ritmo del reloj de los autobuses respecto al tiempo real; nunca supera la escala del servidor
+    minService: 0.35, // fracción de la flota en servicio con la demanda mínima (con la máxima, toda)
+    capacity: 80, // pasajeros por autobús
+    fullAt: 0.9, // ocupación a partir de la cual el autobús se considera lleno
+    boardings: 8, // pasajeros que suben de media en una parada de peso 1 con la demanda máxima
+    alightMin: 0.1, // fracción de los pasajeros que baja en cada parada: entre alightMin y alightMin + alightSpread
+    alightSpread: 0.25,
+    minStopWeight: 0.4, // peso de atracción de la parada (el de la calle según los POI entre referencia)
+    maxStopWeight: 3,
+    referenceWeight: 1.5,
+    maxWaiting: 14, // peatones que se dibujan esperando en una parada
+    waitingSeconds: 600, // segundos de espera a partir de los cuales la parada tiene su máximo de gente
+    length: 12, // metros del autobús
+    width: 3,
+    height: 3.2,
+    colors: [0xe6194b, 0x3cb44b, 0x4363d8, 0xf58231, 0x911eb4, 0x42d4f4, 0xf032e6, 0xbfef45, 0x9a6324, 0x00a88f, 0xfabed4, 0xdcbeff],
+  },
+
   // Sensores de peatones del servidor: cuentan a los que pasan por la acera de una calle o cruzan cerca.
   pedestrianSensors: {
     bucketSeconds: 300, // segundos simulados por registro
@@ -110,6 +150,11 @@ export const CONFIG = {
     urlKey: 'smartcity.server.url',
     pollSeconds: 5,
     carsSeconds: 1,
+  },
+
+  // Registro de autobuses del servidor: una muestra por línea elegida cada `intervalSeconds` simulados.
+  busTracking: {
+    intervalSeconds: 300,
   },
 
   parkingTracking: {

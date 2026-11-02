@@ -57,6 +57,33 @@ copy of the weights (on the real city, sensors on the 20 heaviest segments see 4
 the people of those on average segments according to the agents, and 4.8 times
 according to the model).
 
+### Buses (public transport)
+
+The viewer draws a bus network (`CONFIG.transit`, **Autobuses** panel). The lines are generated
+from `city.json` when the viewer loads (about 150 ms): up to `lines` (10) round-trip lines that
+cross the city along the main roads (primary and secondary roads are cheaper, motorways are
+never used) between terminals picked among the real OSM bus stops. Stops are the OSM bus
+stops within `stopSnap` (40 m) of the route, at least `minStopSpacing` (300 m) apart, plus an
+intermediate stop wherever the gap would exceed `maxStopSpacing` (700 m). Each line has its own color
+and its ribbon, stops and buses are drawn in it; the checkboxes in the panel hide a line.
+
+Buses are rectangles. The bar on the roof shows how full they are (green below 50 %,
+amber above, red when at least `fullAt` (90 %) of the `capacity` (80) is taken) and hovering one shows its
+line and passengers. At each stop part of the passengers get off, everyone does at the end of the outbound
+trip, and the people waiting (yellow squares by the stop) get on until the bus is full. How many wait
+and board follows the stop's attraction weight (same POI model as the pedestrians) and the traffic demand
+of the simulated hour; the fleet in service also grows with the demand. Like pedestrians, buses are a
+pure function of the simulated time (own clock, `clockScale`, ×12 by default) and are only visual: they do
+not interact with the cars.
+
+The server also keeps a record of what happens on the lines you choose (**Autobuses → Registro en el
+servidor**, none by default). Every 5 simulated minutes (`CONFIG.busTracking.intervalSeconds`) it stores,
+per tracked line, the buses in service, passengers on board, capacity, occupancy %, full buses and people waiting
+at the stops. Download it with **CSV de autobuses** or `GET /api/buses.csv?id=L1`; `GET /api/buses` shows the
+current state. As with the other records, it is persisted in SQLite, survives restarts and a recovery after a
+stop regenerates identical data (the server builds the same lines as the viewer, and the bus clock uses the
+scale stored in the database).
+
 ### Pedestrian sensors
 
 In the **Peatones (servidor)** panel, *Colocar sensor de peatones* places a sensor on a

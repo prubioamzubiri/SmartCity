@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
+import { BUS_COLUMNS, PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
 
 const MAX_BODY = 64 * 1024;
 const TIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/;
@@ -31,6 +31,7 @@ const CSV_EXPORTS = {
   '/api/traffic.csv': { kind: 'traffic', columns: TRAFFIC_COLUMNS, filename: 'trafico' },
   '/api/parking.csv': { kind: 'parking', columns: PARKING_COLUMNS, filename: 'ocupacion-parkings' },
   '/api/pedestrians.csv': { kind: 'pedestrians', columns: PEDESTRIAN_COLUMNS, filename: 'peatones' },
+  '/api/buses.csv': { kind: 'buses', columns: BUS_COLUMNS, filename: 'autobuses' },
 };
 
 const digest = (s) => createHash('sha256').update(s).digest();
@@ -104,7 +105,12 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         id: s.id, name: s.name, x: Math.round(s.x * 10) / 10, z: Math.round(s.z * 10) / 10,
         total: s.total, current: Math.round(engine.pedSensors.presentNow(s, engine.simTime)),
       })),
-      records: { traffic: store.count('traffic'), parking: store.count('parking'), pedestrians: store.count('pedestrians') },
+      buses: {
+        lines: engine.transit.lines.map((l) => ({
+          id: l.id, color: l.color, stops: l.stops.length, fleet: l.buses, tracked: engine.busTracker.isTracked(l.id),
+        })),
+      },
+      records: { traffic: store.count('traffic'), parking: store.count('parking'), pedestrians: store.count('pedestrians'), buses: store.count('buses') },
     };
   };
 
@@ -126,6 +132,17 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
     if (method === 'GET' && pathname === '/api/pedestrians') {
       const { engine } = runtime;
       return send(200, { graphKey: engine.graphKey, simSeconds: engine.simTime, ...engine.pedestrianPositions(runtime.scale) });
+    }
+
+    // Estado actual de las líneas de autobús (autobuses en servicio, pasajeros, llenos, gente esperando).
+    if (method === 'GET' && pathname === '/api/buses') {
+      const { engine } = runtime;
+      engine.buses.updateAt(engine.simTime, engine.params.scenario, runtime.scale);
+      return send(200, {
+        graphKey: engine.graphKey,
+        simSeconds: engine.simTime,
+        lines: engine.transit.lines.map((l, i) => ({ id: l.id, stops: l.stops.length, fleet: l.buses, tracked: engine.busTracker.isTracked(l.id), ...engine.buses.stats[i] })),
+      });
     }
 
     if (method === 'GET' && CSV_EXPORTS[pathname]) {
@@ -200,6 +217,17 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         for (const id of ids) e.parking.setTracked(id, true);
       });
       return send(200, { tracked: [...runtime.engine.parking.tracked] });
+    }
+
+    if (method === 'PUT' && pathname === '/api/buses/tracked') {
+      authorize(req);
+      const { ids } = await readJson(req);
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) throw new HttpError(400, 'ids debe ser una lista de textos');
+      runtime.mutate((e) => {
+        e.busTracker.setAll(false);
+        for (const id of ids) e.busTracker.setTracked(id, true);
+      });
+      return send(200, { tracked: [...runtime.engine.busTracker.tracked] });
     }
 
     if (method === 'PUT' && pathname === '/api/params') {

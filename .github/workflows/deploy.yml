@@ -1,8 +1,9 @@
 name: Deploy SmartCity to GitHub Pages
 
+#no usable
 on:
   push:
-    branches: [main]
+    branches: [none]
   workflow_dispatch:
 
 permissions:

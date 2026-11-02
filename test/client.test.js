@@ -45,6 +45,7 @@ test('csvUrl validates filters and builds a streaming download url', () => {
   const api = new ApiClient({ baseUrl: 'https://x.test/', fetchFn: () => {} });
   assert.equal(api.csvUrl('traffic'), 'https://x.test/api/traffic.csv');
   assert.equal(api.csvUrl('parking', { from: '2026-03-01', to: '2026-04-01', id: 'U1_2' }), 'https://x.test/api/parking.csv?from=2026-03-01&to=2026-04-01&id=U1_2');
+  assert.equal(api.csvUrl('buses', { id: 'L1' }), 'https://x.test/api/buses.csv?id=L1');
   assert.throws(() => api.csvUrl('otro'));
   assert.throws(() => api.csvUrl('traffic', { from: 'ayer' }));
 });

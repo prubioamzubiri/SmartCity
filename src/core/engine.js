@@ -10,6 +10,9 @@ import { PedestrianSensors } from '../sensors/pedestrianSensors.js';
 import { createWaterMask } from '../city/waterMask.js';
 import { Pedestrians } from '../pedestrians/pedestrians.js';
 import { pedestrianWeights } from '../pedestrians/weights.js';
+import { buildTransit } from '../transit/lines.js';
+import { Buses } from '../transit/buses.js';
+import { BusTracker } from '../sensors/busTracker.js';
 import { toBase64 } from './binary.js';
 import { createRng } from './random.js';
 
@@ -39,12 +42,26 @@ export class SimEngine {
       getSimTime: () => this.simTime,
       storage: null,
     });
-    this.pedestrians = new Pedestrians(data.crossings, { graph: this.graph, water: createWaterMask(data), weights: pedestrianWeights(this.graph, data), signals: this.signals });
+    const weights = pedestrianWeights(this.graph, data);
+    this.pedestrians = new Pedestrians(data.crossings, { graph: this.graph, water: createWaterMask(data), weights, signals: this.signals });
     this.pedSensors = new PedestrianSensors({
       graph: this.graph,
       pedestrians: this.pedestrians,
       getSimTime: () => this.simTime,
       getParams: () => this.params,
+    });
+    // Autobuses: como los peatones, son una función del tiempo simulado y de la escala del reloj (la fija quien
+    // ejecuta el motor), así que no hay estado de autobuses que guardar; solo qué líneas se registran.
+    this.scale = 1;
+    this.transit = buildTransit(data, this.graph, { weights: weights.edge });
+    this.buses = new Buses(this.transit, this.graph);
+    this.busTracker = new BusTracker({
+      lines: this.transit.lines,
+      getSimTime: () => this.simTime,
+      statsAt: (time) => {
+        this.buses.updateAt(time, this.params.scenario, this.scale);
+        return this.buses.stats;
+      },
     });
     this.graphKey = `${this.graph.edgeCount}:${data.nodes.length}`;
     this.signals.update(this.simTime);
@@ -72,6 +89,7 @@ export class SimEngine {
       this.sensors.tick(this.simTime);
       this.parking.tick(this.simTime);
       this.pedSensors.tick(this.simTime);
+      this.busTracker.tick(this.simTime);
       steps++;
     }
     return true;
@@ -96,10 +114,11 @@ export class SimEngine {
     const traffic = this.sensors.pending.splice(0);
     const parking = this.parking.pending.splice(0);
     const pedestrians = this.pedSensors.pending.splice(0);
+    const buses = this.busTracker.pending.splice(0);
     this.sensors.records.length = 0;
     this.parking.records.length = 0;
     this.pedSensors.records.length = 0;
-    return { traffic, parking, pedestrians };
+    return { traffic, parking, pedestrians, buses };
   }
 
   snapshot() {
@@ -113,6 +132,7 @@ export class SimEngine {
       sensors: this.sensors.serialize(),
       parking: this.parking.serialize(),
       pedSensors: this.pedSensors.serialize(),
+      buses: this.busTracker.serialize(),
     };
   }
 
@@ -125,6 +145,7 @@ export class SimEngine {
     this.sensors.restore(state.sensors);
     this.parking.restore(state.parking);
     this.pedSensors.restore(state.pedSensors, this.simTime);
+    if (state.buses) this.busTracker.restore(state.buses); // los snapshots anteriores a los autobuses no lo traen
     const compatible = state.graphKey === this.graphKey;
     if (compatible) this.sim.restore(state.sim);
     this.signals.update(this.simTime);
