@@ -5,6 +5,7 @@ import { CONFIG } from './config.js';
 import { loadCity } from './city/loadCity.js';
 import { createBuildings } from './city/buildings.js';
 import { createRoads } from './city/roads.js';
+import { createCrosswalks } from './city/crosswalks.js';
 import {
   createParking, createParkingPicker, highlightTracked, lotOccupancy, parkingStats,
   updateParkingOccupancy, PARKING_TYPE_LABEL,
@@ -52,6 +53,7 @@ async function main() {
   scene.add(createWater(data));
   scene.add(createBuildings(data));
   scene.add(createRoads(data));
+  scene.add(createCrosswalks(data));
   const parkingLayer = createParking(data);
   scene.add(parkingLayer);
   const pickParking = createParkingPicker(data);
@@ -77,7 +79,7 @@ async function main() {
   const cars = new RemoteCars(graph, graphKey);
   const carView = new CarView(cars);
   scene.add(carView.mesh);
-  const pedestrians = new Pedestrians(data.crossings, { graph, water: createWaterMask(data), weights: pedestrianWeights(graph, data) });
+  const pedestrians = new Pedestrians(data.crossings, { graph, water: createWaterMask(data), weights: pedestrianWeights(graph, data), signals });
   const pedestrianView = new PedestrianView(pedestrians);
   scene.add(pedestrianView.mesh);
   sync.on('cars', (payload) => cars.apply(payload));

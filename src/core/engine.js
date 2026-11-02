@@ -39,7 +39,7 @@ export class SimEngine {
       getSimTime: () => this.simTime,
       storage: null,
     });
-    this.pedestrians = new Pedestrians(data.crossings, { graph: this.graph, water: createWaterMask(data), weights: pedestrianWeights(this.graph, data) });
+    this.pedestrians = new Pedestrians(data.crossings, { graph: this.graph, water: createWaterMask(data), weights: pedestrianWeights(this.graph, data), signals: this.signals });
     this.pedSensors = new PedestrianSensors({
       graph: this.graph,
       pedestrians: this.pedestrians,

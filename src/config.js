@@ -67,6 +67,11 @@ export const CONFIG = {
     attraction: 0, // sesgo al elegir calle en un cruce hacia las de más peso (0 = solo siguen recto); con >0 los agentes se desvían del modelo de los sensores (≈15 % con 0, ≈17 % con 0,6, ≈22 % con 3)
     height: 0.5,
     color: 0xffd54a,
+    // Pasos de peatones con semáforo: los peatones solo cruzan con el rojo de los coches de esa calle.
+    signalRadius: 40, // metros: un paso a menos de esta distancia de un semáforo activo queda regulado por él
+    redMargin: 1.5, // segundos simulados de seguridad tras ponerse en rojo y antes de volver el verde
+    minRedWindow: 6, // segundos simulados mínimos de rojo útil; con menos, nadie cruza
+    zebra: { stripe: 0.5, gap: 0.5, length: 3.2, color: 0xf2f2f2 }, // franjas del paso de cebra, en metros
   },
 
   // Sensores de peatones del servidor: cuentan a los que pasan por la acera de una calle o cruzan cerca.

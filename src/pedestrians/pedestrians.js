@@ -21,7 +21,7 @@ function rand(i, k, salt) {
 // del tiempo y, en cada ventana, elige qué hacer: caminar por la acera de una calle o cruzar por un paso de
 // peatones de OSM (en ese caso solo se ve mientras cruza).
 export class Pedestrians {
-  constructor(crossings = [], { max = P.max, graph = null, walkFraction = P.walkFraction, water = null, weights = null } = {}) {
+  constructor(crossings = [], { max = P.max, graph = null, walkFraction = P.walkFraction, water = null, weights = null, signals = null } = {}) {
     this.crossings = crossings;
     this.count = Math.floor(crossings.length / STRIDE);
     this.graph = graph;
@@ -34,6 +34,14 @@ export class Pedestrians {
     this.crossCumulative = new Float64Array(this.count);
     for (let j = 0, total = 0; j < this.count; j++) this.crossCumulative[j] = total += this.crossWeight ? this.crossWeight[j] : 1;
     this.crossTotal = this.count ? this.crossCumulative[this.count - 1] : 0;
+    // Semáforo que regula cada paso (índice en signals.signals, -1 = sin regular) y el eje de coches que cruzan.
+    this.signals = signals;
+    this.crossSignal = new Int32Array(this.count).fill(-1);
+    this.crossGroup = new Uint8Array(this.count);
+    if (signals) this.linkSignals();
+    this.simNow = 0;
+    this.simPerSecond = 1; // segundos simulados por segundo del reloj de peatones
+    this.timings = [];
     this.max = max;
     this.x = new Float32Array(max);
     this.z = new Float32Array(max);
@@ -52,7 +60,53 @@ export class Pedestrians {
   // Los peatones tienen su propio reloj: la hora simulada se divide por la escala del servidor (simulada / real) y se
   // multiplica por `clockScale` (tope: la escala del servidor), así que van a ×clockScale en vez de a ×52. La densidad sí sigue la hora simulada.
   updateAt(simSeconds, scenario, scale = 1, limit = this.max) {
-    this.update(((simSeconds * Math.min(P.clockScale, scale)) / scale) * 1000, pedestrianDensity(demandFactor(simSeconds, scenario)), limit);
+    const clock = Math.min(P.clockScale, scale);
+    this.simNow = simSeconds;
+    this.simPerSecond = scale / clock;
+    this.update(((simSeconds * clock) / scale) * 1000, pedestrianDensity(demandFactor(simSeconds, scenario)), limit);
+  }
+
+  // Asocia cada paso al semáforo activo más cercano (dentro de `signalRadius`) y al eje de la calle que cruza.
+  linkSignals() {
+    const list = this.signals.signals;
+    const c = this.crossings;
+    for (let j = 0; j < this.count; j++) {
+      let best = -1;
+      let bestD = P.signalRadius;
+      for (let s = 0; s < list.length; s++) {
+        if (!list[s].active) continue;
+        const d = Math.hypot(list[s].x - c[j * STRIDE], list[s].z - c[j * STRIDE + 1]);
+        if (d <= bestD) {
+          bestD = d;
+          best = s;
+        }
+      }
+      this.crossSignal[j] = best;
+      // La calle va perpendicular a la dirección de cruce; grupo 0 = calle E-O, 1 = N-S (igual que los tramos).
+      this.crossGroup[j] = Math.abs(c[j * STRIDE + 3]) >= Math.abs(c[j * STRIDE + 2]) ? 0 : 1;
+    }
+  }
+
+  // Ciclo del semáforo `s` a la hora simulada actual (se calcula una vez por actualización).
+  timingOf(s) {
+    let t = this.timings[s];
+    if (!t) {
+      const { gA, gB, y } = this.signals.timing(this.signals.signals[s], this.simNow);
+      t = this.timings[s] = { gA, gB, y, cycle: gA + gB + 2 * y, offset: this.signals.offsets[s] };
+    }
+    return t;
+  }
+
+  // Ventana de rojo para los coches del grupo `g` del semáforo `s` que empieza en `from` o la siguiente:
+  // { start, length, current } con tiempos simulados absolutos.
+  redWindow(s, g, from) {
+    const { gA, y, cycle, offset } = this.timingOf(s);
+    const length = g === 0 ? cycle - gA - y : gA + y;
+    const begin = g === 0 ? gA + y : 0;
+    const phase = (((from + offset * cycle) % cycle) + cycle) % cycle;
+    const into = phase - begin;
+    if (into >= 0 && into < length) return { start: from - into, length, current: true };
+    return { start: from + ((begin - phase + cycle) % cycle), length, current: false };
   }
 
   // Flujo esperado de peatones a una hora simulada: el modelo en el que se basan los sensores de peatones y el que
@@ -103,6 +157,7 @@ export class Pedestrians {
   // `density` en [0, 1]: fracción de los peatones que pueden estar en la calle.
   update(nowMs, density = 1, limit = this.max) {
     const t = nowMs / 1000;
+    this.timings.length = 0;
     const crossSlot = Math.floor(t / P.slotSeconds);
     const crossLocal = t - crossSlot * P.slotSeconds;
     const allowed = this.count || this.sidewalks ? Math.min(this.max, Math.round(Math.min(limit, this.max) * Math.max(0, Math.min(1, density)))) : 0;
@@ -144,9 +199,34 @@ export class Pedestrians {
     const half = this.inWater(c[j], c[j + 1]) ? road : road + P.margin;
     const speed = P.speed * (0.8 + 0.4 * rand(i, k, 2));
     const duration = (2 * half) / speed;
-    const start = rand(i, k, 3) * Math.max(0, slot - duration);
-    const s = (local - start) / duration;
-    if (s < 0 || s > 1) return n;
+    let start = rand(i, k, 3) * Math.max(0, slot - duration);
+    let span = duration;
+    const sig = this.crossSignal[j / STRIDE];
+    let waiting = false;
+    if (sig >= 0) {
+      // Paso con semáforo: espera en el bordillo y cruza dentro de la ventana de rojo de los coches (a ritmo de hora
+      // simulada, comprimiendo el cruce si el rojo es corto). Si no cabe antes de acabar la ventana de tiempo, no cruza.
+      const f = this.simPerSecond;
+      const slotStart = this.simNow - local * f;
+      const wanted = slotStart + start * f;
+      const w = this.redWindow(sig, this.crossGroup[j / STRIDE], wanted);
+      const room = w.length - 2 * P.redMargin;
+      if (room < P.minRedWindow) return n;
+      const lengthSim = Math.min(duration * f, room);
+      const lo = w.start + P.redMargin;
+      const begin = w.current ? Math.min(Math.max(wanted, lo), lo + room - lengthSim) : lo;
+      if (begin + lengthSim > slotStart + slot * f) return n;
+      start = (begin - slotStart) / f;
+      span = lengthSim / f;
+      waiting = this.simNow >= wanted;
+      if (!waiting) return n;
+    }
+    let s = (local - start) / span;
+    if (s > 1) return n;
+    if (s < 0) {
+      if (!waiting) return n;
+      s = 0;
+    }
     const dir = rand(i, k, 4) < 0.5 ? 1 : -1;
     const along = (2 * s - 1) * half * dir;
     const lateral = (rand(i, k, 5) - 0.5) * P.laneWidth;
