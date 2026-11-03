@@ -2,7 +2,7 @@ import { CONFIG } from '../config.js';
 import { buildGraph } from '../traffic/graph.js';
 import { SignalController } from '../traffic/signals.js';
 import { TrafficSim } from '../traffic/sim.js';
-import { demandFactor } from '../traffic/demand.js';
+import { demandFactor, speedFactor } from '../traffic/demand.js';
 import { eventCalendar } from '../events/calendar.js';
 import { SensorManager } from '../sensors/sensorManager.js';
 import { ParkingTracker } from '../sensors/parkingTracker.js';
@@ -31,7 +31,7 @@ export class SimEngine {
     scenario = CONFIG.traffic.scenario,
   }) {
     this.simTime = startSeconds;
-    this.attractorMinute = null;
+    this.environmentMinute = null;
     this.params = { maxCars, maxPedestrians, scenario };
     this.graph = buildGraph(data);
     this.signals = new SignalController(this.graph);
@@ -88,7 +88,7 @@ export class SimEngine {
       if (steps >= maxSteps) return false;
       this.simTime += STEP;
       this.signals.update(this.simTime);
-      this.updateAttractors();
+      this.updateEnvironment();
       this.sim.setTarget(this.params.maxCars * demandFactor(this.simTime, this.params.scenario));
       this.sim.step(STEP);
       this.sensors.tick(this.simTime);
@@ -101,11 +101,13 @@ export class SimEngine {
     return true;
   }
 
-  // Las sedes de los eventos en curso se actualizan cada minuto simulado (también tras restaurar un snapshot).
-  updateAttractors() {
+  // Las sedes de los eventos en curso y la velocidad que permite el tiempo se actualizan cada minuto simulado
+  // (también tras restaurar un snapshot): salen de la hora, así que no hay estado que guardar.
+  updateEnvironment() {
     const minute = Math.floor(this.simTime / 60);
-    if (minute === this.attractorMinute) return;
-    this.attractorMinute = minute;
+    if (minute === this.environmentMinute) return;
+    this.environmentMinute = minute;
+    this.sim.speedScale = speedFactor(minute * 60);
     this.sim.setAttractors(CONFIG.events.enabled ? eventCalendar.attractorsAt(minute * 60) : []);
   }
 
@@ -157,7 +159,7 @@ export class SimEngine {
   restore(state) {
     if (state?.version !== SNAPSHOT_VERSION) return false;
     this.simTime = state.simTime;
-    this.attractorMinute = null;
+    this.environmentMinute = null;
     this.params = { maxPedestrians: CONFIG.pedestrians.max, ...state.params };
     this.signals.setPlan(state.plan);
     this.sensors.restore(state.sensors);

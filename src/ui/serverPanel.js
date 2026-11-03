@@ -57,7 +57,7 @@ export function createServerPanel({ section, sync, localGraphKey }) {
   function download(kind) {
     try {
       const to = toInput.value ? nextDay(toInput.value) : undefined;
-      const url = sync.client.csvUrl(kind, { from: fromInput.value || undefined, to, id: ['parking', 'buses', 'bikes', 'events'].includes(kind) ? '' : sensorFilter.value });
+      const url = sync.client.csvUrl(kind, { from: fromInput.value || undefined, to, id: ['parking', 'buses', 'bikes', 'events', 'weather'].includes(kind) ? '' : sensorFilter.value });
       el('a', { href: url, download: '' }).click();
     } catch (err) {
       say(err.message, true);
@@ -106,6 +106,7 @@ export function createServerPanel({ section, sync, localGraphKey }) {
       guarded(el('button', { textContent: 'CSV de autobuses', onclick: () => download('buses') })),
       guarded(el('button', { textContent: 'CSV de bicicletas', onclick: () => download('bikes') })),
       guarded(el('button', { textContent: 'CSV de eventos', onclick: () => download('events') })),
+      guarded(el('button', { textContent: 'CSV del tiempo', onclick: () => download('weather') })),
     ),
   );
 

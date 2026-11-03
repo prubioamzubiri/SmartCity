@@ -1,5 +1,7 @@
 import { CONFIG } from '../src/config.js';
 import { eventCalendar } from '../src/events/calendar.js';
+import { weather, CONDITIONS } from '../src/weather/weather.js';
+import { holidayCalendar } from '../src/calendar/holidays.js';
 import { simDate } from '../src/traffic/demand.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
@@ -124,6 +126,39 @@ function requestedEvents(url, simSeconds) {
   return eventCalendar.eventsBetween(from, to).filter((e) => type === null || e.type === type);
 }
 
+const round = (v, digits) => Math.round(v * 10 ** digits) / 10 ** digits;
+
+// Tiempo observado en `seconds` (nunca el del futuro: de eso solo hay previsión).
+function observation(seconds) {
+  const w = weather.at(seconds);
+  return { time: iso(seconds), temperature_c: round(w.temperature, 1), rain_mm_h: round(w.rain, 2), cloud_pct: Math.round(w.cloud * 100), condition: w.condition };
+}
+
+function forecastEntry(f) {
+  return {
+    time: iso(f.time), lead_h: Math.round(f.lead), temperature_c: round(f.temperature, 1),
+    rain_probability: round(f.rainProbability, 2), rain_mm_h: round(f.rain, 2), cloud_pct: Math.round(f.cloud * 100), condition: f.condition,
+  };
+}
+
+export const WEATHER_COLUMNS = ['time', 'temperature_c', 'rain_mm_h', 'cloud_pct', 'condition'];
+const HOUR = 3600;
+
+// Filas horarias del tiempo observado entre `from` y `to` (por defecto, los últimos 7 días simulados); las horas
+// que aún no han llegado no se incluyen.
+function* observedRows(url, simSeconds) {
+  const bound = (key) => {
+    const value = url.searchParams.get(key);
+    if (value === null) return null;
+    if (!TIME_RE.test(value) || !Number.isFinite(simSecondsOf(value))) throw new HttpError(400, `${key} debe ser una fecha ISO (AAAA-MM-DD[THH:MM[:SS]])`);
+    return simSecondsOf(value);
+  };
+  const to = Math.min(bound('to') ?? Infinity, simSeconds + 1);
+  const from = bound('from') ?? Math.max(0, to - 7 * 86400);
+  if (to - from > MAX_EVENT_RANGE) throw new HttpError(400, 'El intervalo no puede superar 366 días');
+  for (let t = Math.ceil(from / HOUR) * HOUR; t < to; t += HOUR) yield observation(t);
+}
+
 // Segundos simulados de un parámetro `from` / `to` ya validado con TIME_RE.
 function simSecondsOf(value) {
   const full = value.length === 10 ? `${value}T00:00:00Z` : value.length === 16 ? `${value}:00Z` : `${value}Z`;
@@ -157,6 +192,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         id: l.id, name: l.name, capacity: l.capacity, tracked: engine.parking.isTracked(l.id),
         occupancy: Math.round(engine.parking.occupancyOf(l, engine.simTime) * 1000) / 1000,
       })),
+      weather: CONFIG.weather.enabled ? observation(engine.simTime) : null,
+      holiday: CONFIG.holidays.enabled ? holidayCalendar.holidayAt(engine.simTime) : null,
       events: {
         boost: CONFIG.events.enabled ? Math.round(eventCalendar.boostAt(engine.simTime) * 1000) / 1000 : 0,
         active: (CONFIG.events.enabled ? eventCalendar.activeAt(engine.simTime) : []).map(({ event, intensity }) => ({
@@ -223,6 +260,48 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         'Content-Disposition': 'attachment; filename="eventos.csv"',
       });
       await pipeline(Readable.from(csvLines(EVENT_COLUMNS, rows)), res);
+      return undefined;
+    }
+
+    // Festivos entre dos fechas (por defecto, del día simulado actual a un año después).
+    if (method === 'GET' && pathname === '/api/holidays') {
+      const { simTime } = runtime.engine;
+      const bound = (key) => {
+        const value = url.searchParams.get(key);
+        if (value === null) return null;
+        if (!TIME_RE.test(value) || !Number.isFinite(simSecondsOf(value))) throw new HttpError(400, `${key} debe ser una fecha ISO (AAAA-MM-DD[THH:MM[:SS]])`);
+        return simSecondsOf(value);
+      };
+      const from = bound('from') ?? simTime;
+      const to = bound('to') ?? from + 365 * 86400;
+      if (to - from > 3 * MAX_EVENT_RANGE) throw new HttpError(400, 'El intervalo no puede superar 3 años');
+      const list = CONFIG.holidays.enabled && to > from ? holidayCalendar.holidaysBetween(from, to) : [];
+      return send(200, { simSeconds: simTime, holidays: list.map(({ date, name }) => ({ date, name })) });
+    }
+
+    // Tiempo ahora y previsión horaria a 48 h (el tiempo futuro real no se publica).
+    if (method === 'GET' && pathname === '/api/weather') {
+      if (!CONFIG.weather.enabled) throw new HttpError(404, 'El tiempo está desactivado');
+      const { simTime } = runtime.engine;
+      const hours = url.searchParams.get('hours');
+      const limit = hours === null ? CONFIG.weather.forecast.hours : Number(hours);
+      if (!Number.isInteger(limit) || limit < 1 || limit > CONFIG.weather.forecast.hours) throw new HttpError(400, `hours debe ser un entero de 1 a ${CONFIG.weather.forecast.hours}`);
+      return send(200, {
+        simSeconds: simTime, current: observation(simTime),
+        conditions: Object.fromEntries(Object.entries(CONDITIONS).map(([id, c]) => [id, c.label])),
+        forecast: weather.forecast(simTime, limit).map(forecastEntry),
+      });
+    }
+
+    // Tiempo observado hora a hora (para entrenar modelos).
+    if (method === 'GET' && pathname === '/api/weather.csv') {
+      if (!CONFIG.weather.enabled) throw new HttpError(404, 'El tiempo está desactivado');
+      const rows = [...observedRows(url, runtime.engine.simTime)];
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="tiempo.csv"',
+      });
+      await pipeline(Readable.from(csvLines(WEATHER_COLUMNS, rows)), res);
       return undefined;
     }
 

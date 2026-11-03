@@ -8,7 +8,7 @@ import { Runtime } from '../server/runtime.js';
 import { createApp } from '../server/app.js';
 import { ApiClient } from '../src/api/client.js';
 import { poisson, PEDESTRIAN_COLUMNS } from '../src/sensors/pedestrianSensors.js';
-import { demandFactor } from '../src/traffic/demand.js';
+import { pedestrianDemand } from '../src/traffic/demand.js';
 import { pedestrianDensity } from '../src/pedestrians/pedestrians.js';
 
 // Anillo cuadrado de 500 m (calles residenciales, dos sentidos); el paso de peatones está cerca del sensor de (0, -250).
@@ -40,7 +40,7 @@ test('the flow model matches the pedestrians that the agents produce', () => {
   const s = pedSensors.add(0, -250);
   assert.equal(s.edges.length, 2, 'los dos sentidos de la calle');
   const t = 3 * 86400 + 8 * HOUR; // laborable, hora punta
-  const density = pedestrianDensity(demandFactor(t, 'weekday'));
+  const density = pedestrianDensity(pedestrianDemand(t, 'weekday'));
 
   // Peatones dentro del radio del sensor, promediados a lo largo de muchos paseos distintos.
   let sum = 0;

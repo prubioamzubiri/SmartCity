@@ -70,7 +70,7 @@ test('bus records follow the demand: more buses and passengers at the peak than 
   const engine = newEngine();
   engine.busTracker.setAll(true);
   const at = (hour) => {
-    engine.simTime = 24 * 3600 + hour * 3600; // martes
+    engine.simTime = 2 * 24 * 3600 + hour * 3600; // miércoles (el martes 6 de enero es festivo)
     engine.busTracker.nextSample = engine.simTime;
     engine.advanceTo(engine.simTime + INTERVAL);
     const rows = engine.drainRecords().buses;

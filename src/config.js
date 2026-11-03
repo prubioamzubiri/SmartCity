@@ -10,8 +10,21 @@ export const CONFIG = {
     baseDate: Date.UTC(2026, 0, 5), // lunes
   },
 
+  // Festivos de Donostia (nacionales, del País Vasco y locales): fecha fija [mes, día, nombre] y relativos a la Pascua
+  // [días respecto al Domingo de Resurrección, nombre]. Un festivo en domingo no se traslada.
+  holidays: {
+    enabled: true,
+    fixed: [
+      [1, 1, 'Año Nuevo'], [1, 6, 'Epifanía del Señor'], [1, 20, 'San Sebastián'], [3, 19, 'San José'],
+      [5, 1, 'Día del Trabajo'], [7, 25, 'Santiago Apóstol'], [7, 31, 'San Ignacio de Loyola'], [8, 15, 'Asunción de la Virgen'],
+      [10, 12, 'Fiesta Nacional de España'], [11, 1, 'Todos los Santos'], [12, 6, 'Día de la Constitución'],
+      [12, 8, 'Inmaculada Concepción'], [12, 25, 'Navidad'],
+    ],
+    easter: [[-3, 'Jueves Santo'], [-2, 'Viernes Santo'], [1, 'Lunes de Pascua']],
+  },
+
   traffic: {
-    scenario: 'auto', // auto, weekday o weekend
+    scenario: 'auto', // auto, weekday, preholiday, weekend o sunday
     dailyVariation: 0.1, // variación determinista ±10%; 0 para desactivarla
     scenarios: {
       weekday: {
@@ -21,11 +34,28 @@ export const CONFIG = {
           0.7, 0.7, 0.65, 0.65, 0.8, 0.95, 1.0, 0.8, 0.5, 0.3, 0.18, 0.1,
         ],
       },
+      // Víspera de festivo: los viajes de la tarde salen antes y por la noche hay más gente de ocio.
+      preholiday: {
+        multiplier: 1.15,
+        hourly: [
+          0.1, 0.06, 0.04, 0.03, 0.05, 0.15, 0.4, 0.85, 1.0, 0.75, 0.6, 0.6,
+          0.7, 0.85, 0.9, 0.9, 1.0, 1.0, 1.0, 0.95, 0.8, 0.65, 0.45, 0.3,
+        ],
+      },
+      // Sábado, y domingo o festivo si el día siguiente tampoco es laborable: más movimiento de ocio y compras.
       weekend: {
-        multiplier: 0.65,
+        multiplier: 0.85,
         hourly: [
           0.15, 0.1, 0.07, 0.05, 0.04, 0.05, 0.1, 0.2, 0.35, 0.55, 0.75, 0.9,
-          1.0, 0.95, 0.85, 0.8, 0.85, 0.95, 1.0, 0.9, 0.75, 0.55, 0.35, 0.22,
+          1.0, 0.95, 0.85, 0.8, 0.85, 0.95, 1.0, 0.95, 0.85, 0.7, 0.55, 0.4,
+        ],
+      },
+      // Domingo o festivo con el día siguiente laborable: por la tarde cada uno se queda en casa.
+      sunday: {
+        multiplier: 0.65,
+        hourly: [
+          0.1, 0.07, 0.05, 0.04, 0.03, 0.03, 0.05, 0.1, 0.2, 0.4, 0.6, 0.75,
+          0.8, 0.65, 0.4, 0.25, 0.2, 0.2, 0.25, 0.3, 0.25, 0.15, 0.1, 0.08,
         ],
       },
     },
@@ -64,6 +94,33 @@ export const CONFIG = {
       jazz: { label: 'Jazzaldia', icon: '🎷', color: '#26a69a', duration: 8, lead: 2, trail: 1 },
       protest: { label: 'Manifestación', icon: '📢', color: '#e0e0e0', duration: 2, lead: 1, trail: 1 },
     },
+  },
+
+  // Tiempo atmosférico (determinista por fecha, como los eventos): la lluvia y la temperatura cambian cuánta gente sale
+  // y a qué velocidad circulan los coches. El servidor publica lo observado hasta ahora y una previsión a 48 h con
+  // un error que crece con el plazo; el tiempo futuro real no se publica.
+  weather: {
+    enabled: true,
+    seed: 20260105,
+    // Clima típico de Donostia por mes (enero a diciembre): temperatura media (°C) y fracción de horas con lluvia.
+    meanTemp: [9.5, 9.8, 11.5, 12.8, 15.8, 18.8, 21, 21.4, 19.5, 16.5, 12.5, 10.2],
+    rainShare: [0.17, 0.16, 0.15, 0.17, 0.15, 0.11, 0.09, 0.1, 0.13, 0.16, 0.18, 0.18],
+    dailyRange: 4, // °C de oscilación entre la noche y la tarde con el cielo despejado
+    anomaly: 2.8, // °C de variación entre unos días y otros
+    rainScale: 2.4, // mm/h por cada unidad que la variable de lluvia supera el umbral del mes
+    heavyRain: 2, // mm/h con los que el efecto de la lluvia es máximo
+    // Efecto sobre la actividad (1 = el máximo de la lluvia o del buen tiempo).
+    effects: {
+      carsRain: 0.2, // más coches (y más usuarios de autobús y aparcamiento) con lluvia
+      speedRain: 0.18, // los coches circulan más despacio con lluvia
+      pedestriansRain: 0.6, // menos peatones con lluvia
+      bikesRain: 0.85, // y casi nadie en bici
+      sun: 0.15, // más peatones con sol y temperatura agradable (12–32 °C)
+      bikesSun: 1.5, // las bicis responden más al buen tiempo que los peatones
+      cold: 0.2, // menos gente por debajo de 8 °C
+    },
+    // Previsión: error de la variable de lluvia (σ = base + perHour × plazo) y de la temperatura (°C).
+    forecast: { hours: 48, rainBase: 0.08, rainPerHour: 0.011, tempBase: 0.5, tempPerHour: 0.025 },
   },
 
   cars: {

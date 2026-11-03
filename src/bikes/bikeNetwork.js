@@ -1,5 +1,5 @@
 import { CONFIG } from '../config.js';
-import { demandFactor, simDate } from '../traffic/demand.js';
+import { bikeDemand, simDate } from '../traffic/demand.js';
 import { createRng } from '../core/random.js';
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -116,7 +116,7 @@ export class BikeNetwork {
     const C = CONFIG.bicycles;
     this.applyChanges(time);
     const rng = createRng(hash(`${Math.round(time / this.stepSeconds)}:${CONFIG.sim.seed}`));
-    const demand = demandFactor(time, this.getParams().scenario);
+    const demand = bikeDemand(time, this.getParams().scenario);
     for (let i = 0; i < this.count; i++) {
       const lambda = (C.takesPerHour * this.stationList[i].weight * (this.stationList[i].capacity / DEFAULT_CAPACITY) * demand * this.stepSeconds) / 3600;
       const taken = Math.min(this.docked[i], poisson(lambda, rng));

@@ -186,24 +186,42 @@ Variables de entorno principales (`SMARTCITY_TOKEN`, `DB_FILE`, `PORT`,
 
 ## Traffic scenarios
 
-In the **Tráfico** panel, choose **Automático (calendario)**, **Laborable**, or
-**Fin de semana**. Automatic mode uses the simulated UTC date: Monday–Friday
-selects the weekday scenario; Saturday–Sunday selects the weekend scenario.
-Forcing a scenario keeps that demand profile across calendar changes without
-changing the clock. The selection is sent to the server (it needs the token if one
-is set) and takes effect on its next physics step.
+In the **Tráfico** panel, choose **Automático (calendario y festivos)** or force a scenario:
+**Laborable**, **Víspera de festivo**, **Fin de semana** or **Domingo o festivo (mañana laborable)**.
+Automatic mode uses the simulated UTC date and the holiday calendar of Donostia
+(`CONFIG.holidays`: national, Basque and local holidays, with Jueves Santo, Viernes Santo and Lunes de
+Pascua computed for each year; a holiday on a Sunday is not moved). Each day gets one scenario:
+
+| Scenario | Days | Demand |
+| --- | --- | --- |
+| `weekday` | Monday–Friday, normal | the commuting peaks |
+| `preholiday` | a working day before a holiday | same morning, more trips in the afternoon and more people out at night (×1.15) |
+| `weekend` | Saturdays; Sundays and holidays when the next day is not a working day | more leisure and shopping, with a busy evening (×0.85) |
+| `sunday` | Sundays and holidays (Monday–Friday) when the next day is a working day | a morning outing, then a very quiet afternoon: everybody stays at home (×0.65) |
+
+Examples: Monday 5 January 2026 is `preholiday` (6 January is a holiday), the holiday itself is `sunday`,
+the Sunday before 12 October is `weekend`, and in Semana Santa Wednesday is `preholiday`, Thursday to Sunday
+are `weekend` and Easter Monday is `sunday`. The calendar panel marks the holidays in red and describes the
+kind of day selected, and the **Escenario activo** line shows the holiday name. Forcing a scenario keeps that
+demand profile across calendar changes without changing the clock. The selection is sent to the server (it
+needs the token if one is set) and takes effect on its next physics step.
+
+`GET /api/holidays?from=&to=` lists the holidays of a range (by default the next 365 days, up to 3 years) and
+`GET /api/state` has `holiday` (the name, or `null`). Set `CONFIG.holidays.enabled = false` to go back to
+Monday–Friday / Saturday–Sunday.
 
 Edit `CONFIG.traffic` in `src/config.js` to configure:
 
-- `scenario`: initial selection (`auto`, `weekday`, or `weekend`).
+- `scenario`: initial selection (`auto`, `weekday`, `preholiday`, `weekend` or `sunday`).
 - `dailyVariation`: deterministic daily variation from 0 to 1 (default 0.1,
   or ±10%); set to 0 for exact, repeatable profile comparisons.
-- `scenarios.weekday` and `scenarios.weekend`: each has `hourly`, exactly 24
+- `scenarios.weekday`, `scenarios.weekend` and, optionally, `scenarios.preholiday` and `scenarios.sunday`
+  (without them the eve of a holiday is a weekday and the Sunday a weekend): each has `hourly`, exactly 24
   finite numbers between 0 and 1 for UTC hours 00:00–23:00, and `multiplier`,
   a finite non-negative intensity factor. A multiplier of 0 disables demand.
 
 The weekday curve retains the original commute peaks. The weekend curve has
-later daytime peaks and a default multiplier of 0.65. These are illustrative
+later daytime peaks, a busy evening and a default multiplier of 0.85. These are illustrative
 profiles, not calibrated traffic measurements. Values interpolate linearly
 between hours, including from 23:00 to that profile's 00:00. Automatic mode
 switches profiles at midnight; daily variation also changes then.
@@ -259,6 +277,36 @@ finished, `attendance` and `extra_demand`; for the rest those cells are empty, s
 trained on the past and has to predict the attendance of what is coming.
 The calendar panel links to the API documentation (`CONFIG.events.docsUrl`, [DEPLOYMENT.md](DEPLOYMENT.md#api)).
 Set `CONFIG.events.enabled = false` to run without events.
+
+## Weather
+
+The **Tiempo** button (top right, next to the calendar) shows the weather now and the forecast for the
+next 48 simulated hours (every 3 hours: condition, temperature and probability of rain). The weather
+changes how many people go out and how fast cars drive:
+
+- Rain: more cars (and more bus and parking users) and slower traffic, fewer pedestrians and almost no
+  bikes. The effect grows with the rain up to `heavyRain` (2 mm/h).
+- Dry, sunny and mild days (12–32 °C): more pedestrians, and more bikes than pedestrians. Below 8 °C
+  there are fewer people out.
+
+Like the events, the weather (`src/weather/weather.js`, `CONFIG.weather`) is a pure function of the date
+and `weather.seed`, so the server and the viewer agree and there is no state to store. It follows a
+Donostia-like climate (monthly mean temperature and share of hours with rain, about 1,450 mm a year, fronts
+of one or two days with showers inside them, a daily temperature cycle). The coefficients of each effect
+(`CONFIG.weather.effects`) are not published by the API: the students have to find them in the data.
+
+The **forecast** is the real weather plus an error that grows with the lead time (`CONFIG.weather.forecast`)
+and that changes every 6 hours, when a new forecast is issued; close in time it is almost exact and 2 days
+ahead it is useful but wrong at times. The API only gives the weather already lived (`current`, the CSV)
+and the forecast, never the real future:
+
+- `GET /api/weather` (optional `hours=1..48`): `current` and the hourly `forecast`
+  (`temperature_c`, `rain_probability`, `rain_mm_h`, `cloud_pct`, `condition`, `lead_h`).
+- `GET /api/weather.csv?from=&to=` (or **CSV del tiempo** in the **Servidor** panel): the observed
+  weather hour by hour (by default the last 7 simulated days; hours that have not happened yet are left out).
+- `GET /api/state` has the current `weather`.
+
+Set `CONFIG.weather.enabled = false` to run without weather.
 
 ## Parking occupancy tracking
 

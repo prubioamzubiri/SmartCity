@@ -53,6 +53,10 @@ export class ApiClient {
     return this.request('/api/state');
   }
 
+  weather(hours) {
+    return this.request(`/api/weather${hours ? `?hours=${hours}` : ''}`);
+  }
+
   cars() {
     return this.request('/api/cars');
   }
@@ -111,7 +115,7 @@ export class ApiClient {
 
   // URL de descarga directa: el navegador hace streaming del CSV sin cargarlo en memoria.
   csvUrl(kind, { from, to, id, type } = {}) {
-    if (!['traffic', 'parking', 'pedestrians', 'buses', 'bikes', 'events'].includes(kind)) throw new Error('Tipo de CSV desconocido');
+    if (!['traffic', 'parking', 'pedestrians', 'buses', 'bikes', 'events', 'weather'].includes(kind)) throw new Error('Tipo de CSV desconocido');
     const query = new URLSearchParams();
     for (const [key, value] of [['from', from], ['to', to]]) {
       if (!value) continue;

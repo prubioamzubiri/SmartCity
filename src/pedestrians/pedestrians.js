@@ -1,5 +1,5 @@
 import { CONFIG } from '../config.js';
-import { demandFactor } from '../traffic/demand.js';
+import { pedestrianDemand } from '../traffic/demand.js';
 
 const P = CONFIG.pedestrians;
 const STRIDE = 5; // x, z, dirX, dirZ, clase de vía
@@ -65,7 +65,7 @@ export class Pedestrians {
     const clock = Math.min(P.clockScale, scale);
     this.simNow = simSeconds;
     this.simPerSecond = scale / clock;
-    this.update(((simSeconds * clock) / scale) * 1000, pedestrianDensity(demandFactor(simSeconds, scenario)), limit);
+    this.update(((simSeconds * clock) / scale) * 1000, pedestrianDensity(pedestrianDemand(simSeconds, scenario)), limit);
   }
 
   setBikeRiders(count) {
@@ -122,7 +122,7 @@ export class Pedestrians {
   //   crossPerWeight: peatones que cruzan un paso de peso 1 en una ventana de `slotSeconds`; uno de peso w, w veces más.
   //   onStreet: peatones en la calle en un instante (caminantes más los que están cruzando).
   flowAt(simSeconds, scenario, limit = this.max) {
-    const total = Math.min(limit, this.max) * pedestrianDensity(demandFactor(simSeconds, scenario));
+    const total = Math.min(limit, this.max) * pedestrianDensity(pedestrianDemand(simSeconds, scenario));
     const hasWalk = !!this.sidewalks;
     const hasCross = this.count > 0;
     const walkShare = hasWalk ? (hasCross ? this.walkFraction : 1) : 0;
