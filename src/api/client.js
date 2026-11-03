@@ -110,8 +110,8 @@ export class ApiClient {
   }
 
   // URL de descarga directa: el navegador hace streaming del CSV sin cargarlo en memoria.
-  csvUrl(kind, { from, to, id } = {}) {
-    if (!['traffic', 'parking', 'pedestrians', 'buses', 'bikes'].includes(kind)) throw new Error('Tipo de CSV desconocido');
+  csvUrl(kind, { from, to, id, type } = {}) {
+    if (!['traffic', 'parking', 'pedestrians', 'buses', 'bikes', 'events'].includes(kind)) throw new Error('Tipo de CSV desconocido');
     const query = new URLSearchParams();
     for (const [key, value] of [['from', from], ['to', to]]) {
       if (!value) continue;
@@ -119,6 +119,7 @@ export class ApiClient {
       query.set(key, value);
     }
     if (id) query.set('id', id);
+    if (type) query.set('type', type); // solo el CSV de eventos lo usa
     const qs = query.toString();
     return `${this.baseUrl}/api/${kind}.csv${qs ? `?${qs}` : ''}`;
   }

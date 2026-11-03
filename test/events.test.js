@@ -11,6 +11,8 @@ import { Store } from '../server/store.js';
 import { Runtime } from '../server/runtime.js';
 import { createApp } from '../server/app.js';
 import { monthGrid } from '../src/ui/eventCalendar.js';
+import { ApiClient } from '../src/api/client.js';
+import { EVENT_COLUMNS } from '../server/app.js';
 
 const HOUR = 3600;
 const DAY = 86400;
@@ -176,7 +178,8 @@ async function withServer(fn) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const get = async (path) => {
     const res = await fetch(`http://127.0.0.1:${server.address().port}${path}`);
-    return { status: res.status, body: await res.json() };
+    const csv = (res.headers.get('content-type') ?? '').startsWith('text/csv');
+    return { status: res.status, body: csv ? await res.text() : await res.json(), headers: res.headers };
   };
   try {
     await fn(get, runtime);
@@ -218,4 +221,43 @@ test('the API lists the events of a date range and the state reports those in pr
     runtime.engine.simTime = calendar.secondsOf(2026, 1, 3, 4);
     assert.deepEqual((await get('/api/state')).body.events, { boost: 0, active: [] });
   });
+});
+
+const parseCsv = (text) => {
+  const [header, ...lines] = text.trim().split('\n');
+  return lines.map((line) => Object.fromEntries(header.split(',').map((c, i) => [c, line.split(',')[i]])));
+};
+
+test('the events CSV exports a period and hides the attendance of the events that have not ended', async () => {
+  await withServer(async (get, runtime) => {
+    const fireworks = named(year(2026), 'fuegos');
+    const [done, running, future] = [fireworks[0], fireworks[1], fireworks[2]];
+    runtime.engine.simTime = running.start + 600;
+    const res = await get('/api/events.csv?from=2026-08-09&to=2026-08-13');
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-disposition'), /eventos\.csv/);
+    assert.equal(res.body.split('\n')[0], EVENT_COLUMNS.join(','));
+    const rows = parseCsv(res.body).filter((r) => r.name.includes('fuegos'));
+    const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+    assert.equal(byId[done.id].status, 'finished');
+    assert.equal(byId[done.id].attendance, String(done.attendance));
+    assert.ok(Number(byId[done.id].extra_demand) > 0);
+    assert.equal(byId[running.id].status, 'in_progress');
+    assert.equal(byId[future.id].status, 'upcoming');
+    for (const hidden of [byId[running.id], byId[future.id]]) assert.deepEqual([hidden.attendance, hidden.extra_demand], ['', '']);
+
+    const films = parseCsv((await get('/api/events.csv?from=2026-09-01&to=2026-10-01&type=film')).body);
+    assert.equal(films.length, 9);
+    assert.ok(films.every((r) => r.type === 'film' && r.attendance === ''));
+    assert.equal((await get('/api/events?from=2026-09-01&to=2026-10-01&type=film')).body.events.length, 9);
+    assert.equal((await get('/api/events.csv?type=otro')).status, 400);
+    assert.equal((await get('/api/events.csv?from=ayer')).status, 400);
+    assert.equal((await get('/api/events.csv?from=2026-01-01&to=2028-01-01')).status, 400);
+  });
+});
+
+test('the client builds the events CSV url with its period and type', () => {
+  const api = new ApiClient({ baseUrl: 'https://x.test' });
+  assert.equal(api.csvUrl('events', { from: '2026-08-01', to: '2026-09-01', type: 'film' }), 'https://x.test/api/events.csv?from=2026-08-01&to=2026-09-01&type=film');
+  assert.equal(api.csvUrl('events'), 'https://x.test/api/events.csv');
 });

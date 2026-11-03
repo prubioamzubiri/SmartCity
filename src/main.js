@@ -135,7 +135,10 @@ async function main() {
   };
   const focusBikeStation = (station) => focusPoint(station.x, station.z);
   const eventView = new EventView(scene);
-  const eventPanel = createEventCalendarPanel({ focus: (x, z) => focusPoint(x, z, 900) });
+  const eventPanel = createEventCalendarPanel({
+    focus: (x, z) => focusPoint(x, z, 900),
+    csvUrl: (range) => sync.client?.csvUrl('events', range),
+  });
   const hud = createHud({
     sync, signals, localGraphKey: graphKey, setMode, getMode: () => mode, focusSignal,
     parking: { layer: parkingLayer, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked) },

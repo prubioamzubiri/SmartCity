@@ -152,3 +152,5 @@ html, body {
 .event-item button { margin-top: 4px; }
 .event-docs { display: block; margin-top: 10px; padding-top: 8px; border-top: 1px solid #243244; color: #8fb4dc; font-size: 12px; }
 .event-docs:hover { color: #bcd6f2; }
+.event-panel .event-export { margin-top: 6px; }
+.event-panel .event-export:disabled { opacity: 0.5; cursor: default; }

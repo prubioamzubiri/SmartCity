@@ -28,7 +28,7 @@ export function monthGrid(year, month, baseDate = CONFIG.sim.baseDate) {
 }
 
 // Botón arriba a la derecha que abre el calendario de eventos: un mes con los eventos de cada día y el detalle del día elegido.
-export function createEventCalendarPanel({ focus, calendar = eventCalendar, startSeconds = CONFIG.sim.startSeconds } = {}) {
+export function createEventCalendarPanel({ focus, csvUrl, calendar = eventCalendar, startSeconds = CONFIG.sim.startSeconds } = {}) {
   const root = el('div', { id: 'event-calendar' });
   document.body.append(root);
 
@@ -54,6 +54,15 @@ export function createEventCalendarPanel({ focus, calendar = eventCalendar, star
     }
   });
   root.append(toggle, panel);
+
+  // Descarga del servidor los eventos del mes que se ve (la asistencia solo viene de los ya terminados).
+  const exportMonth = () => {
+    const first = (year, month) => new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+    const next = new Date(Date.UTC(view.year, view.month + 1, 1));
+    const url = csvUrl?.({ from: first(view.year, view.month), to: first(next.getUTCFullYear(), next.getUTCMonth()) });
+    if (url) el('a', { href: url, download: '' }).click();
+  };
+  const exportButton = el('button', { class: 'event-export', textContent: '⬇ CSV de este mes', onclick: exportMonth });
 
   const ensureView = () => {
     if (view) return;
@@ -151,6 +160,8 @@ export function createEventCalendarPanel({ focus, calendar = eventCalendar, star
           },
         })),
       grid, legend, el('div', { class: 'event-detail' }, ...sections),
+      el('div', { class: 'status', textContent: 'Exporta los eventos del mes; la asistencia queda vacía hasta que el evento termina.' }),
+      exportButton,
       el('a', {
         class: 'event-docs', textContent: '📖 Documentación de la API (eventos y datos)',
         href: CONFIG.events.docsUrl, target: '_blank', rel: 'noopener noreferrer',
@@ -161,6 +172,7 @@ export function createEventCalendarPanel({ focus, calendar = eventCalendar, star
     // Hora simulada del servidor (o null sin conexión): marca el día de hoy y los eventos en curso.
     update(simSeconds) {
       nowSeconds = simSeconds ?? startSeconds;
+      exportButton.disabled = simSeconds === null; // sin servidor no hay de dónde descargar
       render();
     },
   };

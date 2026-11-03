@@ -251,6 +251,12 @@ the next 30 simulated days, up to 366 days) with start and end, venue, attendanc
 demand; `GET /api/state` has `events.active` and `events.boost` for the ones in progress.
 The `attendance` and `extraDemand` of an event are `null` (also in the panel) until it has ended, so
 the models have to predict it; the events' effect on the demand is measurable while it happens.
+To get the events of a period for analysis, use `GET /api/events.csv?from=2026-01-01&to=2027-01-01`
+(optional `type=football`), the **CSV de eventos** button of the **Servidor** panel (it uses its
+*Desde/Hasta* dates) or **⬇ CSV de este mes** in the calendar. The CSV has one row per event with its
+venue, coordinates, start, end, `status` (`upcoming`, `in_progress`, `finished`) and, only once it has
+finished, `attendance` and `extra_demand`; for the rest those cells are empty, so a model can be
+trained on the past and has to predict the attendance of what is coming.
 The calendar panel links to the API documentation (`CONFIG.events.docsUrl`, [DEPLOYMENT.md](DEPLOYMENT.md#api)).
 Set `CONFIG.events.enabled = false` to run without events.
 

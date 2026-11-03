@@ -93,6 +93,37 @@ function eventJson(event, simSeconds) {
   };
 }
 
+export const EVENT_COLUMNS = ['id', 'type', 'name', 'series', 'venue', 'venue_name', 'x', 'z', 'start', 'end', 'duration_h', 'status', 'attendance', 'extra_demand'];
+
+// Fila del CSV de eventos: `attendance` y `extra_demand` van vacíos hasta que el evento termina.
+function eventRow(event, simSeconds) {
+  const json = eventJson(event, simSeconds);
+  return {
+    id: json.id, type: json.type, name: json.name, series: json.series ?? '', venue: json.venue, venue_name: json.venueName,
+    x: json.x, z: json.z, start: json.start, end: json.end,
+    duration_h: Math.round(((event.end - event.start) / 3600) * 100) / 100,
+    status: event.end <= simSeconds ? 'finished' : event.start <= simSeconds ? 'in_progress' : 'upcoming',
+    attendance: json.attendance ?? '', extra_demand: json.extraDemand ?? '',
+  };
+}
+
+// Eventos que pide la URL (`from`, `to`, `type`): por defecto, los próximos 30 días simulados.
+function requestedEvents(url, simSeconds) {
+  const params = {};
+  for (const key of ['from', 'to']) {
+    const value = url.searchParams.get(key);
+    if (value === null) continue;
+    if (!TIME_RE.test(value) || !Number.isFinite(simSecondsOf(value))) throw new HttpError(400, `${key} debe ser una fecha ISO (AAAA-MM-DD[THH:MM[:SS]])`);
+    params[key] = simSecondsOf(value);
+  }
+  const from = params.from ?? simSeconds;
+  const to = params.to ?? from + 30 * 86400;
+  if (to - from > MAX_EVENT_RANGE) throw new HttpError(400, 'El intervalo no puede superar 366 días');
+  const type = url.searchParams.get('type');
+  if (type !== null && !Object.hasOwn(eventCalendar.types, type)) throw new HttpError(400, `type debe ser uno de: ${Object.keys(eventCalendar.types).join(', ')}`);
+  return eventCalendar.eventsBetween(from, to).filter((e) => type === null || e.type === type);
+}
+
 // Segundos simulados de un parámetro `from` / `to` ya validado con TIME_RE.
 function simSecondsOf(value) {
   const full = value.length === 10 ? `${value}T00:00:00Z` : value.length === 16 ? `${value}:00Z` : `${value}Z`;
@@ -180,17 +211,19 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
 
     // Calendario de eventos entre dos fechas (por defecto, los próximos 30 días simulados).
     if (method === 'GET' && pathname === '/api/events') {
-      const params = {};
-      for (const key of ['from', 'to']) {
-        const value = url.searchParams.get(key);
-        if (value === null) continue;
-        if (!TIME_RE.test(value) || !Number.isFinite(simSecondsOf(value))) throw new HttpError(400, `${key} debe ser una fecha ISO (AAAA-MM-DD[THH:MM[:SS]])`);
-        params[key] = simSecondsOf(value);
-      }
-      const from = params.from ?? runtime.engine.simTime;
-      const to = params.to ?? from + 30 * 86400;
-      if (to - from > MAX_EVENT_RANGE) throw new HttpError(400, 'El intervalo no puede superar 366 días');
-      return send(200, { simSeconds: runtime.engine.simTime, events: eventCalendar.eventsBetween(from, to).map((e) => eventJson(e, runtime.engine.simTime)) });
+      const { simTime } = runtime.engine;
+      return send(200, { simSeconds: simTime, events: requestedEvents(url, simTime).map((e) => eventJson(e, simTime)) });
+    }
+
+    if (method === 'GET' && pathname === '/api/events.csv') {
+      const { simTime } = runtime.engine;
+      const rows = requestedEvents(url, simTime).map((e) => eventRow(e, simTime));
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="eventos.csv"',
+      });
+      await pipeline(Readable.from(csvLines(EVENT_COLUMNS, rows)), res);
+      return undefined;
     }
 
     if (method === 'GET' && CSV_EXPORTS[pathname]) {
