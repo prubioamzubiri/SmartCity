@@ -2,6 +2,7 @@ import { el } from './dom.js';
 import { eventCalendar } from '../events/calendar.js';
 import { simDate } from '../traffic/demand.js';
 import { CONFIG } from '../config.js';
+import { holidayCalendar } from '../calendar/holidays.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
@@ -16,6 +17,13 @@ const clock = (seconds) => {
 const dayOf = (seconds) => Math.floor(seconds / 86400);
 const people = (n) => n.toLocaleString('es-ES');
 
+export const DAY_KINDS = {
+  weekday: 'Laborable',
+  preholiday: 'Víspera de festivo: más viajes por la tarde y más gente de ocio por la noche.',
+  weekend: 'Fin de semana (o festivo sin laborable al día siguiente): más movimiento de ocio y compras.',
+  sunday: 'Domingo o festivo con laborable al día siguiente: por la tarde, poco movimiento (cada uno en casa).',
+};
+
 // Las 42 casillas (semanas de lunes a domingo) del mes: `day` es el índice de día simulado, como en el calendario de eventos.
 export function monthGrid(year, month, baseDate = CONFIG.sim.baseDate) {
   const first = Date.UTC(year, month, 1);
@@ -28,7 +36,7 @@ export function monthGrid(year, month, baseDate = CONFIG.sim.baseDate) {
 }
 
 // Botón (en `bar`, arriba a la derecha) que abre en `host` el calendario de eventos: un mes con los eventos de cada día y el detalle del día elegido.
-export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = eventCalendar, startSeconds = CONFIG.sim.startSeconds } = {}) {
+export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = eventCalendar, holidays = holidayCalendar, startSeconds = CONFIG.sim.startSeconds } = {}) {
   let open = false;
   let view = null; // { year, month }
   let selectedDay = null;
@@ -114,13 +122,15 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
       byDay.get(d).push(event);
     }
 
+    const holidayOf = (day) => (CONFIG.holidays.enabled ? holidays.holidayAt(day * 86400 + 43200) : null);
     const grid = el('div', { class: 'event-grid' }, ...WEEKDAYS.map((w) => el('div', { class: 'event-weekday', textContent: w })));
     for (const cell of cells) {
       const events = byDay.get(cell.day) ?? [];
       const types = [...new Set(events.map((e) => e.type))].slice(0, MAX_DOTS);
+      const holiday = holidayOf(cell.day);
       const button = el('button', {
-        class: `event-day${cell.inMonth ? '' : ' outside'}${cell.day === today ? ' today' : ''}${cell.day === selectedDay ? ' selected' : ''}`,
-        title: events.length ? events.map((e) => e.name).join('\n') : '',
+        class: `event-day${cell.inMonth ? '' : ' outside'}${cell.day === today ? ' today' : ''}${cell.day === selectedDay ? ' selected' : ''}${holiday ? ' holiday' : ''}`,
+        title: [holiday ? `Festivo: ${holiday}` : '', ...events.map((e) => e.name)].filter(Boolean).join('\n'),
         onclick: () => {
           selectedDay = cell.day;
           render(true);
@@ -138,11 +148,17 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
     if (selectedDay !== null) {
       const d = new Date(CONFIG.sim.baseDate + selectedDay * DAY_MS);
       sections.push(el('h4', { textContent: `${d.getUTCDate()} de ${MONTHS[d.getUTCMonth()]}` }));
+      if (CONFIG.holidays.enabled) {
+        const holiday = holidayOf(selectedDay);
+        if (holiday) sections.push(el('div', { class: 'event-holiday', textContent: `🔴 Festivo: ${holiday}` }));
+        sections.push(el('div', { class: 'status', textContent: DAY_KINDS[holidays.kindAt(selectedDay * 86400 + 43200)] }));
+      }
       sections.push(...(dayEvents.length ? dayEvents.map(eventItem) : [el('div', { class: 'status', textContent: 'Sin eventos este día.' })]));
     }
 
     const legend = el('div', { class: 'legend' }, ...Object.values(calendar.types).map((t) =>
-      el('span', {}, el('i', { style: `background:${t.color}` }), `${t.icon} ${t.label}`)),);
+      el('span', {}, el('i', { style: `background:${t.color}` }), `${t.icon} ${t.label}`)),
+    ...(CONFIG.holidays.enabled ? [el('span', {}, el('i', { class: 'holiday-key' }), '🔴 Festivo')] : []));
 
     panel.replaceChildren(
       el('div', { class: 'event-head' },

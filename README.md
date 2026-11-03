@@ -186,24 +186,42 @@ Variables de entorno principales (`SMARTCITY_TOKEN`, `DB_FILE`, `PORT`,
 
 ## Traffic scenarios
 
-In the **Tráfico** panel, choose **Automático (calendario)**, **Laborable**, or
-**Fin de semana**. Automatic mode uses the simulated UTC date: Monday–Friday
-selects the weekday scenario; Saturday–Sunday selects the weekend scenario.
-Forcing a scenario keeps that demand profile across calendar changes without
-changing the clock. The selection is sent to the server (it needs the token if one
-is set) and takes effect on its next physics step.
+In the **Tráfico** panel, choose **Automático (calendario y festivos)** or force a scenario:
+**Laborable**, **Víspera de festivo**, **Fin de semana** or **Domingo o festivo (mañana laborable)**.
+Automatic mode uses the simulated UTC date and the holiday calendar of Donostia
+(`CONFIG.holidays`: national, Basque and local holidays, with Jueves Santo, Viernes Santo and Lunes de
+Pascua computed for each year; a holiday on a Sunday is not moved). Each day gets one scenario:
+
+| Scenario | Days | Demand |
+| --- | --- | --- |
+| `weekday` | Monday–Friday, normal | the commuting peaks |
+| `preholiday` | a working day before a holiday | same morning, more trips in the afternoon and more people out at night (×1.15) |
+| `weekend` | Saturdays; Sundays and holidays when the next day is not a working day | more leisure and shopping, with a busy evening (×0.85) |
+| `sunday` | Sundays and holidays (Monday–Friday) when the next day is a working day | a morning outing, then a very quiet afternoon: everybody stays at home (×0.65) |
+
+Examples: Monday 5 January 2026 is `preholiday` (6 January is a holiday), the holiday itself is `sunday`,
+the Sunday before 12 October is `weekend`, and in Semana Santa Wednesday is `preholiday`, Thursday to Sunday
+are `weekend` and Easter Monday is `sunday`. The calendar panel marks the holidays in red and describes the
+kind of day selected, and the **Escenario activo** line shows the holiday name. Forcing a scenario keeps that
+demand profile across calendar changes without changing the clock. The selection is sent to the server (it
+needs the token if one is set) and takes effect on its next physics step.
+
+`GET /api/holidays?from=&to=` lists the holidays of a range (by default the next 365 days, up to 3 years) and
+`GET /api/state` has `holiday` (the name, or `null`). Set `CONFIG.holidays.enabled = false` to go back to
+Monday–Friday / Saturday–Sunday.
 
 Edit `CONFIG.traffic` in `src/config.js` to configure:
 
-- `scenario`: initial selection (`auto`, `weekday`, or `weekend`).
+- `scenario`: initial selection (`auto`, `weekday`, `preholiday`, `weekend` or `sunday`).
 - `dailyVariation`: deterministic daily variation from 0 to 1 (default 0.1,
   or ±10%); set to 0 for exact, repeatable profile comparisons.
-- `scenarios.weekday` and `scenarios.weekend`: each has `hourly`, exactly 24
+- `scenarios.weekday`, `scenarios.weekend` and, optionally, `scenarios.preholiday` and `scenarios.sunday`
+  (without them the eve of a holiday is a weekday and the Sunday a weekend): each has `hourly`, exactly 24
   finite numbers between 0 and 1 for UTC hours 00:00–23:00, and `multiplier`,
   a finite non-negative intensity factor. A multiplier of 0 disables demand.
 
 The weekday curve retains the original commute peaks. The weekend curve has
-later daytime peaks and a default multiplier of 0.65. These are illustrative
+later daytime peaks, a busy evening and a default multiplier of 0.85. These are illustrative
 profiles, not calibrated traffic measurements. Values interpolate linearly
 between hours, including from 23:00 to that profile's 00:00. Automatic mode
 switches profiles at midnight; daily variation also changes then.

@@ -1,8 +1,11 @@
 import { CONFIG } from '../config.js';
 import { eventCalendar } from '../events/calendar.js';
 import { weather as cityWeather } from '../weather/weather.js';
+import { holidayCalendar } from '../calendar/holidays.js';
 
-const MODES = ['auto', 'weekday', 'weekend'];
+const MODES = ['auto', 'weekday', 'preholiday', 'weekend', 'sunday'];
+// Perfiles opcionales: sin ellos, la víspera de festivo es un laborable y el domingo, un fin de semana.
+const FALLBACK = { preholiday: 'weekday', sunday: 'weekend' };
 
 function validateMode(mode) {
   if (!MODES.includes(mode)) throw new Error(`Unknown traffic scenario: ${mode}`);
@@ -18,8 +21,9 @@ export function simDate(simSeconds) {
 
 // Validate and copy configuration once, outside the physics loop. With an event calendar, the people that
 // events bring to the city are added on top of the daily profile; with a weather model, rain and good weather
-// scale each kind of activity (cars and transit, pedestrians, bikes) differently.
-export function createDemandModel(config = CONFIG.traffic, baseDate = CONFIG.sim.baseDate, events = null, weather = null) {
+// scale each kind of activity (cars and transit, pedestrians, bikes) differently; with a holiday calendar, the automatic
+// mode picks the profile by kind of day (eve of a holiday, Sunday before a working day...) instead of Saturday/Sunday only.
+export function createDemandModel(config = CONFIG.traffic, baseDate = CONFIG.sim.baseDate, events = null, weather = null, holidays = null) {
   validateMode(config.scenario);
   if (!Number.isFinite(baseDate) || !Number.isFinite(new Date(baseDate).getTime())) {
     throw new Error('Traffic baseDate must be a valid timestamp');
@@ -29,8 +33,9 @@ export function createDemandModel(config = CONFIG.traffic, baseDate = CONFIG.sim
     throw new Error('Traffic dailyVariation must be between 0 and 1');
   }
   const profiles = {};
-  for (const name of ['weekday', 'weekend']) {
-    const profile = config.scenarios?.[name];
+  for (const name of ['weekday', 'weekend', 'preholiday', 'sunday']) {
+    const profile = config.scenarios?.[name] ?? (FALLBACK[name] ? null : undefined);
+    if (profile === null) continue;
     if (!Array.isArray(profile?.hourly) || profile.hourly.length !== 24 ||
         Array.from(profile.hourly).some((v) => !Number.isFinite(v) || v < 0 || v > 1)) {
       throw new Error(`Traffic ${name}.hourly must contain 24 numbers between 0 and 1`);
@@ -40,6 +45,7 @@ export function createDemandModel(config = CONFIG.traffic, baseDate = CONFIG.sim
     }
     profiles[name] = { hourly: [...profile.hourly], multiplier: profile.multiplier };
   }
+  for (const [name, fallback] of Object.entries(FALLBACK)) profiles[name] ??= profiles[fallback];
   const defaultMode = config.scenario;
   function dateAt(seconds) {
     const date = new Date(baseDate + seconds * 1000);
@@ -50,8 +56,9 @@ export function createDemandModel(config = CONFIG.traffic, baseDate = CONFIG.sim
   }
   function scenarioForTime(seconds, mode = defaultMode) {
     validateMode(mode);
+    if (mode !== 'auto') return mode;
     const day = dateAt(seconds).getUTCDay();
-    return mode === 'auto' ? (day === 0 || day === 6 ? 'weekend' : 'weekday') : mode;
+    return holidays ? holidays.kindAt(seconds) : day === 0 || day === 6 ? 'weekend' : 'weekday';
   }
   // Demanda del calendario (perfil del día, escenario y eventos), sin el efecto del tiempo.
   function baseDemand(seconds, mode = defaultMode) {
@@ -75,5 +82,5 @@ export function createDemandModel(config = CONFIG.traffic, baseDate = CONFIG.sim
 }
 
 export const { demandFactor, pedestrianDemand, bikeDemand, speedFactor, scenarioForTime } = createDemandModel(
-  CONFIG.traffic, CONFIG.sim.baseDate, CONFIG.events.enabled ? eventCalendar : null, CONFIG.weather.enabled ? cityWeather : null,
+  CONFIG.traffic, CONFIG.sim.baseDate, CONFIG.events.enabled ? eventCalendar : null, CONFIG.weather.enabled ? cityWeather : null, CONFIG.holidays.enabled ? holidayCalendar : null,
 );

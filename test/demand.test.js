@@ -37,7 +37,7 @@ test('explicit scenarios override the calendar and configured mode is respected'
   const config = settings();
   config.scenario = 'weekend';
   const model = createDemandModel(config);
-  close(model.demandFactor(8 * HOUR), 0.35 * 0.65);
+  close(model.demandFactor(8 * HOUR), CONFIG.traffic.scenarios.weekend.hourly[8] * CONFIG.traffic.scenarios.weekend.multiplier);
   close(model.demandFactor(5 * DAY + 8 * HOUR, 'weekday'), 1);
   close(model.demandFactor(8 * HOUR, 'auto'), 1);
 });
@@ -63,9 +63,10 @@ test('automatic mode switches curves at midnight; forced modes keep their curve'
   config.scenarios.weekend.hourly.fill(0.2);
   const model = createDemandModel(config);
   close(model.demandFactor(5 * DAY - 0.25), 0.8);
-  close(model.demandFactor(5 * DAY), 0.13);
+  const weekend = 0.2 * CONFIG.traffic.scenarios.weekend.multiplier;
+  close(model.demandFactor(5 * DAY), weekend);
   close(model.demandFactor(7 * DAY), 0.8);
-  close(model.demandFactor(7 * DAY, 'weekend'), 0.13);
+  close(model.demandFactor(7 * DAY, 'weekend'), weekend);
 });
 
 test('weekday defaults retain the original curve and deterministic daily variation', () => {

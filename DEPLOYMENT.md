@@ -77,6 +77,7 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 | `GET /api/events.csv?from=&to=&type=` | The same events as a CSV (`eventos.csv`), one row per event: `id`, `type`, `name`, `series`, `venue`, `venue_name`, `x`, `z`, `start`, `end`, `duration_h`, `status` (`upcoming`, `in_progress`, `finished`), `attendance`, `extra_demand`. The last two are empty until the event is `finished`, so a file never reveals the attendance of future events. `type` (optional) is one of `football`, `basketball`, `concert`, `film`, `fiesta`, `jazz`, `protest`; `GET /api/events` accepts it too |
 | `GET /api/weather?hours=` | Weather now (`current`: `time`, `temperature_c`, `rain_mm_h`, `cloud_pct`, `condition`) and the hourly forecast for the next 1–48 simulated hours (`forecast`: `time`, `lead_h`, `temperature_c`, `rain_probability`, `rain_mm_h`, `cloud_pct`, `condition`). The error of the forecast grows with `lead_h`; the real future weather is never published |
 | `GET /api/weather.csv?from=&to=` | Observed weather hour by hour (`tiempo.csv`: `time`, `temperature_c`, `rain_mm_h`, `cloud_pct`, `condition`). Default: the last 7 simulated days; hours after the simulated now are not included. `GET /api/state` also has `weather` (the current observation) |
+| `GET /api/holidays?from=&to=` | Holidays of the range (`holidays`: `date`, `name`; default: the next 365 days, max 3 years). `GET /api/state` has `holiday` (name of today's holiday or `null`). Days before and after a holiday change the demand, so use them as features |
 | `GET /api/cars` | Car positions (base64 typed arrays: `edge`, `pos`, `speed`) for the viewer |
 | `GET /api/pedestrians` | Pedestrians (walking along sidewalks or crossing at crossings) at the current simulated time, on their real-time clock (base64 `Float32Array`s `x`, `z`, `heading`, in scene metres). The viewer does not poll it: it computes the same pedestrians every frame from the server clock |
 | `GET /api/traffic.csv?from=&to=&id=` | Sensor records (`id` = sensor id, optional) |
@@ -94,7 +95,7 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 | `PUT /api/buses/tracked` `{ids: [...]}` | Bus lines to record (none by default) |
 | `PUT /api/bikes/capacity` `{changes: {"<station id>": docks, "<id>": null}}` | Change the docks (1-60) of stations; it takes effect after 30 simulated days (`pending` in `GET /api/bikes`), `null` cancels a pending change. Requires the token; all-or-nothing |
 | `PUT /api/bikes/tracked` `{ids: [...]}` | Bike stations to record (none by default) |
-| `PUT /api/params` `{maxCars, maxPedestrians, scenario}` | Traffic and pedestrian parameters |
+| `PUT /api/params` `{maxCars, maxPedestrians, scenario}` | Traffic and pedestrian parameters (`scenario`: `auto`, `weekday`, `preholiday`, `weekend`, `sunday`) |
 | `PUT /api/signals/plan` `{plan}` | Signal timing plan |
 
 ```sh

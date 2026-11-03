@@ -29,12 +29,13 @@ test('scenario changes drive existing population growth, reduction and capacity 
     assert.equal(sim.activeCount, 100);
 
     sim.setTarget(100 * demand.demandFactor(time, 'weekend'));
-    assert.equal(sim.targetCount, 23);
+    const weekend = Math.round(100 * CONFIG.traffic.scenarios.weekend.hourly[8] * CONFIG.traffic.scenarios.weekend.multiplier);
+    assert.equal(sim.targetCount, weekend);
     sim.step(CONFIG.sim.step);
     assert.equal(sim.activeCount, 80);
     for (let i = 0; i < 3; i++) sim.step(CONFIG.sim.step);
-    assert.equal(sim.activeCount, 23);
-    assert.equal(sim.edgeCars.reduce((sum, cars) => sum + (cars?.length ?? 0), 0), 23);
+    assert.equal(sim.activeCount, weekend);
+    assert.equal(sim.edgeCars.reduce((sum, cars) => sum + (cars?.length ?? 0), 0), weekend);
 
     config.scenarios.weekday.multiplier = 10;
     const highDemand = createDemandModel(config);

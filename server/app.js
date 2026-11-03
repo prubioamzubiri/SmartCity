@@ -1,6 +1,7 @@
 import { CONFIG } from '../src/config.js';
 import { eventCalendar } from '../src/events/calendar.js';
 import { weather, CONDITIONS } from '../src/weather/weather.js';
+import { holidayCalendar } from '../src/calendar/holidays.js';
 import { simDate } from '../src/traffic/demand.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
@@ -192,6 +193,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         occupancy: Math.round(engine.parking.occupancyOf(l, engine.simTime) * 1000) / 1000,
       })),
       weather: CONFIG.weather.enabled ? observation(engine.simTime) : null,
+      holiday: CONFIG.holidays.enabled ? holidayCalendar.holidayAt(engine.simTime) : null,
       events: {
         boost: CONFIG.events.enabled ? Math.round(eventCalendar.boostAt(engine.simTime) * 1000) / 1000 : 0,
         active: (CONFIG.events.enabled ? eventCalendar.activeAt(engine.simTime) : []).map(({ event, intensity }) => ({
@@ -259,6 +261,22 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
       });
       await pipeline(Readable.from(csvLines(EVENT_COLUMNS, rows)), res);
       return undefined;
+    }
+
+    // Festivos entre dos fechas (por defecto, del día simulado actual a un año después).
+    if (method === 'GET' && pathname === '/api/holidays') {
+      const { simTime } = runtime.engine;
+      const bound = (key) => {
+        const value = url.searchParams.get(key);
+        if (value === null) return null;
+        if (!TIME_RE.test(value) || !Number.isFinite(simSecondsOf(value))) throw new HttpError(400, `${key} debe ser una fecha ISO (AAAA-MM-DD[THH:MM[:SS]])`);
+        return simSecondsOf(value);
+      };
+      const from = bound('from') ?? simTime;
+      const to = bound('to') ?? from + 365 * 86400;
+      if (to - from > 3 * MAX_EVENT_RANGE) throw new HttpError(400, 'El intervalo no puede superar 3 años');
+      const list = CONFIG.holidays.enabled && to > from ? holidayCalendar.holidaysBetween(from, to) : [];
+      return send(200, { simSeconds: simTime, holidays: list.map(({ date, name }) => ({ date, name })) });
     }
 
     // Tiempo ahora y previsión horaria a 48 h (el tiempo futuro real no se publica).

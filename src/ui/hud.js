@@ -4,6 +4,7 @@ import { createServerPanel } from './serverPanel.js';
 import { loadColor } from '../transit/buses.js';
 import { demandFactor, scenarioForTime, simDate } from '../traffic/demand.js';
 import { CONDITIONS } from '../weather/weather.js';
+import { holidayCalendar } from '../calendar/holidays.js';
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -75,7 +76,10 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
     onchange: () => run((c) => c.setParams({ maxCars: Number(carsInput.value) })),
   });
   const statsLabel = el('div', { class: 'stats' });
-  const scenarioNames = { auto: 'Automático (calendario)', weekday: 'Laborable', weekend: 'Fin de semana' };
+  const scenarioNames = {
+    auto: 'Automático (calendario y festivos)', weekday: 'Laborable', preholiday: 'Víspera de festivo',
+    weekend: 'Fin de semana', sunday: 'Domingo o festivo (mañana laborable)',
+  };
   const scenarioSelect = el('select', {
     onchange: () => run((c) => c.setParams({ scenario: scenarioSelect.value })),
   }, ...Object.entries(scenarioNames).map(([value, textContent]) => el('option', { value, textContent })));
@@ -746,7 +750,8 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
       const mm = String(d.getUTCMinutes()).padStart(2, '0');
       clockLabel.textContent = `${WEEKDAYS[d.getUTCDay()]} ${d.toISOString().slice(0, 10)} ${hh}:${mm} (día ${day}) · ×${state.scale.toFixed(1)}`;
       clockNote.textContent = state.caughtUp ? 'Reloj virtual del servidor' : `Recuperando ${Math.round(state.behindSimSeconds / 3600)} h simuladas tras una parada`;
-      scenarioLabel.textContent = `Escenario activo: ${scenarioNames[scenarioForTime(t, state.params.scenario)]}`;
+      const holiday = CONFIG.holidays.enabled ? holidayCalendar.holidayAt(t) : null;
+      scenarioLabel.textContent = `Escenario activo: ${scenarioNames[scenarioForTime(t, state.params.scenario)]}${holiday ? ` · Festivo: ${holiday}` : ''}`;
       const w = state.weather;
       weatherLabel.textContent = w ? `Tiempo: ${CONDITIONS[w.condition].icon} ${CONDITIONS[w.condition].label}, ${w.temperature_c.toFixed(0)} °C (previsión arriba a la derecha)` : '';
       const events = state.events;

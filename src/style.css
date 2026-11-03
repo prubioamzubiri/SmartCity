@@ -165,3 +165,7 @@ html, body {
 .weather-table td:nth-child(3), .weather-table td:nth-child(4) { text-align: right; }
 .weather-table .rain { color: #4fc3f7; }
 .weather-table tr.day td { border-top: 2px solid #36506d; }
+#top-right button.event-day.holiday { background: #3a1d24; border-color: #7a3040; }
+#top-right button.event-day.holiday > span:first-child { color: #ff8a80; font-weight: 700; }
+.event-panel .legend i.holiday-key { background: #ff5252; }
+.event-holiday { margin-top: 2px; color: #ff8a80; font-weight: 600; }

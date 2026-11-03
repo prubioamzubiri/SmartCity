@@ -10,8 +10,21 @@ export const CONFIG = {
     baseDate: Date.UTC(2026, 0, 5), // lunes
   },
 
+  // Festivos de Donostia (nacionales, del País Vasco y locales): fecha fija [mes, día, nombre] y relativos a la Pascua
+  // [días respecto al Domingo de Resurrección, nombre]. Un festivo en domingo no se traslada.
+  holidays: {
+    enabled: true,
+    fixed: [
+      [1, 1, 'Año Nuevo'], [1, 6, 'Epifanía del Señor'], [1, 20, 'San Sebastián'], [3, 19, 'San José'],
+      [5, 1, 'Día del Trabajo'], [7, 25, 'Santiago Apóstol'], [7, 31, 'San Ignacio de Loyola'], [8, 15, 'Asunción de la Virgen'],
+      [10, 12, 'Fiesta Nacional de España'], [11, 1, 'Todos los Santos'], [12, 6, 'Día de la Constitución'],
+      [12, 8, 'Inmaculada Concepción'], [12, 25, 'Navidad'],
+    ],
+    easter: [[-3, 'Jueves Santo'], [-2, 'Viernes Santo'], [1, 'Lunes de Pascua']],
+  },
+
   traffic: {
-    scenario: 'auto', // auto, weekday o weekend
+    scenario: 'auto', // auto, weekday, preholiday, weekend o sunday
     dailyVariation: 0.1, // variación determinista ±10%; 0 para desactivarla
     scenarios: {
       weekday: {
@@ -21,11 +34,28 @@ export const CONFIG = {
           0.7, 0.7, 0.65, 0.65, 0.8, 0.95, 1.0, 0.8, 0.5, 0.3, 0.18, 0.1,
         ],
       },
+      // Víspera de festivo: los viajes de la tarde salen antes y por la noche hay más gente de ocio.
+      preholiday: {
+        multiplier: 1.15,
+        hourly: [
+          0.1, 0.06, 0.04, 0.03, 0.05, 0.15, 0.4, 0.85, 1.0, 0.75, 0.6, 0.6,
+          0.7, 0.85, 0.9, 0.9, 1.0, 1.0, 1.0, 0.95, 0.8, 0.65, 0.45, 0.3,
+        ],
+      },
+      // Sábado, y domingo o festivo si el día siguiente tampoco es laborable: más movimiento de ocio y compras.
       weekend: {
-        multiplier: 0.65,
+        multiplier: 0.85,
         hourly: [
           0.15, 0.1, 0.07, 0.05, 0.04, 0.05, 0.1, 0.2, 0.35, 0.55, 0.75, 0.9,
-          1.0, 0.95, 0.85, 0.8, 0.85, 0.95, 1.0, 0.9, 0.75, 0.55, 0.35, 0.22,
+          1.0, 0.95, 0.85, 0.8, 0.85, 0.95, 1.0, 0.95, 0.85, 0.7, 0.55, 0.4,
+        ],
+      },
+      // Domingo o festivo con el día siguiente laborable: por la tarde cada uno se queda en casa.
+      sunday: {
+        multiplier: 0.65,
+        hourly: [
+          0.1, 0.07, 0.05, 0.04, 0.03, 0.03, 0.05, 0.1, 0.2, 0.4, 0.6, 0.75,
+          0.8, 0.65, 0.4, 0.25, 0.2, 0.2, 0.25, 0.3, 0.25, 0.15, 0.1, 0.08,
         ],
       },
     },
