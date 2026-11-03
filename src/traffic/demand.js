@@ -1,4 +1,5 @@
 import { CONFIG } from '../config.js';
+import { eventCalendar } from '../events/calendar.js';
 
 const MODES = ['auto', 'weekday', 'weekend'];
 
@@ -14,8 +15,9 @@ export function simDate(simSeconds) {
   return new Date(CONFIG.sim.baseDate + simSeconds * 1000);
 }
 
-// Validate and copy configuration once, outside the physics loop.
-export function createDemandModel(config = CONFIG.traffic, baseDate = CONFIG.sim.baseDate) {
+// Validate and copy configuration once, outside the physics loop. With an event calendar, the people that
+// events bring to the city are added on top of the daily profile.
+export function createDemandModel(config = CONFIG.traffic, baseDate = CONFIG.sim.baseDate, events = null) {
   validateMode(config.scenario);
   if (!Number.isFinite(baseDate) || !Number.isFinite(new Date(baseDate).getTime())) {
     throw new Error('Traffic baseDate must be a valid timestamp');
@@ -57,9 +59,9 @@ export function createDemandModel(config = CONFIG.traffic, baseDate = CONFIG.sim
     const base = profile.hourly[hour] * (1 - fraction) + profile.hourly[(hour + 1) % 24] * fraction;
     const day = dayIndex(seconds);
     const noise = 1 - variation + 2 * variation * (Math.abs(Math.sin(day * 12.9898) * 43758.5453) % 1);
-    return base * profile.multiplier * noise;
+    return base * profile.multiplier * noise + (events ? events.boostAt(seconds) : 0);
   }
   return { demandFactor, scenarioForTime };
 }
 
-export const { demandFactor, scenarioForTime } = createDemandModel();
+export const { demandFactor, scenarioForTime } = createDemandModel(CONFIG.traffic, CONFIG.sim.baseDate, CONFIG.events.enabled ? eventCalendar : null);

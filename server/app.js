@@ -1,4 +1,6 @@
 import { CONFIG } from '../src/config.js';
+import { eventCalendar } from '../src/events/calendar.js';
+import { simDate } from '../src/traffic/demand.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -75,6 +77,59 @@ function exportFilters(url) {
   return filters;
 }
 
+const MAX_EVENT_RANGE = 366 * 86400;
+const iso = (seconds) => simDate(seconds).toISOString().slice(0, 19);
+
+// La asistencia y la demanda extra solo se publican cuando el evento ha terminado: antes hay que predecirlas.
+function eventJson(event, simSeconds) {
+  const venue = eventCalendar.venues[event.venue];
+  const over = event.end <= simSeconds;
+  return {
+    id: event.id, type: event.type, name: event.name, series: event.series,
+    venue: event.venue, venueName: venue.name, x: Math.round(event.x), z: Math.round(event.z),
+    start: iso(event.start), end: iso(event.end),
+    attendance: over ? event.attendance : null,
+    extraDemand: over ? Math.round(event.boost * 1000) / 1000 : null,
+  };
+}
+
+export const EVENT_COLUMNS = ['id', 'type', 'name', 'series', 'venue', 'venue_name', 'x', 'z', 'start', 'end', 'duration_h', 'status', 'attendance', 'extra_demand'];
+
+// Fila del CSV de eventos: `attendance` y `extra_demand` van vacíos hasta que el evento termina.
+function eventRow(event, simSeconds) {
+  const json = eventJson(event, simSeconds);
+  return {
+    id: json.id, type: json.type, name: json.name, series: json.series ?? '', venue: json.venue, venue_name: json.venueName,
+    x: json.x, z: json.z, start: json.start, end: json.end,
+    duration_h: Math.round(((event.end - event.start) / 3600) * 100) / 100,
+    status: event.end <= simSeconds ? 'finished' : event.start <= simSeconds ? 'in_progress' : 'upcoming',
+    attendance: json.attendance ?? '', extra_demand: json.extraDemand ?? '',
+  };
+}
+
+// Eventos que pide la URL (`from`, `to`, `type`): por defecto, los próximos 30 días simulados.
+function requestedEvents(url, simSeconds) {
+  const params = {};
+  for (const key of ['from', 'to']) {
+    const value = url.searchParams.get(key);
+    if (value === null) continue;
+    if (!TIME_RE.test(value) || !Number.isFinite(simSecondsOf(value))) throw new HttpError(400, `${key} debe ser una fecha ISO (AAAA-MM-DD[THH:MM[:SS]])`);
+    params[key] = simSecondsOf(value);
+  }
+  const from = params.from ?? simSeconds;
+  const to = params.to ?? from + 30 * 86400;
+  if (to - from > MAX_EVENT_RANGE) throw new HttpError(400, 'El intervalo no puede superar 366 días');
+  const type = url.searchParams.get('type');
+  if (type !== null && !Object.hasOwn(eventCalendar.types, type)) throw new HttpError(400, `type debe ser uno de: ${Object.keys(eventCalendar.types).join(', ')}`);
+  return eventCalendar.eventsBetween(from, to).filter((e) => type === null || e.type === type);
+}
+
+// Segundos simulados de un parámetro `from` / `to` ya validado con TIME_RE.
+function simSecondsOf(value) {
+  const full = value.length === 10 ? `${value}T00:00:00Z` : value.length === 16 ? `${value}:00Z` : `${value}Z`;
+  return (Date.parse(full) - CONFIG.sim.baseDate) / 1000;
+}
+
 // Listener HTTP de la API. Las lecturas son públicas; las escrituras exigen `Authorization: Bearer <token>`.
 export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
   const tokenHash = token ? digest(token) : null;
@@ -102,6 +157,12 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         id: l.id, name: l.name, capacity: l.capacity, tracked: engine.parking.isTracked(l.id),
         occupancy: Math.round(engine.parking.occupancyOf(l, engine.simTime) * 1000) / 1000,
       })),
+      events: {
+        boost: CONFIG.events.enabled ? Math.round(eventCalendar.boostAt(engine.simTime) * 1000) / 1000 : 0,
+        active: (CONFIG.events.enabled ? eventCalendar.activeAt(engine.simTime) : []).map(({ event, intensity }) => ({
+          ...eventJson(event, engine.simTime), intensity: Math.round(intensity * 100) / 100,
+        })),
+      },
       pedestrians: { expected: Math.round(engine.pedestrians.flowAt(engine.simTime, engine.params.scenario, engine.params.maxPedestrians).onStreet) },
       pedestrianSensors: engine.pedSensors.sensors.map((s) => ({
         id: s.id, name: s.name, x: Math.round(s.x * 10) / 10, z: Math.round(s.z * 10) / 10,
@@ -146,6 +207,23 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         simSeconds: engine.simTime,
         lines: engine.transit.lines.map((l, i) => ({ id: l.id, stops: l.stops.length, fleet: l.buses, tracked: engine.busTracker.isTracked(l.id), ...engine.buses.stats[i] })),
       });
+    }
+
+    // Calendario de eventos entre dos fechas (por defecto, los próximos 30 días simulados).
+    if (method === 'GET' && pathname === '/api/events') {
+      const { simTime } = runtime.engine;
+      return send(200, { simSeconds: simTime, events: requestedEvents(url, simTime).map((e) => eventJson(e, simTime)) });
+    }
+
+    if (method === 'GET' && pathname === '/api/events.csv') {
+      const { simTime } = runtime.engine;
+      const rows = requestedEvents(url, simTime).map((e) => eventRow(e, simTime));
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="eventos.csv"',
+      });
+      await pipeline(Readable.from(csvLines(EVENT_COLUMNS, rows)), res);
+      return undefined;
     }
 
     if (method === 'GET' && CSV_EXPORTS[pathname]) {

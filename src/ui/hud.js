@@ -79,8 +79,9 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
     onchange: () => run((c) => c.setParams({ scenario: scenarioSelect.value })),
   }, ...Object.entries(scenarioNames).map(([value, textContent]) => el('option', { value, textContent })));
   const scenarioLabel = el('div', { class: 'status' });
+  const eventsLabel = el('div', { class: 'status' });
   const trafficSection = section('Tráfico (servidor)',
-    el('label', {}, 'Escenario: ', scenarioSelect), scenarioLabel,
+    el('label', {}, 'Escenario: ', scenarioSelect), scenarioLabel, eventsLabel,
     el('label', {}, 'Coches en hora punta: ', carsLabel), carsInput, statsLabel);
 
   // Semáforos
@@ -744,6 +745,10 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
       clockLabel.textContent = `${WEEKDAYS[d.getUTCDay()]} ${d.toISOString().slice(0, 10)} ${hh}:${mm} (día ${day}) · ×${state.scale.toFixed(1)}`;
       clockNote.textContent = state.caughtUp ? 'Reloj virtual del servidor' : `Recuperando ${Math.round(state.behindSimSeconds / 3600)} h simuladas tras una parada`;
       scenarioLabel.textContent = `Escenario activo: ${scenarioNames[scenarioForTime(t, state.params.scenario)]}`;
+      const events = state.events;
+      eventsLabel.textContent = events?.active.length
+        ? `Eventos en curso: ${events.active.map((e) => e.name).join(', ')} · +${(events.boost * 100).toFixed(0)} % de demanda`
+        : 'Sin eventos en curso (calendario arriba a la derecha)';
       statsLabel.textContent = `Activos: ${state.cars} · Parados: ${state.traffic.stopped} · Vel. media: ${state.traffic.avgKmh.toFixed(1)} km/h · Demanda: ${(demandFactor(t, state.params.scenario) * 100).toFixed(0)}%`;
       const signalDate = simDate(t);
       for (const signal of signals.signals) {

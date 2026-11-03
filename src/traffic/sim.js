@@ -3,6 +3,7 @@ import { createRng } from '../core/random.js';
 import { fromBase64, toBase64 } from '../core/binary.js';
 
 const C = CONFIG.cars;
+const E = CONFIG.events;
 
 export class TrafficSim {
   constructor(graph, signals, onCross, { rng = createRng(CONFIG.sim.seed) } = {}) {
@@ -21,6 +22,8 @@ export class TrafficSim {
     this.sensorsByEdge = new Map();
     this.activeCount = 0;
     this.targetCount = 0;
+    this.attractors = []; // sedes de eventos en curso que atraen coches
+    this.venueEdges = new Map(); // id de la sede -> tramos cercanos (solo se calculan una vez)
     for (let i = 0; i < n; i++) this.factor[i] = 0.85 + this.rng() * 0.25;
   }
 
@@ -75,6 +78,61 @@ export class TrafficSim {
     this.targetCount = Math.max(0, Math.min(C.max, Math.round(n)));
   }
 
+  // Sedes de eventos [{ id, x, z, radius, weight }]: los coches nuevos aparecen cerca de ellas y los demás tienden a ir hacia allí.
+  setAttractors(list) {
+    this.attractors = list.map((a) => ({ ...a, pull: Math.min(1, a.weight) * E.steering, edges: this.edgesNear(a) }));
+  }
+
+  edgesNear({ id, x, z, radius }) {
+    let edges = this.venueEdges.get(id);
+    if (!edges) {
+      const g = this.g;
+      const near = [];
+      const roads = [];
+      for (let e = 0; e < g.edgeCount; e++) {
+        const mx = (g.nx[g.A[e]] + g.nx[g.B[e]]) / 2;
+        const mz = (g.nz[g.A[e]] + g.nz[g.B[e]]) / 2;
+        if (Math.hypot(mx - x, mz - z) > radius) continue;
+        near.push(e);
+        if (g.cls[e] > 0) roads.push(e); // sin autovías: no se aparca en ellas
+      }
+      edges = Int32Array.from(roads.length ? roads : near);
+      this.venueEdges.set(id, edges);
+    }
+    return edges;
+  }
+
+  spawnEdge() {
+    const list = this.attractors;
+    if (list.length) {
+      let total = 0;
+      for (const a of list) total += a.edges.length ? a.weight : 0;
+      if (total > 0 && this.rng() < Math.min(E.spawnShare, total)) {
+        let r = this.rng() * total;
+        for (const a of list) {
+          if (!a.edges.length) continue;
+          r -= a.weight;
+          if (r <= 0) return a.edges[(this.rng() * a.edges.length) | 0];
+        }
+      }
+    }
+    return this.randomEdge();
+  }
+
+  // Sesgo de elegir el tramo `c` por acercar el coche a la sede de un evento (1 = sin sesgo). Dentro de la
+  // mitad del radio ya no tira de ellos: se quedan por la zona.
+  pull(c) {
+    const g = this.g;
+    let factor = 1;
+    for (const a of this.attractors) {
+      const dB = Math.hypot(g.nx[g.B[c]] - a.x, g.nz[g.B[c]] - a.z);
+      if (dB < a.radius / 2) continue;
+      const toward = (Math.hypot(g.nx[g.A[c]] - a.x, g.nz[g.A[c]] - a.z) - dB) / Math.max(1, g.len[c]);
+      if (toward > 0) factor += a.pull * toward;
+    }
+    return factor;
+  }
+
   randomEdge() {
     const g = this.g;
     for (let tries = 0; tries < 6; tries++) {
@@ -115,7 +173,8 @@ export class TrafficSim {
   weight(e, c) {
     const g = this.g;
     const dot = g.ux[e] * g.ux[c] + g.uz[e] * g.uz[c];
-    return (1 + 3 * Math.max(0, dot)) * (5 - g.cls[c]);
+    const w = (1 + 3 * Math.max(0, dot)) * (5 - g.cls[c]);
+    return this.attractors.length ? w * this.pull(c) : w;
   }
 
   place(i, e) {
@@ -135,7 +194,7 @@ export class TrafficSim {
   }
 
   spawn(i) {
-    const e = this.randomEdge();
+    const e = this.spawnEdge();
     this.place(i, e);
     this.pos[i] = this.rng() * this.g.len[e];
     this.speed[i] = 0;
