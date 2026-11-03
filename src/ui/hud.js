@@ -3,6 +3,7 @@ import { el } from './dom.js';
 import { createServerPanel } from './serverPanel.js';
 import { loadColor } from '../transit/buses.js';
 import { demandFactor, scenarioForTime, simDate } from '../traffic/demand.js';
+import { CONDITIONS } from '../weather/weather.js';
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -80,8 +81,9 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
   }, ...Object.entries(scenarioNames).map(([value, textContent]) => el('option', { value, textContent })));
   const scenarioLabel = el('div', { class: 'status' });
   const eventsLabel = el('div', { class: 'status' });
+  const weatherLabel = el('div', { class: 'status' });
   const trafficSection = section('Tráfico (servidor)',
-    el('label', {}, 'Escenario: ', scenarioSelect), scenarioLabel, eventsLabel,
+    el('label', {}, 'Escenario: ', scenarioSelect), scenarioLabel, eventsLabel, weatherLabel,
     el('label', {}, 'Coches en hora punta: ', carsLabel), carsInput, statsLabel);
 
   // Semáforos
@@ -745,6 +747,8 @@ export function createHud({ sync, signals, localGraphKey, setMode, getMode, focu
       clockLabel.textContent = `${WEEKDAYS[d.getUTCDay()]} ${d.toISOString().slice(0, 10)} ${hh}:${mm} (día ${day}) · ×${state.scale.toFixed(1)}`;
       clockNote.textContent = state.caughtUp ? 'Reloj virtual del servidor' : `Recuperando ${Math.round(state.behindSimSeconds / 3600)} h simuladas tras una parada`;
       scenarioLabel.textContent = `Escenario activo: ${scenarioNames[scenarioForTime(t, state.params.scenario)]}`;
+      const w = state.weather;
+      weatherLabel.textContent = w ? `Tiempo: ${CONDITIONS[w.condition].icon} ${CONDITIONS[w.condition].label}, ${w.temperature_c.toFixed(0)} °C (previsión arriba a la derecha)` : '';
       const events = state.events;
       eventsLabel.textContent = events?.active.length
         ? `Eventos en curso: ${events.active.map((e) => e.name).join(', ')} · +${(events.boost * 100).toFixed(0)} % de demanda`

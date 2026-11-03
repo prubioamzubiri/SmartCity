@@ -66,6 +66,33 @@ export const CONFIG = {
     },
   },
 
+  // Tiempo atmosférico (determinista por fecha, como los eventos): la lluvia y la temperatura cambian cuánta gente sale
+  // y a qué velocidad circulan los coches. El servidor publica lo observado hasta ahora y una previsión a 48 h con
+  // un error que crece con el plazo; el tiempo futuro real no se publica.
+  weather: {
+    enabled: true,
+    seed: 20260105,
+    // Clima típico de Donostia por mes (enero a diciembre): temperatura media (°C) y fracción de horas con lluvia.
+    meanTemp: [9.5, 9.8, 11.5, 12.8, 15.8, 18.8, 21, 21.4, 19.5, 16.5, 12.5, 10.2],
+    rainShare: [0.17, 0.16, 0.15, 0.17, 0.15, 0.11, 0.09, 0.1, 0.13, 0.16, 0.18, 0.18],
+    dailyRange: 4, // °C de oscilación entre la noche y la tarde con el cielo despejado
+    anomaly: 2.8, // °C de variación entre unos días y otros
+    rainScale: 2.4, // mm/h por cada unidad que la variable de lluvia supera el umbral del mes
+    heavyRain: 2, // mm/h con los que el efecto de la lluvia es máximo
+    // Efecto sobre la actividad (1 = el máximo de la lluvia o del buen tiempo).
+    effects: {
+      carsRain: 0.2, // más coches (y más usuarios de autobús y aparcamiento) con lluvia
+      speedRain: 0.18, // los coches circulan más despacio con lluvia
+      pedestriansRain: 0.6, // menos peatones con lluvia
+      bikesRain: 0.85, // y casi nadie en bici
+      sun: 0.15, // más peatones con sol y temperatura agradable (12–32 °C)
+      bikesSun: 1.5, // las bicis responden más al buen tiempo que los peatones
+      cold: 0.2, // menos gente por debajo de 8 °C
+    },
+    // Previsión: error de la variable de lluvia (σ = base + perHour × plazo) y de la temperatura (°C).
+    forecast: { hours: 48, rainBase: 0.08, rainPerHour: 0.011, tempBase: 0.5, tempPerHour: 0.025 },
+  },
+
   cars: {
     max: 3000,
     initialMax: 1500,

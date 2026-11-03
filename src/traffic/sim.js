@@ -22,6 +22,7 @@ export class TrafficSim {
     this.sensorsByEdge = new Map();
     this.activeCount = 0;
     this.targetCount = 0;
+    this.speedScale = 1; // multiplicador de la velocidad de todos los coches (el tiempo: lluvia)
     this.attractors = []; // sedes de eventos en curso que atraen coches
     this.venueEdges = new Map(); // id de la sede -> tramos cercanos (solo se calculan una vez)
     for (let i = 0; i < n; i++) this.factor[i] = 0.85 + this.rng() * 0.25;
@@ -302,7 +303,7 @@ export class TrafficSim {
     for (let i = 0; i < this.activeCount; i++) {
       const gap = this.freeGap(i);
       const e0 = this.edge[i];
-      const vmax = g.speed[e0] * this.factor[i];
+      const vmax = g.speed[e0] * this.factor[i] * this.speedScale;
       const safe = gap === Infinity ? vmax : Math.sqrt(2 * C.decel * Math.max(0, gap - C.minGap));
       const v = Math.max(0, Math.min(this.speed[i] + C.accel * dt, vmax, safe));
       this.speed[i] = v;

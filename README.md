@@ -260,6 +260,36 @@ trained on the past and has to predict the attendance of what is coming.
 The calendar panel links to the API documentation (`CONFIG.events.docsUrl`, [DEPLOYMENT.md](DEPLOYMENT.md#api)).
 Set `CONFIG.events.enabled = false` to run without events.
 
+## Weather
+
+The **Tiempo** button (top right, next to the calendar) shows the weather now and the forecast for the
+next 48 simulated hours (every 3 hours: condition, temperature and probability of rain). The weather
+changes how many people go out and how fast cars drive:
+
+- Rain: more cars (and more bus and parking users) and slower traffic, fewer pedestrians and almost no
+  bikes. The effect grows with the rain up to `heavyRain` (2 mm/h).
+- Dry, sunny and mild days (12–32 °C): more pedestrians, and more bikes than pedestrians. Below 8 °C
+  there are fewer people out.
+
+Like the events, the weather (`src/weather/weather.js`, `CONFIG.weather`) is a pure function of the date
+and `weather.seed`, so the server and the viewer agree and there is no state to store. It follows a
+Donostia-like climate (monthly mean temperature and share of hours with rain, about 1,450 mm a year, fronts
+of one or two days with showers inside them, a daily temperature cycle). The coefficients of each effect
+(`CONFIG.weather.effects`) are not published by the API: the students have to find them in the data.
+
+The **forecast** is the real weather plus an error that grows with the lead time (`CONFIG.weather.forecast`)
+and that changes every 6 hours, when a new forecast is issued; close in time it is almost exact and 2 days
+ahead it is useful but wrong at times. The API only gives the weather already lived (`current`, the CSV)
+and the forecast, never the real future:
+
+- `GET /api/weather` (optional `hours=1..48`): `current` and the hourly `forecast`
+  (`temperature_c`, `rain_probability`, `rain_mm_h`, `cloud_pct`, `condition`, `lead_h`).
+- `GET /api/weather.csv?from=&to=` (or **CSV del tiempo** in the **Servidor** panel): the observed
+  weather hour by hour (by default the last 7 simulated days; hours that have not happened yet are left out).
+- `GET /api/state` has the current `weather`.
+
+Set `CONFIG.weather.enabled = false` to run without weather.
+
 ## Parking occupancy tracking
 
 In **Aparcamiento (OSM) → Ocupación registrada por el servidor**, tick the public

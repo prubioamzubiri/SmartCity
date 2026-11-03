@@ -29,6 +29,7 @@ import { ServerSync } from './api/serverSync.js';
 import { createHud } from './ui/hud.js';
 import { createEventCalendarPanel } from './ui/eventCalendar.js';
 import { EventView } from './events/eventView.js';
+import { createWeatherPanel } from './ui/weatherPanel.js';
 
 const loading = document.getElementById('loading');
 
@@ -135,7 +136,18 @@ async function main() {
   };
   const focusBikeStation = (station) => focusPoint(station.x, station.z);
   const eventView = new EventView(scene);
+  const topBar = document.createElement('div');
+  topBar.className = 'top-bar';
+  const topPanels = document.createElement('div');
+  topPanels.className = 'top-panels';
+  const topRight = document.createElement('div');
+  topRight.id = 'top-right';
+  topRight.append(topBar, topPanels);
+  document.body.append(topRight);
+  const weatherPanel = createWeatherPanel({ bar: topBar, host: topPanels, sync });
   const eventPanel = createEventCalendarPanel({
+    bar: topBar,
+    host: topPanels,
     focus: (x, z) => focusPoint(x, z, 900),
     csvUrl: (range) => sync.client?.csvUrl('events', range),
   });
@@ -275,6 +287,7 @@ async function main() {
     }
     eventView.update(simTime);
     eventPanel.update(simTime);
+    weatherPanel.update(sync.state?.weather ?? null);
     cars.update(now);
     carView.render();
     pedestrianView.render();

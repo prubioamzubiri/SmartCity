@@ -69,9 +69,10 @@ test('automatic mode switches curves at midnight; forced modes keep their curve'
 });
 
 test('weekday defaults retain the original curve and deterministic daily variation', () => {
+  const plain = createDemandModel(); // sin eventos ni tiempo: solo el perfil del día
   for (let day = 0; day < 5; day++) {
     const noise = 0.9 + 0.2 * (Math.abs(Math.sin(day * 12.9898) * 43758.5453) % 1);
-    close(demandFactor(day * DAY + 8 * HOUR), noise);
+    close(plain.demandFactor(day * DAY + 8 * HOUR), noise);
     assert.equal(demandFactor(day * DAY), demandFactor(day * DAY));
   }
   const model = createDemandModel(settings());

@@ -27,11 +27,8 @@ export function monthGrid(year, month, baseDate = CONFIG.sim.baseDate) {
   });
 }
 
-// Botón arriba a la derecha que abre el calendario de eventos: un mes con los eventos de cada día y el detalle del día elegido.
-export function createEventCalendarPanel({ focus, csvUrl, calendar = eventCalendar, startSeconds = CONFIG.sim.startSeconds } = {}) {
-  const root = el('div', { id: 'event-calendar' });
-  document.body.append(root);
-
+// Botón (en `bar`, arriba a la derecha) que abre en `host` el calendario de eventos: un mes con los eventos de cada día y el detalle del día elegido.
+export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = eventCalendar, startSeconds = CONFIG.sim.startSeconds } = {}) {
   let open = false;
   let view = null; // { year, month }
   let selectedDay = null;
@@ -53,7 +50,8 @@ export function createEventCalendarPanel({ focus, csvUrl, calendar = eventCalend
       render(true);
     }
   });
-  root.append(toggle, panel);
+  bar.append(toggle);
+  host.append(panel);
 
   // Descarga del servidor los eventos del mes que se ve (la asistencia solo viene de los ya terminados).
   const exportMonth = () => {
@@ -144,7 +142,7 @@ export function createEventCalendarPanel({ focus, csvUrl, calendar = eventCalend
     }
 
     const legend = el('div', { class: 'legend' }, ...Object.values(calendar.types).map((t) =>
-      el('span', {}, el('i', { style: `background:${t.color}` }), `${t.icon} ${t.label}`)));
+      el('span', {}, el('i', { style: `background:${t.color}` }), `${t.icon} ${t.label}`)),);
 
     panel.replaceChildren(
       el('div', { class: 'event-head' },
