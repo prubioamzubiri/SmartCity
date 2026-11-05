@@ -201,6 +201,8 @@ export const CONFIG = {
     headway: 300, // segundos entre autobuses que se buscan (sale el nº de autobuses por línea)
     minBuses: 4,
     maxBuses: 16,
+    minFleet: 1, // rango de autobuses por línea que se puede fijar desde la API
+    maxFleet: 30,
     clockScale: 12, // ritmo del reloj de los autobuses respecto al tiempo real; nunca supera la escala del servidor
     minService: 0.35, // fracción de la flota en servicio con la demanda mínima (con la máxima, toda)
     capacity: 80, // pasajeros por autobús

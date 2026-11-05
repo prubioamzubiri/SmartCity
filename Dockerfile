@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY src ./src
 COPY server ./server
+COPY docs ./docs
 # El servidor necesita el mapa: ejecuta "npm run fetch-osm" antes de construir la imagen.
 COPY public/data/city.json ./public/data/city.json
 COPY public/data/municipal.json ./public/data/municipal.json

@@ -113,6 +113,11 @@ export class ApiClient {
     return this.request('/api/bikes/tracked', { method: 'PUT', body: { ids } });
   }
 
+  // Guía de la API que publica el servidor (docs/API.md).
+  docsUrl() {
+    return `${this.baseUrl}/api/docs`;
+  }
+
   // URL de descarga directa: el navegador hace streaming del CSV sin cargarlo en memoria.
   csvUrl(kind, { from, to, id, type } = {}) {
     if (!['traffic', 'parking', 'pedestrians', 'buses', 'bikes', 'events', 'weather'].includes(kind)) throw new Error('Tipo de CSV desconocido');

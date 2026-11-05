@@ -278,6 +278,7 @@ async function main() {
       bikeStationView.update(sync.state?.bikes ?? null);
       pedestrians.setBikeRiders(sync.state?.bikes?.inUse ?? 0);
       pedestrians.updateAt(simTime, sync.state.params.scenario, sync.state.scale, sync.state.params.maxPedestrians);
+      buses.sync(sync.state.buses?.lines ?? []);
       buses.updateAt(simTime, sync.state.params.scenario, sync.state.scale);
     } else {
       pedestrians.activeCount = 0;

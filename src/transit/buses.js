@@ -44,7 +44,7 @@ export class Buses {
   constructor(transit, graph) {
     this.g = graph;
     this.lines = transit.lines;
-    this.max = this.lines.reduce((sum, l) => sum + l.buses, 0);
+    this.max = this.lines.length * Math.max(T.maxFleet, ...this.lines.map((l) => l.buses)); // sitio para la flota máxima de cada línea
     this.x = new Float32Array(this.max);
     this.z = new Float32Array(this.max);
     this.heading = new Float32Array(this.max);
@@ -54,6 +54,7 @@ export class Buses {
     this.dwelling = new Uint8Array(this.max);
     this.activeCount = 0;
     this.ranks = this.lines.map((l) => serviceRank(l.buses));
+    this.suspended = this.lines.map(() => false); // línea sin servicio porque su recorrido está cortado
     // Gente esperando en cada parada de cada línea (índice = offset de la línea + parada).
     this.stopOffset = [];
     let total = 0;
@@ -65,6 +66,31 @@ export class Buses {
     this.stats = this.lines.map(() => ({ active: 0, passengers: 0, full: 0, waiting: 0 }));
     this.demand = 0;
     this.scratch = {};
+  }
+
+  // Autobuses de una línea (entre minFleet y maxFleet): los que entran en servicio se recalculan al instante.
+  setFleet(li, count) {
+    const line = this.lines[li];
+    if (!line || !Number.isInteger(count) || count < T.minFleet || count > T.maxFleet) {
+      throw new RangeError(`La flota debe ser un entero entre ${T.minFleet} y ${T.maxFleet}`);
+    }
+    line.buses = count;
+    line.headway = line.cycle / count;
+    this.ranks[li] = serviceRank(count);
+  }
+
+  setSuspended(li, suspended) {
+    this.suspended[li] = suspended;
+  }
+
+  // Aplica la flota y las líneas suspendidas que publica el servidor (`state.buses.lines`).
+  sync(lines) {
+    lines.forEach(({ id, fleet, suspended }) => {
+      const li = this.lines.findIndex((l) => l.id === id);
+      if (li < 0) return;
+      if (Number.isInteger(fleet) && fleet !== this.lines[li].buses && fleet >= T.minFleet && fleet <= T.maxFleet) this.setFleet(li, fleet);
+      this.suspended[li] = !!suspended;
+    });
   }
 
   // Reloj de los autobuses: la hora simulada dividida por la escala del servidor y multiplicada por `clockScale`
@@ -82,7 +108,7 @@ export class Buses {
     this.lines.forEach((line, li) => {
       const stats = this.stats[li];
       stats.active = stats.passengers = stats.full = stats.waiting = 0;
-      const active = Math.min(line.buses, Math.ceil(line.buses * service));
+      const active = this.suspended[li] ? 0 : Math.min(line.buses, Math.ceil(line.buses * service));
       const us = [];
       for (let b = 0; b < line.buses; b++) {
         if (this.ranks[li][b] >= active) continue;

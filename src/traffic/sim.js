@@ -25,6 +25,10 @@ export class TrafficSim {
     this.speedScale = 1; // multiplicador de la velocidad de todos los coches (el tiempo: lluvia)
     this.attractors = []; // sedes de eventos en curso que atraen coches
     this.venueEdges = new Map(); // id de la sede -> tramos cercanos (solo se calculan una vez)
+    this.closed = new Uint8Array(graph.edgeCount); // 1 = tramo cortado a los coches
+    this.zone = new Int32Array(graph.edgeCount); // zona con límite de entrada a la que pertenece el tramo (0 = ninguna)
+    this.zoneLimit = new Map(); // zona -> coches que puede haber dentro como máximo
+    this.zoneCount = new Map(); // zona -> coches que hay dentro ahora
     for (let i = 0; i < n; i++) this.factor[i] = 0.85 + this.rng() * 0.25;
   }
 
@@ -69,6 +73,7 @@ export class TrafficSim {
     this.stuck.fill(0);
     if (state.stuck) this.stuck.set(fromBase64(state.stuck, Float32Array));
     this.edgeCars = new Array(this.g.edgeCount);
+    this.zoneCount.clear();
     this.activeCount = n;
     this.targetCount = state.targetCount;
     for (let i = 0; i < n; i++) this.place(i, this.edge[i]);
@@ -113,7 +118,10 @@ export class TrafficSim {
         for (const a of list) {
           if (!a.edges.length) continue;
           r -= a.weight;
-          if (r <= 0) return a.edges[(this.rng() * a.edges.length) | 0];
+          if (r <= 0) {
+            const e = a.edges[(this.rng() * a.edges.length) | 0];
+            return this.restricted(e) ? this.randomEdge() : e;
+          }
         }
       }
     }
@@ -134,13 +142,64 @@ export class TrafficSim {
     return factor;
   }
 
+  // Los coches nuevos no aparecen en tramos cortados ni dentro de zonas con límite de entrada.
+  restricted(e) {
+    return this.closed[e] === 1 || this.zone[e] !== 0;
+  }
+
   randomEdge() {
     const g = this.g;
     for (let tries = 0; tries < 6; tries++) {
       const e = (this.rng() * g.edgeCount) | 0;
-      if (this.rng() * 5 < 5 - g.cls[e] || tries === 5) return e;
+      if ((this.rng() * 5 < 5 - g.cls[e] || tries === 5) && !this.restricted(e)) return e;
     }
+    for (let e = 0; e < g.edgeCount; e++) if (!this.restricted(e)) return e;
     return 0;
+  }
+
+  // Un coche del tramo `from` puede pasar al `to` (from = -1: aparece de la nada). El límite de una zona se comprueba al
+  // elegir la ruta, así que los coches que ya la tienen elegida pueden pasarlo por unidades.
+  allows(from, to) {
+    if (this.closed[to] === 1) return false;
+    const z = this.zone[to];
+    if (z === 0 || (from >= 0 && this.zone[from] === z)) return true;
+    return (this.zoneCount.get(z) ?? 0) < this.zoneLimit.get(z);
+  }
+
+  // Tramos cortados y zonas de acceso restringido: { closed, zone, limits }. Con `evict`, los coches que están en un
+  // tramo cortado reaparecen en otro sitio y los que llevan una ruta que ya no se permite la recalculan.
+  setRestrictions({ closed, zone, limits }, { evict = true } = {}) {
+    this.closed = closed;
+    this.zone = zone;
+    this.zoneLimit = limits;
+    this.zoneCount.clear();
+    for (let e = 0; e < this.g.edgeCount; e++) {
+      const z = zone[e];
+      if (z !== 0 && this.edgeCars[e]) this.zoneCount.set(z, (this.zoneCount.get(z) ?? 0) + this.edgeCars[e].length);
+    }
+    if (!evict) return;
+    for (let i = 0; i < this.activeCount; i++) {
+      const e = this.edge[i];
+      if (closed[e] === 1) {
+        this.detach(i);
+        this.spawn(i);
+        continue;
+      }
+      let from = e;
+      let valid = true;
+      for (let k = 0; k < 3 && valid; k++) {
+        const to = this.next[i * 3 + k];
+        if (to < 0) break;
+        valid = closed[to] !== 1 && (zone[to] === 0 || zone[to] === zone[from]);
+        from = to;
+      }
+      if (valid) continue;
+      const n0 = this.chooseNext(e);
+      const n1 = this.chooseNext(n0);
+      this.next[i * 3] = n0;
+      this.next[i * 3 + 1] = n1;
+      this.next[i * 3 + 2] = this.chooseNext(n1);
+    }
   }
 
   chooseNext(e) {
@@ -160,7 +219,7 @@ export class TrafficSim {
       }
       total += this.weight(e, c);
     }
-    if (total === 0) return fallback;
+    if (total === 0) return fallback >= 0 && this.allows(e, fallback) ? fallback : -1;
     let r = this.rng() * total;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
@@ -168,10 +227,11 @@ export class TrafficSim {
       r -= this.weight(e, c);
       if (r <= 0) return c;
     }
-    return fallback;
+    return fallback >= 0 && this.allows(e, fallback) ? fallback : -1;
   }
 
   weight(e, c) {
+    if (!this.allows(e, c)) return 0;
     const g = this.g;
     const dot = g.ux[e] * g.ux[c] + g.uz[e] * g.uz[c];
     const w = (1 + 3 * Math.max(0, dot)) * (5 - g.cls[c]);
@@ -182,6 +242,8 @@ export class TrafficSim {
     const list = (this.edgeCars[e] ??= []);
     list.push(i);
     this.edge[i] = e;
+    const z = this.zone[e];
+    if (z !== 0) this.zoneCount.set(z, (this.zoneCount.get(z) ?? 0) + 1);
   }
 
   detach(i) {
@@ -191,6 +253,8 @@ export class TrafficSim {
     if (k >= 0) {
       list[k] = list[list.length - 1];
       list.pop();
+      const z = this.zone[this.edge[i]];
+      if (z !== 0) this.zoneCount.set(z, this.zoneCount.get(z) - 1);
     }
   }
 
