@@ -28,8 +28,15 @@ const csvSafe = (v) => {
 };
 
 function* csvLines(columns, rows) {
-  yield `${columns.join(',')}\n`;
-  for (const row of rows) yield `${columns.map((c) => csvSafe(row[c])).join(',')}\n`;
+  let chunk = `${columns.join(',')}\n`;
+  for (const row of rows) {
+    chunk += `${columns.map((c) => csvSafe(row[c])).join(',')}\n`;
+    if (chunk.length >= 65536) {
+      yield chunk;
+      chunk = '';
+    }
+  }
+  if (chunk) yield chunk;
 }
 
 const CSV_EXPORTS = {
@@ -312,6 +319,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="${filename}.csv"`,
       });
+      // El navegador muestra la descarga al recibir las cabeceras, no al llegar la primera fila.
+      res.flushHeaders();
       await pipeline(Readable.from(csvLines(columns, rows)), res);
       return undefined;
     }
