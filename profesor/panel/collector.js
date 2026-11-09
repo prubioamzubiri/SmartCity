@@ -220,14 +220,48 @@ export class Collector {
   }
 }
 
-async function defaultFetchText(url) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+// Explicaciones de los fallos de red más habituales (Node solo dice «fetch failed»).
+const NETWORK_HINTS = {
+  ECONNREFUSED: 'conexión rechazada: no hay nada escuchando en ese puerto (¿la ciudad está arrancada? ¿es su HTTP_PORT?)',
+  ENOTFOUND: 'no se encuentra ese nombre de equipo (en Linux, ¿falta extra_hosts? haz git pull y docker compose up -d)',
+  EAI_AGAIN: 'no se pudo resolver el nombre de equipo',
+  ETIMEDOUT: 'tiempo de espera agotado (¿un cortafuegos bloquea el puerto?)',
+  EHOSTUNREACH: 'equipo inalcanzable (¿un cortafuegos bloquea el puerto?)',
+  DEPTH_ZERO_SELF_SIGNED_CERT: 'certificado no válido: arranca la ciudad con DOMAIN=:80 y usa http://',
+  SELF_SIGNED_CERT_IN_CHAIN: 'certificado no válido: arranca la ciudad con DOMAIN=:80 y usa http://',
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'certificado no válido: arranca la ciudad con DOMAIN=:80 y usa http://',
+  ERR_TLS_CERT_ALTNAME_INVALID: 'el certificado es de otro dominio: usa la URL de su DOMAIN o arranca la ciudad con DOMAIN=:80',
+};
+
+export function describeFetchError(url, err) {
+  if (err.name === 'TimeoutError') return `${url}: no responde a tiempo`;
+  const code = err.cause?.code ?? err.code;
+  if (!code) return `${url}: ${err.cause?.message ?? err.message}`;
+  return `${url}: ${NETWORK_HINTS[code] ?? code}`;
+}
+
+async function request(url, timeoutMs) {
+  let res;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'manual' });
+  } catch (err) {
+    throw new Error(describeFetchError(url, err));
+  }
+  // Caddy con DOMAIN=localhost (o un dominio) redirige http:// a https:// en el puerto 443, que no es el de la ciudad.
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error(`${url}: redirige a ${res.headers.get('location') ?? 'otra dirección'}. Arranca la ciudad con DOMAIN=:80 para usar http://, o pon en PANEL_GROUPS su https://dominio`);
+  }
   if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
-  return res.text();
+  const type = res.headers.get('content-type') ?? '';
+  // Una página HTML en lugar de la API: la URL apunta al visor u otra web, no a la ciudad.
+  if (type.includes('text/html')) throw new Error(`${url}: devuelve una página web, no la API (¿es la URL base de la ciudad?)`);
+  return res;
+}
+
+async function defaultFetchText(url) {
+  return (await request(url, 60000)).text();
 }
 
 async function defaultFetch(url) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
-  return res.json();
+  return (await request(url, 15000)).json();
 }

@@ -156,3 +156,12 @@ test('the panel requires the password and serves the overview', async (t) => {
   assert.equal((await fetch(`${url}/data/overview`, { method: 'POST', headers: auth })).status, 405);
   assert.equal((await fetch(`${url}/health`)).status, 200);
 });
+
+test('network errors are explained instead of a bare "fetch failed"', async () => {
+  const { describeFetchError } = await import('../profesor/panel/collector.js');
+  const failed = (code) => Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error(code), { code }) });
+  assert.match(describeFetchError('http://x:1', failed('ECONNREFUSED')), /conexión rechazada/);
+  assert.match(describeFetchError('http://x:1', failed('ENOTFOUND')), /no se encuentra/);
+  assert.match(describeFetchError('https://x', failed('DEPTH_ZERO_SELF_SIGNED_CERT')), /DOMAIN=:80/);
+  assert.match(describeFetchError('http://x:1', failed('EWHATEVER')), /EWHATEVER/);
+});
