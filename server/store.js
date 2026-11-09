@@ -124,15 +124,33 @@ export class Store {
   }
 
   // Los límites `from` y `to` son marcas de tiempo simuladas ISO (from inclusivo, to exclusivo).
-  iterate(kind, { from, to, id } = {}) {
+  // Lee por lotes con consultas cortas (cada lote sigue donde acabó el anterior) en vez de dejar un cursor abierto
+  // durante toda la descarga mientras el simulador escribe en la misma conexión. Termina en la última fila que había
+  // al empezar, así que una exportación siempre acaba aunque sigan llegando filas.
+  *iterate(kind, { from, to, id } = {}, batch = 2000) {
     const { table, columns, idColumn } = TABLES[kind];
     const where = [];
     const args = [];
     if (from) { where.push('timestamp >= ?'); args.push(from); }
     if (to) { where.push('timestamp < ?'); args.push(to); }
     if (id && idColumn) { where.push(`${idColumn} = ?`); args.push(id); }
-    const sql = `SELECT ${columns.join(',')} FROM ${table}${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY timestamp, id`;
-    return this.db.prepare(sql).iterate(...args);
+    const lastId = this.db.prepare(`SELECT MAX(id) AS id FROM ${table}`).get().id ?? 0;
+    where.push('id <= ?');
+    args.push(lastId);
+    const base = `SELECT ${columns.join(',')}, timestamp AS _ts, id AS _id FROM ${table} WHERE ${where.join(' AND ')}`;
+    const first = this.db.prepare(`${base} ORDER BY timestamp, id LIMIT ?`);
+    const next = this.db.prepare(`${base} AND (timestamp, id) > (?, ?) ORDER BY timestamp, id LIMIT ?`);
+    let rows = first.all(...args, batch);
+    while (rows.length) {
+      const { _ts: lastTs, _id: lastRowId } = rows[rows.length - 1];
+      for (const row of rows) {
+        delete row._ts;
+        delete row._id;
+        yield row;
+      }
+      if (rows.length < batch) return;
+      rows = next.all(...args, lastTs, lastRowId, batch);
+    }
   }
 
   count(kind) {
