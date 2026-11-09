@@ -1,6 +1,7 @@
 // Métrica del profesor: compara la ciudad de un grupo con la ciudad de referencia (sin gestor) a la misma hora simulada.
 // Los alumnos solo deben conocer los criterios generales (tráfico, transporte público, bicis, parkings y coste de las
 // intervenciones), no los pesos ni la fórmula.
+// Los criterios: tráfico, viajes en coche, transporte público, bicis, parkings y coste de las intervenciones.
 
 export const BUCKET_SECONDS = 900; // los indicadores se agrupan en tramos de 15 min simulados
 export const ROWS_PER_BUCKET = 3; // /api/city.csv graba una fila cada 5 min: un tramo completo tiene 3
@@ -8,7 +9,7 @@ const BUCKET_HOURS = BUCKET_SECONDS / 3600;
 
 // Todo lo ajustable está aquí. Los pesos suman 1.
 export const METRIC = {
-  weights: { traffic: 0.3, transit: 0.25, fleet: 0.05, bikes: 0.1, parkings: 0.1, cost: 0.2 },
+  weights: { traffic: 0.2, trips: 0.2, transit: 0.25, fleet: 0.05, bikes: 0.1, parkings: 0.1, cost: 0.1 },
   clamp: 0.5, // cada componente aporta entre −50 % y +50 % de mejora
   // Peso de cada km de calle restringida: cortada (pedestrians_only o entry_limit 0), solo bus, acceso limitado.
   restrictionWeight: { closed: 1, bus_only: 0.6, limited: 0.4 },
@@ -17,7 +18,7 @@ export const METRIC = {
   reversalSeconds: 3600, // deshacer un cambio antes de 1 h simulada es una marcha atrás
   costFullPenaltyKm: 5, // con 5 km equivalentes de media el componente de coste llega a −50 %
   // Valores mínimos del denominador cuando la referencia es (casi) cero, como fracción de las horas de la ventana.
-  floors: { suspendedLineHours: 0.25, badStationHours: 1, saturatedLotHours: 0.5 },
+  floors: { suspendedLineHours: 0.25, badStationHours: 1, saturatedLotHours: 0.5, lostShare: 0.05, delayMinutes: 0.5 },
   capIfComponentBelow: -0.2, // si algún componente empeora más de un 20 %...
   cap: 60, // ...el índice no pasa de 60
   suspensionSeconds: 2 * 3600, // una línea suspendida más de 2 h seguidas...
@@ -28,7 +29,7 @@ export const METRIC = {
 // Nombres de los indicadores instantáneos que se guardan (sumas por tramo).
 export const INDICATORS = [
   'cars', 'stopped', 'speedXcars', 'busWaiting', 'busActive', 'busFull', 'busPassengers', 'suspendedLines',
-  'badStations', 'saturatedLots', 'restrictedKm', 'allRed',
+  'badStations', 'saturatedLots', 'restrictedKm', 'allRed', 'tripsDone', 'tripMinutes', 'delayMinutes', 'tripsLost',
 ];
 
 // Indicadores de una fila de GET /api/city.csv (el simulador la graba cada 5 min simulados, a horas exactas).
@@ -48,6 +49,11 @@ export function indicatorsOf(row) {
     saturatedLots: n('parkings_full'),
     restrictedKm: (n('closed_m') * w.closed + n('bus_only_m') * w.bus_only + n('limited_m') * w.limited) / 1000,
     allRed: n('signals_all_red'),
+    // Viajes del intervalo de la fila: se usan como cocientes (retraso por viaje, % perdidos).
+    tripsDone: n('trips_done'),
+    tripMinutes: n('trip_min') * n('trips_done'),
+    delayMinutes: n('delay_min') * n('trips_done'),
+    tripsLost: n('trips_lost'),
   };
 }
 
@@ -81,11 +87,15 @@ export function scoreWindow(group, ref, { reversals = 0, suspensions = 0 } = {})
 
   const speed = (t) => (t.cars > 0 ? t.speedXcars / t.cars : 0);
   const fullRatio = (t) => (t.busActive > 0 ? t.busFull / t.busActive : 0);
+  const delayPerTrip = (t) => (t.tripsDone > 0 ? t.delayMinutes / t.tripsDone : 0);
+  const lostShare = (t) => (t.tripsDone + t.tripsLost > 0 ? t.tripsLost / (t.tripsDone + t.tripsLost) : 0);
   const reversalsPerHour = reversals / hours;
   const costKm = g.restrictedKm / hours + METRIC.allRedKm * (g.allRed / hours) + METRIC.reversalKm * reversalsPerHour;
 
   const components = {
     traffic: (2 / 3) * lessIsBetter(g.stopped, r.stopped) + (1 / 3) * moreIsBetter(speed(g), speed(r)),
+    // Retraso medio de los viajes frente a ir sin tráfico ni cortes, y viajes que no se pudieron hacer.
+    trips: 0.5 * lessIsBetter(delayPerTrip(g), delayPerTrip(r), f.delayMinutes) + 0.5 * lessIsBetter(lostShare(g), lostShare(r), f.lostShare),
     transit:
       0.5 * lessIsBetter(g.busWaiting, r.busWaiting) +
       0.25 * lessIsBetter(fullRatio(g), fullRatio(r), 0.01) +
@@ -120,6 +130,9 @@ export function scoreWindow(group, ref, { reversals = 0, suspensions = 0 } = {})
     badStationHours: t.badStations,
     saturatedLotHours: t.saturatedLots,
     restrictedKmAvg: t.restrictedKm / hours,
+    delayPerTripMin: delayPerTrip(t),
+    tripMin: t.tripsDone > 0 ? t.tripMinutes / t.tripsDone : 0,
+    lostTripsPct: 100 * lostShare(t),
   });
   return {
     index: Math.max(0, Math.min(100, index)),

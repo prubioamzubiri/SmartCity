@@ -97,15 +97,16 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 </main>
 <div class="tip" id="tip"></div>
 <script>
-const COMPONENTS = { traffic: 'Tráfico', transit: 'Transporte público', fleet: 'Eficiencia de flota', bikes: 'Bicis', parkings: 'Parkings', cost: 'Coste intervenciones' };
+const COMPONENTS = { traffic: 'Tráfico', trips: 'Viajes en coche', transit: 'Transporte público', fleet: 'Eficiencia de flota', bikes: 'Bicis', parkings: 'Parkings', cost: 'Coste intervenciones' };
 const CHARTS = [
-  ['stopped', 'Coches parados', 0], ['avgKmh', 'Velocidad media (km/h)', 1], ['busWaiting', 'Personas esperando el autobús', 0],
+  ['stopped', 'Coches parados', 0], ['avgKmh', 'Velocidad media (km/h)', 1], ['delayPerTrip', 'Retraso medio por viaje (min)', 1], ['lostTripsPct', 'Viajes perdidos (%)', 1], ['busWaiting', 'Personas esperando el autobús', 0],
   ['fullBusPct', 'Autobuses llenos (%)', 0], ['badStations', 'Puestos de bici vacíos o llenos', 1], ['saturatedLots', 'Parkings ≥ 95 %', 1],
   ['restrictedKm', 'Calle restringida (km ponderados)', 2], ['busActive', 'Autobuses en servicio', 0],
 ];
 const KIND = { action: 'Acción', reversal: 'Marcha atrás', suspension: 'Suspensión larga', params: 'Parámetros', reset: 'Reinicio' };
 const ROWS = [
-  ['stoppedCarHours', 'Horas de coche parado', 0], ['avgKmh', 'Velocidad media (km/h)', 1], ['busWaitingPersonHours', 'Personas × h esperando bus', 0],
+  ['stoppedCarHours', 'Horas de coche parado', 0], ['avgKmh', 'Velocidad media (km/h)', 1], ['tripMin', 'Duración media del viaje (min)', 1],
+  ['delayPerTripMin', 'Retraso medio por viaje (min)', 1], ['lostTripsPct', 'Viajes perdidos (%)', 1], ['busWaitingPersonHours', 'Personas × h esperando bus', 0],
   ['fullBusPct', 'Autobuses llenos (%)', 1], ['suspendedLineHours', 'Líneas × h suspendidas', 1], ['busHours', 'Autobuses × h en servicio', 0],
   ['badStationHours', 'Puestos × h vacíos o llenos', 0], ['saturatedLotHours', 'Parkings × h saturados', 1], ['restrictedKmAvg', 'Km restringidos de media', 2],
 ];

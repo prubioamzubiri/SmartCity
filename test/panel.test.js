@@ -6,7 +6,7 @@ import { Collector, diffSnapshots, parseCsv } from '../profesor/panel/collector.
 import { CITY_COLUMNS } from '../src/sensors/cityTracker.js';
 import { createPanel, parseGroups, REFERENCE } from '../profesor/panel/server.js';
 
-const base = { cars: 1000, stopped: 100, speedXcars: 30000, busWaiting: 400, busActive: 40, busFull: 4, busPassengers: 2000, suspendedLines: 0, badStations: 10, saturatedLots: 3, restrictedKm: 0, allRed: 0 };
+const base = { cars: 1000, stopped: 100, speedXcars: 30000, busWaiting: 400, busActive: 40, busFull: 4, busPassengers: 2000, suspendedLines: 0, badStations: 10, saturatedLots: 3, restrictedKm: 0, allRed: 0, tripsDone: 100, tripMinutes: 1200, delayMinutes: 300, tripsLost: 1 };
 const times = (values, k) => Object.fromEntries(Object.entries(values).map(([key, v]) => [key, v * k]));
 const rows = (values, n = 24) => Array.from({ length: n }, (_, bucket) => ({ bucket, n: ROWS_PER_BUCKET, sums: times({ ...base, ...values }, ROWS_PER_BUCKET) }));
 
@@ -29,6 +29,16 @@ test('closing streets has a cost even if the indicators do not change', () => {
   const score = scoreWindow(rows({ restrictedKm: 10 }), rows({}));
   assert.equal(score.components.cost, -METRIC.clamp);
   assert.ok(score.index < 50);
+});
+
+test('longer trips and trips that cannot be made lower the index', () => {
+  const worse = scoreWindow(rows({ delayMinutes: 600, tripsLost: 20 }), rows({}));
+  assert.ok(worse.components.trips < -0.3, `componente de viajes ${worse.components.trips}`);
+  assert.ok(worse.index < 50);
+  assert.equal(Math.round(worse.group.delayPerTripMin), 6);
+  assert.ok(worse.group.lostTripsPct > 10);
+  const better = scoreWindow(rows({ delayMinutes: 150 }), rows({}));
+  assert.ok(better.components.trips > 0);
 });
 
 test('making one service much worse caps the index, and long suspensions are penalised', () => {

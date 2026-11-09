@@ -29,6 +29,8 @@ const derived = {
   badStations: (r) => mean(r, 'badStations'),
   saturatedLots: (r) => mean(r, 'saturatedLots'),
   restrictedKm: (r) => mean(r, 'restrictedKm'),
+  delayPerTrip: (r) => (r && r.sums.tripsDone > 0 ? r.sums.delayMinutes / r.sums.tripsDone : r ? 0 : null),
+  lostTripsPct: (r) => (r && r.sums.tripsDone + r.sums.tripsLost > 0 ? (100 * r.sums.tripsLost) / (r.sums.tripsDone + r.sums.tripsLost) : r ? 0 : null),
 };
 
 export function createPanel({ collector, groups, password, now = Date.now }) {
