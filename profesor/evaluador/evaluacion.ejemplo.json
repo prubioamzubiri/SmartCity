@@ -1,0 +1,14 @@
+{
+  "escenarios": [
+    { "nombre": "laborable-lluvia", "semilla": 48151, "inicio": "2026-11-17T00:00", "horas": 24 },
+    { "nombre": "sabado-evento", "semilla": 62342, "inicio": "2026-08-15T00:00", "horas": 24 },
+    { "nombre": "festivo", "semilla": 91827, "inicio": "2026-12-08T00:00", "horas": 24 }
+  ],
+  "grupos": [
+    { "nombre": "control", "carpeta": null },
+    { "nombre": "grupo1", "carpeta": "entregas/grupo1" },
+    { "nombre": "grupo2", "carpeta": "entregas/grupo2" },
+    { "nombre": "grupo3", "carpeta": "entregas/grupo3" },
+    { "nombre": "grupo4", "carpeta": "entregas/grupo4" }
+  ]
+}

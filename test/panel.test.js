@@ -6,7 +6,7 @@ import { Collector, diffSnapshots, parseCsv } from '../profesor/panel/collector.
 import { CITY_COLUMNS } from '../src/sensors/cityTracker.js';
 import { createPanel, parseGroups, REFERENCE } from '../profesor/panel/server.js';
 
-const base = { cars: 1000, stopped: 100, speedXcars: 30000, busWaiting: 400, busActive: 40, busFull: 4, busPassengers: 2000, suspendedLines: 0, badStations: 10, saturatedLots: 3, restrictedKm: 0, allRed: 0 };
+const base = { cars: 1000, stopped: 100, speedXcars: 30000, busWaiting: 400, busActive: 40, busFull: 4, busPassengers: 2000, suspendedLines: 0, badStations: 10, saturatedLots: 3, restrictedKm: 0, allRed: 0, tripsDone: 100, tripMinutes: 1200, delayMinutes: 300, tripsLost: 1 };
 const times = (values, k) => Object.fromEntries(Object.entries(values).map(([key, v]) => [key, v * k]));
 const rows = (values, n = 24) => Array.from({ length: n }, (_, bucket) => ({ bucket, n: ROWS_PER_BUCKET, sums: times({ ...base, ...values }, ROWS_PER_BUCKET) }));
 
@@ -31,6 +31,23 @@ test('closing streets has a cost even if the indicators do not change', () => {
   assert.ok(score.index < 50);
 });
 
+test('longer trips and trips that cannot be made lower the index', () => {
+  const worse = scoreWindow(rows({ delayMinutes: 600, tripsLost: 20 }), rows({}));
+  assert.ok(worse.components.trips < -0.3, `componente de viajes ${worse.components.trips}`);
+  assert.ok(worse.index < 50);
+  assert.equal(Math.round(worse.group.delayPerTripMin), 6);
+  assert.ok(worse.group.lostTripsPct > 10);
+  const better = scoreWindow(rows({ delayMinutes: 150 }), rows({}));
+  assert.ok(better.components.trips > 0);
+});
+
+test('suspending bus lines does not count as fleet efficiency', () => {
+  const suspended = scoreWindow(rows({ busActive: 20, suspendedLines: 2 }), rows({}));
+  assert.equal(suspended.components.fleet, 0);
+  const leaner = scoreWindow(rows({ busActive: 30 }), rows({}));
+  assert.ok(leaner.components.fleet > 0);
+});
+
 test('making one service much worse caps the index, and long suspensions are penalised', () => {
   const tradeoff = scoreWindow(rows({ stopped: 0, busWaiting: 4000, badStations: 0, saturatedLots: 0 }), rows({}));
   assert.ok(tradeoff.index <= METRIC.cap);
@@ -49,7 +66,7 @@ test('only buckets present in both cities are compared', () => {
 test('indicators are read from a row of the city CSV', () => {
   const row = { timestamp: '2026-01-05T07:05:00', cars: '10', stopped: '2', avg_speed_kmh: '30', buses: '5', bus_passengers: '59', full_buses: '1',
     bus_waiting: '6', suspended_lines: '1', bikes_in_use: '3', stations_empty: '1', stations_full: '1', parkings_full: '1',
-    closed_m: '1000', bus_only_m: '0', limited_m: '1000', signals_all_red: '1' };
+    closed_m: '1000', bus_only_m: '0', limited_m: '1000', signals_all_red: '1', trips_done: '20', trip_min: '6', delay_min: '2', trips_lost: '1' };
   assert.deepEqual(Object.keys(row).sort(), CITY_COLUMNS.filter((c) => c !== 'weekday').sort());
   const v = indicatorsOf(row);
   assert.deepEqual(Object.keys(v).sort(), [...INDICATORS].sort());

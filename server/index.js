@@ -1,3 +1,5 @@
+// Primero el escenario: fija las semillas antes de que se carguen el motor, el tiempo y los eventos.
+import { scenario } from './scenario.js';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -33,6 +35,7 @@ const runtime = new Runtime({
   checkpointMs: Number(env.CHECKPOINT_SECONDS ?? 30) * 1000,
   log,
 });
+if (scenario.seed !== undefined || scenario.start) log(`Escenario: ${JSON.stringify(scenario)} (solo cuenta si la base de datos es nueva)`);
 if (!env.SMARTCITY_TOKEN) log('SMARTCITY_TOKEN no definido: cualquiera puede modificar la ciudad');
 
 const server = http.createServer(createApp({ runtime, store, token: env.SMARTCITY_TOKEN, corsOrigin: env.CORS_ORIGIN ?? '*', lockParams: env.LOCK_PARAMS === '1' }));

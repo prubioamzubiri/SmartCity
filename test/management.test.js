@@ -103,7 +103,7 @@ test('an entry limit above zero lets some cars in, but far fewer than without it
   };
   const free = zoneMax(CONFIG.cars.max);
   const limited = zoneMax(20);
-  assert.ok(free > 60, `sin límite hay mucho tráfico dentro (${free})`);
+  assert.ok(free > 40, `sin límite hay mucho tráfico dentro (${free})`);
   assert.ok(limited < free / 2, `con límite 20 hay muchos menos coches dentro (${limited} frente a ${free})`);
 });
 
@@ -329,4 +329,44 @@ test('a restriction reports the metres of street it affects, counting two-way st
   assert.equal(engine.restrictions.describe(item).length, expected);
   const zone = engine.restrictions.describe(engine.restrictions.add({ mode: 'entry_limit', area: { x: 0, z: 0, radius: 150 }, limit: 0 }));
   assert.ok(zone.length > 0 && zone.length < 4 * 300, `zona de 150 m: ${zone.length} m`);
+});
+
+test('cars make trips to destination zones and the delay over free flow is measured', () => {
+  const engine = engineOf(400);
+  const before = { ...engine.sim.tripTotals };
+  engine.advanceTo(engine.simTime + 3600);
+  const t = engine.sim.tripTotals;
+  const done = t.done - before.done;
+  assert.ok(done > 200, `viajes completados en 1 h: ${done}`);
+  assert.ok(t.delay - before.delay >= 0);
+  assert.ok((t.seconds - before.seconds) / done > 60, 'un viaje dura más de un minuto');
+  assert.ok(t.lost - before.lost < done / 20, `pocos viajes perdidos sin cortes (${t.lost - before.lost})`);
+});
+
+test('closing the centre of a destination zone makes trips to it impossible', () => {
+  const lostIn = (close) => {
+    const engine = engineOf(400);
+    const zone = engine.sim.trips.zones[Math.floor(engine.sim.trips.zones.length / 2)];
+    if (close) engine.restrictions.add({ mode: 'pedestrians_only', area: { x: zone.x, z: zone.z, radius: 450 } });
+    const before = engine.sim.tripTotals.lost;
+    engine.advanceTo(engine.simTime + 3600);
+    return engine.sim.tripTotals.lost - before;
+  };
+  const open = lostIn(false);
+  const closed = lostIn(true);
+  assert.ok(closed > open + 10, `perdidos con el corte ${closed}, sin él ${open}`);
+});
+
+test('the city CSV counts trips, their duration, delay and lost trips per interval', () => {
+  const engine = engineOf(400);
+  engine.drainRecords();
+  engine.advanceTo(engine.simTime + 1800);
+  const rows = engine.drainRecords().city;
+  assert.ok(rows.length >= 5);
+  const done = rows.reduce((a, r) => a + r.trips_done, 0);
+  assert.ok(done > 50);
+  for (const r of rows) {
+    assert.ok(r.trip_min >= 0 && r.delay_min >= 0 && r.trips_lost >= 0);
+    if (r.trips_done) assert.ok(r.delay_min <= r.trip_min);
+  }
 });

@@ -225,6 +225,7 @@ export class SimEngine {
       bus_only_m: Math.round(metres.busOnly),
       limited_m: Math.round(metres.limited),
       signals_all_red: this.signals.signals.filter((sig) => sig.active && this.signals.modeOf(sig) === 'all_red').length,
+      ...this.cityStats.tripsSince(this.sim.tripTotals),
     };
   }
 

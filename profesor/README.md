@@ -27,16 +27,20 @@ el gestor mejora la ciudad y por debajo la empeora.
 
 | Componente | Peso | Qué mide (acumulado en la ventana) |
 | --- | --- | --- |
-| Tráfico | 30 % | Horas de coche parado (2/3) y velocidad media ponderada por coche (1/3) |
+| Tráfico | 20 % | Horas de coche parado (2/3) y velocidad media ponderada por coche (1/3) |
+| Viajes en coche | 20 % | Retraso medio por viaje frente a ir sin tráfico ni cortes (1/2) y % de viajes que no se pueden hacer (1/2) |
 | Transporte público | 25 % | Personas × hora esperando (1/2), % de autobuses llenos (1/4), líneas × hora suspendidas (1/4) |
 | Eficiencia de flota | 5 % | Autobuses × hora en servicio |
 | Bicis | 10 % | Puestos × hora vacíos (sin bicis) o llenos (sin anclajes) |
 | Parkings | 10 % | Parkings × hora por encima del 95 % |
-| Coste de las intervenciones | 20 % | Km de calle restringida de media (ponderados por modo), semáforos en `all_red` y «marchas atrás» |
+| Coste de las intervenciones | 10 % | Km de calle restringida de media (ponderados por modo), semáforos en `all_red` y «marchas atrás» |
 
 - Cada componente es la mejora relativa frente a la referencia, recortada a ±50 %. Índice = 50 + suma ponderada.
-- **Coste**: cortar calles no empeora los indicadores del simulador (los coches reaparecen en otro punto), así que se
-  penaliza aparte. 5 km equivalentes de media restan el máximo (10 puntos). Una *marcha atrás* es deshacer un cambio
+- **Viajes**: cada coche va de su origen a una zona de destino. Cortar calles alarga los viajes y, si el destino se
+  queda sin camino, el viaje no se hace. Así un corte tiene un coste real en los indicadores.
+- **Coste**: además se penaliza intervenir por sí mismo (calle restringida, `all_red`, marchas atrás), porque los
+  peatones no se ven afectados por los cortes y peatonalizar no tiene beneficio modelado. 5 km equivalentes de media
+  restan el máximo (5 puntos). Una *marcha atrás* es deshacer un cambio
   en menos de 1 h simulada (quitar una restricción recién puesta, subir y bajar la flota de una línea).
 - **Topes**: si algún componente empeora más de un 20 %, el índice no pasa de 60. Cada línea suspendida más de 2 h
   seguidas resta 5 puntos (máximo 15).
@@ -111,7 +115,9 @@ HTTPS_PORT=443
 ## Limitaciones
 
 - El índice en directo compara la ciudad del grupo con la referencia durante el curso. Para la **nota final** es más
-  justo evaluar todos los gestores sobre los mismos escenarios (otra semilla y otras fechas), que es otra herramienta.
+  justo evaluar todos los gestores sobre los mismos escenarios ocultos (otra semilla y otras fechas): ver
+  [`evaluador/README.md`](evaluador/README.md).
 - Las reglas de semáforo con horario (`schedule`) que ponen `all_red` no se cuentan en el coste; solo los ajustes
   directos.
-- El simulador no modela el tiempo de viaje ni los viajes que no se hacen: por eso existe el componente de coste.
+- El simulador no modela el beneficio de peatonalizar (los peatones no se ven afectados por los cortes): por eso existe
+  el componente de coste.

@@ -101,7 +101,7 @@ hayáis activado**, y **desde que los activáis** (no hay pasado anterior): acti
 | Ocupación de parkings | `PUT /api/parking/tracked` `{"ids": ["U-125_53", …]}` | `GET /api/parking.csv?from=&to=&id=` |
 | Autobuses por línea | `PUT /api/buses/tracked` `{"ids": ["L1", …]}` | `GET /api/buses.csv?from=&to=&id=` (cada 5 min: `buses`, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`) |
 | Bicis por puesto | `PUT /api/bikes/tracked` `{"ids": ["municipal/0", …]}` | `GET /api/bikes.csv?from=&to=&id=` (cada 15 min: `bikes`, `free_docks`, `takes`, `returns`, `occupancy_pct`) |
-| Toda la ciudad | — (siempre activo, desde que arranca el servidor) | `GET /api/city.csv?from=&to=` (cada 5 min: `cars`, `stopped`, `avg_speed_kmh`, `buses`, `bus_passengers`, `full_buses`, `bus_waiting`, `suspended_lines`, `bikes_in_use`, `stations_empty`, `stations_full`, `parkings_full`, metros de calle `closed_m` / `bus_only_m` / `limited_m` y `signals_all_red`) |
+| Toda la ciudad | — (siempre activo, desde que arranca el servidor) | `GET /api/city.csv?from=&to=` (cada 5 min: `cars`, `stopped`, `avg_speed_kmh`, `buses`, `bus_passengers`, `full_buses`, `bus_waiting`, `suspended_lines`, `bikes_in_use`, `stations_empty`, `stations_full`, `parkings_full`, metros de calle `closed_m` / `bus_only_m` / `limited_m`, `signals_all_red` y los viajes del intervalo: `trips_done`, `trip_min` (duración media), `delay_min` (retraso medio frente a ir sin tráfico ni cortes) y `trips_lost`) |
 | Tiempo, eventos | — (siempre disponibles, también del pasado) | `GET /api/weather.csv`, `GET /api/events.csv` |
 
 Cada `PUT …/tracked` **sustituye** la lista anterior: enviad todos los ids que queráis grabar.
@@ -147,14 +147,17 @@ curl -X POST http://localhost:8080/api/restrictions -H "Authorization: Bearer $T
 
 Cómo se comporta el simulador:
 
-- Al crear una restricción, los coches que estaban en un tramo cortado **reaparecen en otro punto** de la ciudad y los
-  que iban a entrar buscan otra ruta (o dan la vuelta). Los coches nuevos no aparecen en tramos cortados ni en zonas
+- Al crear una restricción, los coches que estaban en un tramo cortado **reaparecen en otro punto** de la ciudad y todos
+  recalculan su ruta. Los coches nuevos no aparecen en tramos cortados ni en zonas
   `entry_limit`.
 - Los **autobuses siguen un recorrido fijo**: si una calle de su ruta se corta con `pedestrians_only`, esa **línea
   queda suspendida** (`suspended: true`, sin autobuses, y la gente se acumula en las paradas). Con
   `buses_and_pedestrians` la línea sigue funcionando. Los autobuses no se desvían.
 - `entry_limit` con `limit` mayor que 0 es aproximado: los coches eligen su ruta con unas calles de antelación, así que
   puede haber unos pocos más del límite.
+- **Los coches hacen viajes**: cada uno va de su origen a una zona de destino por el camino más rápido y, al llegar,
+  empieza otro viaje. Cortar calles alarga los viajes (sube el retraso) y, si el destino queda sin camino, el viaje no
+  se puede hacer (`trips_lost` en `GET /api/city.csv`). Los coches que estaban en un tramo que se corta pierden su viaje.
 - **Los peatones no se ven afectados por los cortes**: caminan siempre por las aceras. La diferencia entre
   `pedestrians_only` y `buses_and_pedestrians` está en los autobuses.
 - Las restricciones se guardan y **sobreviven a reinicios** del servidor.

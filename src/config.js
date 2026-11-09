@@ -139,6 +139,15 @@ export const CONFIG = {
     speedByClass: [22, 16, 13, 11, 8],
   },
 
+  // Viajes en coche: cada coche va de su origen a una zona de destino y desaparece al llegar.
+  trips: {
+    gridCells: 8, // la ciudad se divide en 8 × 8 celdas; cada celda con calles es una zona de destino
+    minZoneLength: 400, // metros de calle mínimos para que una celda sea zona de destino
+    arriveSeconds: 25, // el viaje termina a menos de tantos segundos (sin tráfico) del centro de la zona
+    choiceSeconds: 1, // azar al elegir ruta: una opción peor en tantos segundos pierde ~63 % de probabilidad (más, y dan vueltas)
+    maxTripSeconds: 3600, // un viaje que dura más se da por perdido (coche dando vueltas)
+  },
+
   // Peatones: triángulos que caminan por las aceras y cruzan por los pasos de peatones de OSM (solo visual).
   pedestrians: {
     max: 12000, // con la demanda máxima
