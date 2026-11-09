@@ -260,6 +260,10 @@ export const CONFIG = {
   },
 
   // Registro de autobuses del servidor: una muestra por línea elegida cada `intervalSeconds` simulados.
+  // Histórico global de la ciudad (servidor): una fila cada `intervalSeconds` simulados, siempre activo.
+  cityTracking: {
+    intervalSeconds: 300,
+  },
   busTracking: {
     intervalSeconds: 300,
   },

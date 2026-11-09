@@ -317,3 +317,16 @@ test('API: point query, signals and bus fleet', async (t) => {
   assert.equal((await call(`/api/buses/${line.id}`, { method: 'PATCH', body: { fleet: 5 }, auth: '' })).status, 401);
   assert.equal((await call('/api/buses/L99', { method: 'PATCH', body: { fleet: 5 } })).status, 404);
 });
+
+test('a restriction reports the metres of street it affects, counting two-way streets once', async () => {
+  const { describeWay } = await import('../src/traffic/restrictions.js');
+  const engine = engineOf(50);
+  const g = engine.graph;
+  const way = g.way[g.nearestSegment(0, 0, 50).e];
+  const item = engine.restrictions.add({ mode: 'pedestrians_only', ways: [way] });
+  const expected = describeWay(g, way).length;
+  assert.ok(expected > 1000);
+  assert.equal(engine.restrictions.describe(item).length, expected);
+  const zone = engine.restrictions.describe(engine.restrictions.add({ mode: 'entry_limit', area: { x: 0, z: 0, radius: 150 }, limit: 0 }));
+  assert.ok(zone.length > 0 && zone.length < 4 * 300, `zona de 150 m: ${zone.length} m`);
+});

@@ -199,9 +199,19 @@ export class Restrictions {
       limit: item.limit ?? null,
       since: item.since,
       edges: item.edges.length,
+      length: Math.round(this.lengthOf(item.edges)),
       cars: this.carsInside(item),
       suspendedLines: suspended,
     };
+  }
+
+  // Metros de calle afectados (una calle de doble sentido cuenta una vez, como en describeWay).
+  lengthOf(edges) {
+    const g = this.graph;
+    const set = new Set(edges);
+    let length = 0;
+    for (const e of edges) if (!(g.rev[e] >= 0 && g.rev[e] < e && set.has(g.rev[e]))) length += g.len[e];
+    return length;
   }
 
   serialize() {

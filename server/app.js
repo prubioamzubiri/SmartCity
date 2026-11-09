@@ -11,7 +11,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { BIKE_COLUMNS, BUS_COLUMNS, PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
+import { BIKE_COLUMNS, BUS_COLUMNS, CITY_COLUMNS, PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
 
 const MAX_BODY = 64 * 1024;
 const TIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/;
@@ -43,6 +43,7 @@ const CSV_EXPORTS = {
   '/api/pedestrians.csv': { kind: 'pedestrians', columns: PEDESTRIAN_COLUMNS, filename: 'peatones' },
   '/api/buses.csv': { kind: 'buses', columns: BUS_COLUMNS, filename: 'autobuses' },
   '/api/bikes.csv': { kind: 'bikes', columns: BIKE_COLUMNS, filename: 'bicicletas' },
+  '/api/city.csv': { kind: 'city', columns: CITY_COLUMNS, filename: 'ciudad' },
 };
 
 const digest = (s) => createHash('sha256').update(s).digest();
@@ -228,7 +229,7 @@ function simSecondsOf(value) {
 const DOCS_FILE = new URL('../docs/API.md', import.meta.url);
 
 // Listener HTTP de la API. Las lecturas son públicas; las escrituras exigen `Authorization: Bearer <token>`.
-export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFile = DOCS_FILE }) {
+export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFile = DOCS_FILE, lockParams = false }) {
   const tokenHash = token ? digest(token) : null;
 
   const authorize = (req) => {
@@ -273,7 +274,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
         })),
       },
       bikes: engine.bikes.state(),
-      records: { traffic: store.count('traffic'), parking: store.count('parking'), pedestrians: store.count('pedestrians'), buses: store.count('buses'), bikes: store.count('bikes') },
+      records: { traffic: store.count('traffic'), parking: store.count('parking'), pedestrians: store.count('pedestrians'), buses: store.count('buses'), bikes: store.count('bikes'), city: store.count('city') },
     };
   };
 
@@ -516,6 +517,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
 
     if (method === 'PUT' && pathname === '/api/params') {
       authorize(req);
+      // La demanda es parte del escenario, no de la gestión: el profesor puede impedir que se cambie.
+      if (lockParams) throw new HttpError(403, 'Los parámetros de demanda están bloqueados en este servidor');
       const body = await readJson(req);
       const patch = {};
       if (body.maxCars !== undefined) patch.maxCars = finite(body.maxCars, 'maxCars');

@@ -14,7 +14,7 @@ ejemplo funcional está en [`examples/gestor.py`](https://github.com/prubioamzub
 | URL | `http://localhost:8080` (`npm run serve`) · `http://localhost` / `https://<dominio>` (Docker, el proxy reenvía `/api`) |
 | Lecturas (`GET`) | Públicas |
 | Escrituras (`POST`, `PUT`, `PATCH`, `DELETE`) | Cabecera `Authorization: Bearer <SMARTCITY_TOKEN>` si el servidor tiene token (en `.env`). Sin token configurado, cualquiera puede escribir |
-| Formato | JSON (`Content-Type: application/json`). Errores: `{"error": "mensaje"}` con 400 (datos no válidos), 401 (token), 404, 413 o 422 |
+| Formato | JSON (`Content-Type: application/json`). Errores: `{"error": "mensaje"}` con 400 (datos no válidos), 401 (token), 403 (acción bloqueada), 404, 413 o 422 |
 | Esta guía | En el visor: panel **Servidor → Documentación de la API**. En el servidor: `GET /api/docs` (página web) y `GET /api/docs.md` (Markdown) |
 
 ### Tiempo simulado
@@ -101,6 +101,7 @@ hayáis activado**, y **desde que los activáis** (no hay pasado anterior): acti
 | Ocupación de parkings | `PUT /api/parking/tracked` `{"ids": ["U-125_53", …]}` | `GET /api/parking.csv?from=&to=&id=` |
 | Autobuses por línea | `PUT /api/buses/tracked` `{"ids": ["L1", …]}` | `GET /api/buses.csv?from=&to=&id=` (cada 5 min: `buses`, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`) |
 | Bicis por puesto | `PUT /api/bikes/tracked` `{"ids": ["municipal/0", …]}` | `GET /api/bikes.csv?from=&to=&id=` (cada 15 min: `bikes`, `free_docks`, `takes`, `returns`, `occupancy_pct`) |
+| Toda la ciudad | — (siempre activo, desde que arranca el servidor) | `GET /api/city.csv?from=&to=` (cada 5 min: `cars`, `stopped`, `avg_speed_kmh`, `buses`, `bus_passengers`, `full_buses`, `bus_waiting`, `suspended_lines`, `bikes_in_use`, `stations_empty`, `stations_full`, `parkings_full`, metros de calle `closed_m` / `bus_only_m` / `limited_m` y `signals_all_red`) |
 | Tiempo, eventos | — (siempre disponibles, también del pasado) | `GET /api/weather.csv`, `GET /api/events.csv` |
 
 Cada `PUT …/tracked` **sustituye** la lista anterior: enviad todos los ids que queráis grabar.
@@ -128,7 +129,7 @@ hasta 200). Hay tres modos:
 | Petición | Descripción |
 | --- | --- |
 | `POST /api/restrictions` `{mode, x, z, radius \| ways, limit?, name?}` | Crea una (hasta 100 a la vez). Devuelve `201` y la restricción con su `id` (`R1`…) |
-| `GET /api/restrictions` | Lista las activas: `id`, `mode`, `area`/`ways`, `limit`, `edges`, `cars` (coches dentro ahora) y `suspendedLines` |
+| `GET /api/restrictions` | Lista las activas: `id`, `mode`, `area`/`ways`, `limit`, `edges`, `length` (metros de calle afectados), `cars` (coches dentro ahora) y `suspendedLines` |
 | `GET /api/restrictions/<id>` | Una restricción |
 | `PATCH /api/restrictions/<id>` `{mode?, limit?, name?}` | Cambia el modo, el límite o el nombre (la zona no se cambia: se borra y se crea otra) |
 | `DELETE /api/restrictions/<id>` | La quita: la calle se reabre |
@@ -202,7 +203,8 @@ tanto sale en `pending`.
 ### 3.5 Parámetros globales — `PUT /api/params`
 
 `{"maxCars": 1500, "maxPedestrians": 12000, "scenario": "auto"}`. `maxCars` (0–3000) es el máximo de coches con la demanda
-máxima; `scenario`: `auto`, `weekday`, `preholiday`, `weekend` o `sunday`.
+máxima; `scenario`: `auto`, `weekday`, `preholiday`, `weekend` o `sunday`. Si el servidor tiene `LOCK_PARAMS=1`, responde `403`: la demanda forma parte
+del escenario y no se puede cambiar.
 
 ---
 
