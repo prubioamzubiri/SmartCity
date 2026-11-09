@@ -3,10 +3,15 @@ import { eventCalendar } from '../src/events/calendar.js';
 import { weather, CONDITIONS } from '../src/weather/weather.js';
 import { holidayCalendar } from '../src/calendar/holidays.js';
 import { simDate } from '../src/traffic/demand.js';
+import { latLonToXZ } from '../src/city/projection.js';
+import { renderDocsPage } from '../src/docs/markdown.js';
+import { SIGNAL_MODES } from '../src/traffic/signals.js';
+import { RESTRICTION_MODES, RestrictionError, MAX_RADIUS, describeWay, roadsNear } from '../src/traffic/restrictions.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { BIKE_COLUMNS, BUS_COLUMNS, PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
+import { BIKE_COLUMNS, BUS_COLUMNS, CITY_COLUMNS, PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
 
 const MAX_BODY = 64 * 1024;
 const TIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/;
@@ -38,6 +43,7 @@ const CSV_EXPORTS = {
   '/api/pedestrians.csv': { kind: 'pedestrians', columns: PEDESTRIAN_COLUMNS, filename: 'peatones' },
   '/api/buses.csv': { kind: 'buses', columns: BUS_COLUMNS, filename: 'autobuses' },
   '/api/bikes.csv': { kind: 'bikes', columns: BIKE_COLUMNS, filename: 'bicicletas' },
+  '/api/city.csv': { kind: 'city', columns: CITY_COLUMNS, filename: 'ciudad' },
 };
 
 const digest = (s) => createHash('sha256').update(s).digest();
@@ -62,6 +68,61 @@ const finite = (v, name) => {
   if (typeof v !== 'number' || !Number.isFinite(v)) throw new HttpError(400, `${name} debe ser un número`);
   return v;
 };
+
+// Punto del mapa pedido como x/z (metros desde el origen) o como lat/lon; `get(nombre)` lee la consulta o el cuerpo.
+function pointOf(get) {
+  const num = (name) => {
+    const raw = get(name);
+    if (raw === null || raw === undefined || raw === '') return undefined;
+    const value = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(value)) throw new HttpError(400, `${name} debe ser un número`);
+    return value;
+  };
+  const [x, z, lat, lon] = ['x', 'z', 'lat', 'lon'].map(num);
+  if (x !== undefined && z !== undefined) return { x, z };
+  if (lat !== undefined && lon !== undefined) return latLonToXZ(lat, lon);
+  throw new HttpError(400, 'Indica el punto con x y z (metros) o con lat y lon');
+}
+
+const radiusOf = (raw, fallback, max) => {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 1 || value > max) throw new HttpError(400, `radius debe estar entre 1 y ${max} metros`);
+  return value;
+};
+
+const round1 = (v) => Math.round(v * 10) / 10;
+const LIGHT = ['green', 'yellow', 'red'];
+const SIGNAL_KEYS = ['mode', 'green', 'greenA', 'greenB', 'yellow', 'schedule'];
+
+// Estado de un semáforo: ciclo actual por eje (ew = este-oeste, ns = norte-sur), tiempos efectivos y ajustes propios.
+function signalJson(engine, s, index) {
+  const { gA, gB, y } = engine.signals.timing(s, engine.simTime);
+  return {
+    id: s.id, x: round1(s.x), z: round1(s.z), active: s.active, mode: engine.signals.modeOf(s),
+    state: { ew: LIGHT[engine.signals.states[index * 2]], ns: LIGHT[engine.signals.states[index * 2 + 1]] },
+    timing: { greenEw: gA, greenNs: gB, yellow: y, cycle: gA + gB + 2 * y },
+    override: engine.signals.plan.signals[s.id] ?? null,
+  };
+}
+
+// Valida los campos de un semáforo (o del plan por defecto).
+function checkSignalSettings(settings, where) {
+  // null quita el campo (solo en PATCH), así que no se valida.
+  const range = (key, lo, hi) => {
+    if (settings[key] === undefined || settings[key] === null) return;
+    if (typeof settings[key] !== 'number' || !(settings[key] >= lo && settings[key] <= hi)) throw new HttpError(400, `${where}${key} debe ser un número entre ${lo} y ${hi}`);
+  };
+  if (settings.mode !== undefined && settings.mode !== null && !SIGNAL_MODES.includes(settings.mode)) throw new HttpError(400, `${where}mode debe ser uno de: ${SIGNAL_MODES.join(', ')}`);
+  range('green', 5, 180);
+  range('greenA', 5, 180);
+  range('greenB', 5, 180);
+  range('yellow', 1, 10);
+  const { schedule } = settings;
+  if (schedule !== undefined && schedule !== null && (!Array.isArray(schedule) || schedule.length > 20 || !schedule.every((r) => r && typeof r === 'object' && !Array.isArray(r)))) {
+    throw new HttpError(400, `${where}schedule debe ser una lista de hasta 20 reglas`);
+  }
+}
 
 function exportFilters(url) {
   const filters = {};
@@ -165,8 +226,10 @@ function simSecondsOf(value) {
   return (Date.parse(full) - CONFIG.sim.baseDate) / 1000;
 }
 
+const DOCS_FILE = new URL('../docs/API.md', import.meta.url);
+
 // Listener HTTP de la API. Las lecturas son públicas; las escrituras exigen `Authorization: Bearer <token>`.
-export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
+export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFile = DOCS_FILE, lockParams = false }) {
   const tokenHash = token ? digest(token) : null;
 
   const authorize = (req) => {
@@ -206,12 +269,12 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
         total: s.total, current: Math.round(engine.pedSensors.presentNow(s, engine.simTime)),
       })),
       buses: {
-        lines: engine.transit.lines.map((l) => ({
-          id: l.id, color: l.color, stops: l.stops.length, fleet: l.buses, tracked: engine.busTracker.isTracked(l.id),
+        lines: engine.transit.lines.map((l, i) => ({
+          id: l.id, color: l.color, stops: l.stops.length, fleet: l.buses, suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
         })),
       },
       bikes: engine.bikes.state(),
-      records: { traffic: store.count('traffic'), parking: store.count('parking'), pedestrians: store.count('pedestrians'), buses: store.count('buses'), bikes: store.count('bikes') },
+      records: { traffic: store.count('traffic'), parking: store.count('parking'), pedestrians: store.count('pedestrians'), buses: store.count('buses'), bikes: store.count('bikes'), city: store.count('city') },
     };
   };
 
@@ -224,6 +287,24 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
     };
 
     if (method === 'GET' && pathname === '/api/health') return send(200, { ok: true });
+
+    // Guía de la API (docs/API.md): como página web y como Markdown.
+    if (method === 'GET' && (pathname === '/api/docs' || pathname === '/api/docs.md')) {
+      let markdown;
+      try {
+        markdown = readFileSync(docsFile, 'utf8');
+      } catch {
+        throw new HttpError(404, 'La documentación no está disponible en este servidor');
+      }
+      const page = pathname === '/api/docs';
+      res.writeHead(200, {
+        'Content-Type': page ? 'text/html; charset=utf-8' : 'text/markdown; charset=utf-8',
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.end(page ? renderDocsPage(markdown) : markdown);
+      return undefined;
+    }
     if (method === 'GET' && pathname === '/api/state') return send(200, state());
     if (method === 'GET' && pathname === '/api/cars') {
       const { engine } = runtime;
@@ -242,7 +323,10 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
       return send(200, {
         graphKey: engine.graphKey,
         simSeconds: engine.simTime,
-        lines: engine.transit.lines.map((l, i) => ({ id: l.id, stops: l.stops.length, fleet: l.buses, tracked: engine.busTracker.isTracked(l.id), ...engine.buses.stats[i] })),
+        lines: engine.transit.lines.map((l, i) => ({
+          id: l.id, stops: l.stops.length, fleet: l.buses, minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet, capacity: CONFIG.transit.capacity,
+          suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id), ...engine.buses.stats[i],
+        })),
       });
     }
 
@@ -319,8 +403,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
     if (method === 'POST' && pathname === '/api/sensors') {
       authorize(req);
       const body = await readJson(req);
-      const x = finite(body.x, 'x');
-      const z = finite(body.z, 'z');
+      const { x, z } = pointOf((key) => body[key]);
       const name = typeof body.name === 'string' ? body.name.slice(0, 60) : '';
       const sensor = runtime.mutate((e) => e.sensors.add(x, z, name));
       if (!sensor) throw new HttpError(422, 'No hay ninguna calle cerca de esa posición');
@@ -330,8 +413,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
     if (method === 'POST' && pathname === '/api/pedestrian-sensors') {
       authorize(req);
       const body = await readJson(req);
-      const x = finite(body.x, 'x');
-      const z = finite(body.z, 'z');
+      const { x, z } = pointOf((key) => body[key]);
       const name = typeof body.name === 'string' ? body.name.slice(0, 60) : '';
       const sensor = runtime.mutate((e) => e.pedSensors.add(x, z, name));
       if (!sensor) throw new HttpError(422, 'No hay ninguna calle cerca de esa posición');
@@ -435,6 +517,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
 
     if (method === 'PUT' && pathname === '/api/params') {
       authorize(req);
+      // La demanda es parte del escenario, no de la gestión: el profesor puede impedir que se cambie.
+      if (lockParams) throw new HttpError(403, 'Los parámetros de demanda están bloqueados en este servidor');
       const body = await readJson(req);
       const patch = {};
       if (body.maxCars !== undefined) patch.maxCars = finite(body.maxCars, 'maxCars');
@@ -452,8 +536,154 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*' }) {
       authorize(req);
       const { plan } = await readJson(req);
       if (!plan || typeof plan !== 'object' || Array.isArray(plan)) throw new HttpError(400, 'plan debe ser un objeto');
+      if (plan.default && typeof plan.default === 'object') checkSignalSettings(plan.default, 'plan.default.');
+      for (const [id, settings] of Object.entries(plan.signals ?? {})) {
+        if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new HttpError(400, `plan.signals.${id} debe ser un objeto`);
+        checkSignalSettings(settings, `plan.signals.${id}.`);
+      }
       runtime.mutate((e) => e.signals.setPlan(plan));
       return send(200, runtime.engine.signals.plan);
+    }
+
+    // Semáforos con ciclo (por defecto solo los que regulan el tráfico; `all=1` incluye los pasos de peatones).
+    // Filtro opcional por zona: x, z (o lat, lon) y radius.
+    if (method === 'GET' && pathname === '/api/signals') {
+      const { engine } = runtime;
+      const all = url.searchParams.get('all') === '1';
+      const near = url.searchParams.has('radius') ? { ...pointOf((k) => url.searchParams.get(k)), radius: radiusOf(url.searchParams.get('radius'), 100, 5000) } : null;
+      const signals = [];
+      engine.signals.signals.forEach((s, i) => {
+        if (!all && !s.active) return;
+        if (near && Math.hypot(s.x - near.x, s.z - near.z) > near.radius) return;
+        signals.push(signalJson(engine, s, i));
+      });
+      return send(200, { simSeconds: engine.simTime, modes: SIGNAL_MODES, signals });
+    }
+
+    const signalMatch = /^\/api\/signals\/(\d{1,15})$/.exec(pathname);
+    if (signalMatch && (method === 'GET' || method === 'PATCH')) {
+      const { engine } = runtime;
+      const id = Number(signalMatch[1]);
+      const s = engine.signals.byId.get(id);
+      if (!s) throw new HttpError(404, 'Semáforo no encontrado');
+      if (method === 'PATCH') {
+        authorize(req);
+        const body = await readJson(req);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'El cuerpo debe ser un objeto');
+        const unknown = Object.keys(body).find((k) => k !== 'reset' && !SIGNAL_KEYS.includes(k));
+        if (unknown) throw new HttpError(400, `Campo desconocido: ${unknown}`);
+        checkSignalSettings(body, '');
+        // `reset: true` borra los ajustes; un campo a null los quita uno a uno; el resto se suma a los ajustes actuales.
+        const settings = body.reset === true ? {} : { ...(engine.signals.plan.signals[id] ?? {}) };
+        for (const key of SIGNAL_KEYS) {
+          if (body[key] === null) delete settings[key];
+          else if (body[key] !== undefined) settings[key] = body[key];
+        }
+        runtime.mutate((e) => e.signals.setSignalOverride(id, settings));
+        engine.signals.update(engine.simTime);
+      }
+      return send(200, signalJson(engine, s, engine.signals.signals.indexOf(s)));
+    }
+
+    // Qué hay ahora mismo cerca de un punto: coches, peatones, autobuses y semáforos.
+    if (method === 'GET' && pathname === '/api/point') {
+      const { engine } = runtime;
+      const { x, z } = pointOf((k) => url.searchParams.get(k));
+      const radius = radiusOf(url.searchParams.get('radius'), 50, 2000);
+      const signals = [];
+      engine.signals.signals.forEach((s, i) => {
+        if (s.active && Math.hypot(s.x - x, s.z - z) <= radius && signals.length < 20) signals.push(signalJson(engine, s, i));
+      });
+      return send(200, {
+        simSeconds: engine.simTime, time: iso(engine.simTime), point: { x: round1(x), z: round1(z) }, radius,
+        ...engine.pointStats(x, z, radius, runtime.scale), signals,
+      });
+    }
+
+    // Calles cercanas a un punto (para elegir cuál cortar): su identificador, clase, longitud, extremos y coches.
+    if (method === 'GET' && pathname === '/api/roads') {
+      const { engine } = runtime;
+      const { x, z } = pointOf((k) => url.searchParams.get(k));
+      const radius = radiusOf(url.searchParams.get('radius'), 100, MAX_RADIUS);
+      const limit = Number(url.searchParams.get('limit') ?? 20);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new HttpError(400, 'limit debe ser un entero de 1 a 100');
+      const roads = roadsNear(engine.graph, x, z, radius).slice(0, limit).map(({ way, distance }) => ({ ...describeWay(engine.graph, way, engine.sim), distance }));
+      return send(200, { point: { x: round1(x), z: round1(z) }, radius, roads });
+    }
+
+    const roadMatch = /^\/api\/roads\/(\d{1,7})$/.exec(pathname);
+    if (method === 'GET' && roadMatch) {
+      const { engine } = runtime;
+      const road = describeWay(engine.graph, Number(roadMatch[1]), engine.sim);
+      if (!road) throw new HttpError(404, 'Calle no encontrada');
+      return send(200, road);
+    }
+
+    // Cortes de calle y zonas de acceso restringido.
+    if (method === 'GET' && pathname === '/api/restrictions') {
+      const { engine } = runtime;
+      return send(200, { simSeconds: engine.simTime, modes: RESTRICTION_MODES, restrictions: engine.restrictions.items.map((r) => engine.restrictions.describe(r)) });
+    }
+
+    if (method === 'POST' && pathname === '/api/restrictions') {
+      authorize(req);
+      const { engine } = runtime;
+      const body = await readJson(req);
+      const definition = { mode: body.mode, name: body.name, limit: body.limit };
+      if (body.ways !== undefined) {
+        definition.ways = body.ways;
+      } else {
+        definition.area = { ...pointOf((k) => body[k]), radius: body.radius };
+      }
+      try {
+        const item = runtime.mutate((e) => e.restrictions.add(definition));
+        return send(201, engine.restrictions.describe(item));
+      } catch (err) {
+        if (err instanceof RestrictionError) throw new HttpError(400, err.message);
+        throw err;
+      }
+    }
+
+    const restrictionMatch = /^\/api\/restrictions\/(R\d{1,6})$/.exec(pathname);
+    if (restrictionMatch && ['GET', 'PATCH', 'DELETE'].includes(method)) {
+      const { engine } = runtime;
+      const id = restrictionMatch[1];
+      const item = engine.restrictions.get(id);
+      if (!item) throw new HttpError(404, 'Restricción no encontrada');
+      if (method === 'DELETE') {
+        authorize(req);
+        runtime.mutate((e) => e.restrictions.remove(id));
+        return send(200, { ok: true });
+      }
+      if (method === 'PATCH') {
+        authorize(req);
+        const body = await readJson(req);
+        try {
+          runtime.mutate((e) => e.restrictions.update(id, { mode: body.mode, limit: body.limit, name: body.name }));
+        } catch (err) {
+          if (err instanceof RestrictionError) throw new HttpError(400, err.message);
+          throw err;
+        }
+      }
+      return send(200, engine.restrictions.describe(item));
+    }
+
+    // Número de autobuses de una línea: { fleet: 12 }. Cambia al instante y se conserva tras un reinicio.
+    const busMatch = /^\/api\/buses\/(L\d{1,3})$/.exec(pathname);
+    if (busMatch && method === 'PATCH') {
+      authorize(req);
+      const { engine } = runtime;
+      const id = busMatch[1];
+      const index = engine.transit.lines.findIndex((l) => l.id === id);
+      if (index < 0) throw new HttpError(404, 'Línea no encontrada');
+      const { fleet } = await readJson(req);
+      if (!Number.isInteger(fleet) || fleet < CONFIG.transit.minFleet || fleet > CONFIG.transit.maxFleet) {
+        throw new HttpError(400, `fleet debe ser un entero entre ${CONFIG.transit.minFleet} y ${CONFIG.transit.maxFleet}`);
+      }
+      runtime.mutate((e) => e.setBusFleet(id, fleet));
+      engine.buses.updateAt(engine.simTime, engine.params.scenario, runtime.scale);
+      const line = engine.transit.lines[index];
+      return send(200, { id, stops: line.stops.length, fleet: line.buses, suspended: engine.buses.suspended[index], ...engine.buses.stats[index] });
     }
 
     throw new HttpError(404, 'No encontrado');

@@ -35,7 +35,7 @@ const runtime = new Runtime({
 });
 if (!env.SMARTCITY_TOKEN) log('SMARTCITY_TOKEN no definido: cualquiera puede modificar la ciudad');
 
-const server = http.createServer(createApp({ runtime, store, token: env.SMARTCITY_TOKEN, corsOrigin: env.CORS_ORIGIN ?? '*' }));
+const server = http.createServer(createApp({ runtime, store, token: env.SMARTCITY_TOKEN, corsOrigin: env.CORS_ORIGIN ?? '*', lockParams: env.LOCK_PARAMS === '1' }));
 server.listen(port, () => log(`API en http://localhost:${port} · escala ×${runtime.scale.toFixed(2)} · ${JSON.stringify(runtime.status())}`));
 
 const loop = runtime.start();

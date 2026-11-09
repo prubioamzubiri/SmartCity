@@ -13,7 +13,9 @@ import { Pedestrians } from '../pedestrians/pedestrians.js';
 import { pedestrianWeights } from '../pedestrians/weights.js';
 import { buildTransit } from '../transit/lines.js';
 import { Buses } from '../transit/buses.js';
+import { Restrictions } from '../traffic/restrictions.js';
 import { BusTracker } from '../sensors/busTracker.js';
+import { CityTracker } from '../sensors/cityTracker.js';
 import { BikeNetwork } from '../bikes/bikeNetwork.js';
 import { toBase64 } from './binary.js';
 import { createRng } from './random.js';
@@ -58,6 +60,13 @@ export class SimEngine {
     this.scale = 1;
     this.transit = buildTransit(data, this.graph, { weights: weights.edge });
     this.buses = new Buses(this.transit, this.graph);
+    this.restrictions = new Restrictions({
+      graph: this.graph,
+      sim: this.sim,
+      buses: this.buses,
+      lines: this.transit.lines,
+      getSimTime: () => this.simTime,
+    });
     this.busTracker = new BusTracker({
       lines: this.transit.lines,
       getSimTime: () => this.simTime,
@@ -67,6 +76,7 @@ export class SimEngine {
       },
     });
     this.bikes = new BikeNetwork({ stations: data.bicycleStations, getSimTime: () => this.simTime, getParams: () => this.params });
+    this.cityStats = new CityTracker({ getSimTime: () => this.simTime, sample: (time) => this.cityRow(time) });
     this.graphKey = `${this.graph.edgeCount}:${data.nodes.length}`;
     this.signals.update(this.simTime);
   }
@@ -78,6 +88,61 @@ export class SimEngine {
       demandFactor(0, scenario); // valida el escenario
       this.params.scenario = scenario;
     }
+  }
+
+  // Cambia los autobuses de una línea (por id, p. ej. "L1"); lanza RangeError si el número no es válido.
+  setBusFleet(lineId, count) {
+    const li = this.transit.lines.findIndex((l) => l.id === lineId);
+    if (li < 0) return false;
+    this.buses.setFleet(li, count);
+    return true;
+  }
+
+  // Qué hay en este instante a menos de `radius` metros de (x, z): coches, peatones y autobuses.
+  pointStats(x, z, radius, scale = this.scale) {
+    const g = this.graph;
+    const sim = this.sim;
+    const r2 = radius * radius;
+    let cars = 0;
+    let stopped = 0;
+    let speedSum = 0;
+    for (let i = 0; i < sim.activeCount; i++) {
+      const e = sim.edge[i];
+      const dx = g.nx[g.A[e]] + g.ux[e] * sim.pos[i] - x;
+      const dz = g.nz[g.A[e]] + g.uz[e] * sim.pos[i] - z;
+      if (dx * dx + dz * dz > r2) continue;
+      cars++;
+      speedSum += sim.speed[i];
+      if (sim.speed[i] < 0.5) stopped++;
+    }
+
+    const p = this.pedestrians;
+    p.setBikeRiders(this.bikes.inUse);
+    p.updateAt(this.simTime, this.params.scenario, scale, this.params.maxPedestrians);
+    let pedestrians = 0;
+    for (let i = 0; i < p.activeCount; i++) {
+      const dx = p.x[i] - x;
+      const dz = p.z[i] - z;
+      if (dx * dx + dz * dz <= r2) pedestrians++;
+    }
+
+    const b = this.buses;
+    b.updateAt(this.simTime, this.params.scenario, scale);
+    let buses = 0;
+    let passengers = 0;
+    for (let i = 0; i < b.activeCount; i++) {
+      const dx = b.x[i] - x;
+      const dz = b.z[i] - z;
+      if (dx * dx + dz * dz > r2) continue;
+      buses++;
+      passengers += b.load[i];
+    }
+
+    return {
+      cars: { count: cars, stopped, avgKmh: cars ? Math.round((speedSum / cars) * 36) / 10 : 0 },
+      pedestrians: { count: pedestrians },
+      buses: { count: buses, passengers },
+    };
   }
 
   // Avanza la simulación paso a paso hasta `target` (o hasta agotar `maxSteps`); devuelve true si lo alcanza.
@@ -96,6 +161,7 @@ export class SimEngine {
       this.pedSensors.tick(this.simTime);
       this.busTracker.tick(this.simTime);
       this.bikes.tick(this.simTime);
+      this.cityStats.tick(this.simTime);
       steps++;
     }
     return true;
@@ -126,6 +192,42 @@ export class SimEngine {
     };
   }
 
+  // Fila del histórico global: tráfico, autobuses, bicis, parkings y cuánto se ha intervenido la ciudad.
+  cityRow(time) {
+    const traffic = this.sim.stats();
+    this.buses.updateAt(time, this.params.scenario, this.scale);
+    const lines = this.buses.stats;
+    const sum = (key) => lines.reduce((acc, s) => acc + s[key], 0);
+    const bikes = this.bikes.state();
+    const metres = { closed: 0, busOnly: 0, limited: 0 };
+    for (const item of this.restrictions.items) {
+      const length = this.restrictions.lengthOf(item.edges);
+      if (item.mode === 'buses_and_pedestrians') metres.busOnly += length;
+      else if (item.mode === 'entry_limit' && item.limit > 0) metres.limited += length;
+      else metres.closed += length;
+    }
+    let fullLots = 0;
+    for (const lot of this.parking.lots.values()) if (this.parking.occupancyOf(lot, time) >= 0.95) fullLots++;
+    return {
+      cars: traffic.active,
+      stopped: traffic.stopped,
+      avg_speed_kmh: Math.round(traffic.avgKmh * 10) / 10,
+      buses: sum('active'),
+      bus_passengers: sum('passengers'),
+      full_buses: sum('full'),
+      bus_waiting: sum('waiting'),
+      suspended_lines: this.buses.suspended.filter(Boolean).length,
+      bikes_in_use: bikes.inUse,
+      stations_empty: bikes.stations.filter((s) => s.available <= 0).length,
+      stations_full: bikes.stations.filter((s) => s.available >= s.capacity).length,
+      parkings_full: fullLots,
+      closed_m: Math.round(metres.closed),
+      bus_only_m: Math.round(metres.busOnly),
+      limited_m: Math.round(metres.limited),
+      signals_all_red: this.signals.signals.filter((sig) => sig.active && this.signals.modeOf(sig) === 'all_red').length,
+    };
+  }
+
   // Extrae los registros cerrados desde la última llamada (para persistirlos).
   drainRecords() {
     const traffic = this.sensors.pending.splice(0);
@@ -133,10 +235,11 @@ export class SimEngine {
     const pedestrians = this.pedSensors.pending.splice(0);
     const buses = this.busTracker.pending.splice(0);
     const bikes = this.bikes.pending.splice(0);
+    const city = this.cityStats.pending.splice(0);
     this.sensors.records.length = 0;
     this.parking.records.length = 0;
     this.pedSensors.records.length = 0;
-    return { traffic, parking, pedestrians, buses, bikes };
+    return { traffic, parking, pedestrians, buses, bikes, city };
   }
 
   snapshot() {
@@ -152,6 +255,9 @@ export class SimEngine {
       pedSensors: this.pedSensors.serialize(),
       buses: this.busTracker.serialize(),
       bikes: this.bikes.serialize(),
+      city: this.cityStats.serialize(),
+      fleet: Object.fromEntries(this.transit.lines.map((l) => [l.id, l.buses])),
+      restrictions: this.restrictions.serialize(),
     };
   }
 
@@ -167,7 +273,18 @@ export class SimEngine {
     this.pedSensors.restore(state.pedSensors, this.simTime);
     if (state.buses) this.busTracker.restore(state.buses); // los snapshots anteriores a los autobuses no lo traen
     if (state.bikes) this.bikes.restore(state.bikes);
+    // Snapshots anteriores al histórico global: empieza en el siguiente intervalo.
+    if (state.city) this.cityStats.restore(state.city);
+    else this.cityStats.nextSample = Math.ceil(this.simTime / this.cityStats.intervalSeconds) * this.cityStats.intervalSeconds;
+    for (const [id, count] of Object.entries(state.fleet ?? {})) {
+      try {
+        this.setBusFleet(id, count);
+      } catch {
+        // flota fuera del rango actual: se queda la de por defecto
+      }
+    }
     const compatible = state.graphKey === this.graphKey;
+    if (compatible && state.restrictions) this.restrictions.restore(state.restrictions);
     if (compatible) this.sim.restore(state.sim);
     this.signals.update(this.simTime);
     return compatible;

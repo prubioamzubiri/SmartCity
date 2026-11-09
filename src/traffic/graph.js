@@ -83,18 +83,20 @@ export function buildGraph(data) {
   const ea = [];
   const eb = [];
   const ecls = [];
+  const eway = [];
   const keyToEdge = new Map();
 
-  const addEdge = (a, b, cls) => {
+  const addEdge = (a, b, cls, way) => {
     const key = a * nodeCount + b;
     if (keyToEdge.has(key)) return;
     keyToEdge.set(key, ea.length);
     ea.push(a);
     eb.push(b);
     ecls.push(cls);
+    eway.push(way);
   };
 
-  for (const w of data.ways) {
+  data.ways.forEach((w, way) => {
     const cls = w[0];
     const dir = w[1];
     for (let k = 2; k < w.length - 1; k++) {
@@ -104,15 +106,16 @@ export function buildGraph(data) {
       const dx = nx[b] - nx[a];
       const dz = nz[b] - nz[a];
       if (dx * dx + dz * dz < 0.25) continue;
-      if (dir >= 0) addEdge(a, b, cls);
-      if (dir <= 0) addEdge(b, a, cls);
+      if (dir >= 0) addEdge(a, b, cls, way);
+      if (dir <= 0) addEdge(b, a, cls, way);
     }
-  }
+  });
 
   const edgeCount = ea.length;
   const A = Int32Array.from(ea);
   const B = Int32Array.from(eb);
   const cls = Uint8Array.from(ecls);
+  const way = Int32Array.from(eway); // índice de la calle (data.ways) a la que pertenece cada tramo
   const len = new Float32Array(edgeCount);
   const ux = new Float32Array(edgeCount);
   const uz = new Float32Array(edgeCount);
@@ -237,7 +240,8 @@ export function buildGraph(data) {
     nodeCount,
     edgeCount,
     nx, nz,
-    A, B, cls, len, ux, uz, speed, rev,
+    A, B, cls, way, len, ux, uz, speed, rev,
+    wayCount: data.ways.length,
     outStart, outList,
     sig, grp,
     ringId: rings.ringId,

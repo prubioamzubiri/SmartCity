@@ -5,6 +5,11 @@ Three.js traffic simulation with a Vite frontend.
 See the [development roadmap](DEVELOPMENT_ROADMAP.md) for current progress,
 planned milestones, and prototype completion criteria.
 
+To manage the city from an external program (read the state, download the history,
+close streets, change signals, add buses, limit the access of cars…) see the
+[API guide](docs/API.md) (in Spanish) and the example manager in
+[examples/gestor.py](examples/gestor.py).
+
 ```sh
 npm ci
 npm run fetch-osm

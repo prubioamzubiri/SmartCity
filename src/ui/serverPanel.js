@@ -54,6 +54,17 @@ export function createServerPanel({ section, sync, localGraphKey }) {
     say('Conectando…');
   }
 
+  // La guía la sirve el propio servidor: se abre aunque aún no se haya pulsado Conectar.
+  function openDocs() {
+    try {
+      const client = sync.client ?? sync.createClient({ baseUrl: urlInput.value, token: '' });
+      if (!client.baseUrl) throw new Error('Introduce la URL del servidor');
+      window.open(client.docsUrl(), '_blank', 'noopener');
+    } catch (err) {
+      say(err.message, true);
+    }
+  }
+
   function download(kind) {
     try {
       const to = toInput.value ? nextDay(toInput.value) : undefined;
@@ -93,6 +104,7 @@ export function createServerPanel({ section, sync, localGraphKey }) {
     el('div', { class: 'row' },
       el('button', { textContent: 'Conectar', onclick: connect }),
       el('button', { textContent: 'Desconectar', onclick: () => sync.disconnect() }),
+      el('button', { textContent: 'Documentación de la API', onclick: openDocs }),
     ),
     status,
     info,

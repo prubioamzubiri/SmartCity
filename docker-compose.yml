@@ -8,6 +8,8 @@ services:
     environment:
       SMARTCITY_TOKEN: ${SMARTCITY_TOKEN:-}
       CHECKPOINT_SECONDS: ${CHECKPOINT_SECONDS:-30}
+      SIM_SCALE: ${SIM_SCALE:-52.142857142857146} # 365/7: una semana real = un año simulado. Solo se aplica al crear la base de datos
+      LOCK_PARAMS: ${LOCK_PARAMS:-0} # 1 = PUT /api/params responde 403 (la demanda no se puede cambiar)
       DB_FILE: /data/smartcity.db
     volumes:
       - sim-data:/data

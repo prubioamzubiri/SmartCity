@@ -39,11 +39,15 @@ function scheduleMatches(rule, date) {
     && includes(when.dates, dateKey);
 }
 
+export const SIGNAL_MODES = ['normal', 'off', 'flashing', 'all_red'];
+
 // Estados por grupo: 0 verde, 1 ámbar, 2 rojo. Grupo 0 = aproche E-O, grupo 1 = aproche N-S.
+// Modos: normal (ciclo), off (apagado) y flashing (ámbar intermitente) no detienen a nadie, all_red lo detiene todo.
 export class SignalController {
   constructor(graph) {
     this.graph = graph;
     this.signals = graph.signals;
+    this.byId = new Map(this.signals.map((s) => [s.id, s]));
     this.states = new Uint8Array(this.signals.length * 2);
     this.plan = { default: { green: CONFIG.signals.green, yellow: CONFIG.signals.yellow }, signals: {} };
     this.offsets = this.signals.map((s) => (Math.imul(s.id, 2654435761) >>> 0) % 1000 / 1000);
@@ -55,6 +59,16 @@ export class SignalController {
 
   setSignalTiming(id, timing) {
     this.plan.signals[id] = { ...(this.plan.signals[id] ?? {}), ...timing };
+  }
+
+  // Sustituye los ajustes del semáforo `id` por `settings` ({} los borra y vuelve al plan por defecto).
+  setSignalOverride(id, settings) {
+    if (Object.keys(settings).length) this.plan.signals[id] = settings;
+    else delete this.plan.signals[id];
+  }
+
+  modeOf(s) {
+    return this.plan.signals[s.id]?.mode ?? this.plan.default.mode ?? 'normal';
   }
 
   // Formato: { default: {green, yellow}, signals: { "<osmId>": {green | greenA, greenB, yellow} } }
@@ -104,6 +118,11 @@ export class SignalController {
     for (let i = 0; i < this.signals.length; i++) {
       const s = this.signals[i];
       if (!s.active) continue;
+      const mode = this.modeOf(s);
+      if (mode !== 'normal') {
+        this.states[i * 2] = this.states[i * 2 + 1] = mode === 'all_red' ? 2 : 0;
+        continue;
+      }
       const { gA, gB, y } = this.timing(s, simTime, date);
       const cycle = gA + gB + 2 * y;
       const t = (simTime + this.offsets[i] * cycle) % cycle;

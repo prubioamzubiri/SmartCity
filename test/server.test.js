@@ -91,6 +91,22 @@ test('stopping the server and catching up later yields the same data as running 
   assert.ok(continuous.count('parking') > 100);
   assert.deepEqual(csv(restarted, 'traffic'), csv(continuous, 'traffic'));
   assert.deepEqual(csv(restarted, 'parking'), csv(continuous, 'parking'));
+  // El histórico global se graba siempre y es idéntico: es lo que usa el panel del profesor para comparar ciudades.
+  assert.ok(continuous.count('city') > 50);
+  assert.deepEqual(csv(restarted, 'city'), csv(continuous, 'city'));
+});
+
+test('the city CSV has one row every 5 simulated minutes with the global indicators', async (t) => {
+  const { call } = await api(t);
+  const res = await call('/api/city.csv');
+  assert.equal(res.status, 200);
+  const [header, ...lines] = (await res.text()).trim().split('\n');
+  assert.equal(header.split(',')[0], 'timestamp');
+  assert.ok(header.includes('stopped') && header.includes('bus_waiting') && header.includes('closed_m'));
+  assert.ok(lines.length > 10);
+  const minutes = lines.slice(0, 3).map((l) => Number(l.slice(14, 16)));
+  assert.deepEqual(minutes.map((m) => m % 5), [0, 0, 0]);
+  assert.equal(minutes[1] - minutes[0], 5);
 });
 
 test('a week of wall time is a year of simulated time', () => {
@@ -120,12 +136,12 @@ test('crash between checkpoints loses nothing: the unsaved period is regenerated
   assert.equal(store.count('traffic'), ref.store.count('traffic'));
 });
 
-async function api(t, { token = 'secreto' } = {}) {
+async function api(t, { token = 'secreto', lockParams = false } = {}) {
   const now = clock();
   const store = new Store();
   const runtime = setup(store, now, { sensors: false });
   run(runtime, now, 2 * CHUNK);
-  const server = http.createServer(createApp({ runtime, store, token }));
+  const server = http.createServer(createApp({ runtime, store, token, lockParams }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -153,6 +169,26 @@ test('API is open for writes when no token is configured', async (t) => {
   const { call } = await api(t, { token: '' });
   assert.equal((await call('/api/sensors', { method: 'POST', body: { x: 0, z: -250 } })).status, 201);
   assert.equal((await call('/api/state')).status, 200);
+});
+
+test('LOCK_PARAMS blocks changes to the demand parameters', async (t) => {
+  const locked = await api(t, { lockParams: true });
+  const res = await locked.call('/api/params', { method: 'PUT', body: { maxCars: 10 }, auth: 'secreto' });
+  assert.equal(res.status, 403);
+  assert.notEqual(locked.runtime.engine.params.maxCars, 10);
+  const open = await api(t);
+  assert.equal((await open.call('/api/params', { method: 'PUT', body: { maxCars: 10 }, auth: 'secreto' })).status, 200);
+});
+
+test('sensors can be placed with lat/lon as well as x/z', async (t) => {
+  const { call } = await api(t, { token: '' });
+  const { xzToLatLon } = await import('../src/city/projection.js');
+  const { lat, lon } = xzToLatLon(0, -250);
+  for (const path of ['/api/sensors', '/api/pedestrian-sensors']) {
+    const res = await call(path, { method: 'POST', body: { lat, lon, name: 'GPS' } });
+    assert.equal(res.status, 201, path);
+    assert.equal((await call(path, { method: 'POST', body: { name: 'sin punto' } })).status, 400, path);
+  }
 });
 
 test('sensors recorded after creation can be exported as CSV by simulated date range', async (t) => {

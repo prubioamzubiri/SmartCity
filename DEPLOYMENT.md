@@ -72,6 +72,7 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 
 | Endpoint | Description |
 | --- | --- |
+| `GET /api/docs` / `GET /api/docs.md` | The API guide ([docs/API.md](docs/API.md)) as a web page / as Markdown. The viewer opens it from **Servidor → Documentación de la API** |
 | `GET /api/state` | Simulated time, scale, graph key, traffic stats, sensors (with current count), pedestrian sensors (with expected present and total), expected pedestrians on the street, parkings (with occupancy), params, signal plan, record counts |
 | `GET /api/events?from=&to=` | City events overlapping the range (default: next 30 simulated days, max 366): `id`, `type`, `name`, `series`, `venue`, `venueName`, `x`, `z`, `start`, `end`, and `attendance` / `extraDemand`, which are `null` until the event has ended. `GET /api/state` adds `events.active` (events with effect now, with `intensity`) and `events.boost` (extra demand now) |
 | `GET /api/events.csv?from=&to=&type=` | The same events as a CSV (`eventos.csv`), one row per event: `id`, `type`, `name`, `series`, `venue`, `venue_name`, `x`, `z`, `start`, `end`, `duration_h`, `status` (`upcoming`, `in_progress`, `finished`), `attendance`, `extra_demand`. The last two are empty until the event is `finished`, so a file never reveals the attendance of future events. `type` (optional) is one of `football`, `basketball`, `concert`, `film`, `fiesta`, `jazz`, `protest`; `GET /api/events` accepts it too |
@@ -96,7 +97,18 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 | `PUT /api/bikes/capacity` `{changes: {"<station id>": docks, "<id>": null}}` | Change the docks (1-60) of stations; it takes effect after 30 simulated days (`pending` in `GET /api/bikes`), `null` cancels a pending change. Requires the token; all-or-nothing |
 | `PUT /api/bikes/tracked` `{ids: [...]}` | Bike stations to record (none by default) |
 | `PUT /api/params` `{maxCars, maxPedestrians, scenario}` | Traffic and pedestrian parameters (`scenario`: `auto`, `weekday`, `preholiday`, `weekend`, `sunday`) |
-| `PUT /api/signals/plan` `{plan}` | Signal timing plan |
+| `PUT /api/signals/plan` `{plan}` | Signal timing plan (replaces the whole plan) |
+| `GET /api/signals?all=&x=&z=&radius=` / `GET /api/signals/:id` | Traffic signals with current `state` (`ew`/`ns`: green, yellow, red), `mode`, effective `timing` and own `override` |
+| `PATCH /api/signals/:id` `{mode, green, greenA, greenB, yellow, schedule}` | Change one signal: `mode` is `normal`, `off`, `flashing` or `all_red`; `null` removes a field, `{reset: true}` clears the overrides |
+| `GET /api/point?x=&z=&radius=` (or `lat`, `lon`) | Cars (`count`, `stopped`, `avgKmh`), pedestrians, buses and signals within `radius` metres right now |
+| `GET /api/roads?x=&z=&radius=&limit=` / `GET /api/roads/:way` | Streets near a point with their `way` id, class, length, ends and cars |
+| `GET /api/restrictions` / `GET /api/restrictions/:id` | Street closures and restricted-access zones |
+| `POST /api/restrictions` `{mode, x, z, radius \| ways, limit, name}` | Close streets (`pedestrians_only`, `buses_and_pedestrians`) or limit the entry of new cars into a zone (`entry_limit`) |
+| `PATCH /api/restrictions/:id` `{mode, limit, name}` / `DELETE /api/restrictions/:id` | Change / lift a restriction |
+| `PATCH /api/buses/:line` `{fleet}` | Number of buses of a line (`minFleet`–`maxFleet`, immediate) |
+
+How to manage the city from an external program (reading, history and every change) is described in
+[docs/API.md](docs/API.md), with a working example in [examples/gestor.py](examples/gestor.py).
 
 ```sh
 curl -o trafico.csv "https://<app>.fly.dev/api/traffic.csv?from=2026-01-05T00:00&to=2026-02-01T00:00"

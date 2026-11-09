@@ -1,4 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
+import { CITY_COLUMNS } from '../src/sensors/cityTracker.js';
+
+export { CITY_COLUMNS };
 
 export const TRAFFIC_COLUMNS = ['timestamp', 'weekday', 'sensor_id', 'sensor_name', 'x', 'z', 'count', 'count_fwd', 'count_bwd', 'avg_speed_kmh'];
 export const PARKING_COLUMNS = ['timestamp', 'weekday', 'parking_id', 'parking_name', 'capacity', 'occupied', 'free', 'occupancy_pct'];
@@ -45,6 +48,14 @@ CREATE TABLE IF NOT EXISTS bike_records (
 );
 CREATE INDEX IF NOT EXISTS bike_time ON bike_records (timestamp);
 CREATE INDEX IF NOT EXISTS bike_station ON bike_records (station_id, timestamp);
+CREATE TABLE IF NOT EXISTS city_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp TEXT NOT NULL, weekday TEXT NOT NULL, cars INTEGER, stopped INTEGER, avg_speed_kmh REAL, buses INTEGER,
+  bus_passengers INTEGER, full_buses INTEGER, bus_waiting INTEGER, suspended_lines INTEGER, bikes_in_use INTEGER,
+  stations_empty INTEGER, stations_full INTEGER, parkings_full INTEGER, closed_m INTEGER, bus_only_m INTEGER,
+  limited_m INTEGER, signals_all_red INTEGER
+);
+CREATE INDEX IF NOT EXISTS city_time ON city_records (timestamp);
 `;
 
 const TABLES = {
@@ -53,6 +64,7 @@ const TABLES = {
   pedestrians: { table: 'pedestrian_records', columns: PEDESTRIAN_COLUMNS, idColumn: 'sensor_id' },
   buses: { table: 'bus_records', columns: BUS_COLUMNS, idColumn: 'line_id' },
   bikes: { table: 'bike_records', columns: BIKE_COLUMNS, idColumn: 'station_id' },
+  city: { table: 'city_records', columns: CITY_COLUMNS, idColumn: null },
 };
 
 export class Store {
@@ -112,7 +124,7 @@ export class Store {
     const args = [];
     if (from) { where.push('timestamp >= ?'); args.push(from); }
     if (to) { where.push('timestamp < ?'); args.push(to); }
-    if (id) { where.push(`${idColumn} = ?`); args.push(id); }
+    if (id && idColumn) { where.push(`${idColumn} = ?`); args.push(id); }
     const sql = `SELECT ${columns.join(',')} FROM ${table}${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY timestamp, id`;
     return this.db.prepare(sql).iterate(...args);
   }
