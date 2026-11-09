@@ -27,6 +27,9 @@ services:
   panel:
     build: ./panel
     restart: unless-stopped
+    # Permite llegar a una ciudad que corre en este mismo equipo: http://host.docker.internal:<puerto>
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       PANEL_GROUPS: ${PANEL_GROUPS:?Define PANEL_GROUPS en .env, por ejemplo g1=https://grupo1.ejemplo.es,g2=https://grupo2.ejemplo.es}
       PANEL_PASSWORD: ${PANEL_PASSWORD:?Define PANEL_PASSWORD en .env}

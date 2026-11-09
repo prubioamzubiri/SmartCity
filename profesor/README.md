@@ -81,6 +81,24 @@ docker compose up -d --build
 Da a cada grupo su URL y su token. Pon su URL en `PANEL_GROUPS` del servidor del profesor
 (`g1=https://grupo1.ejemplo.es,…`) y reinicia el panel: `docker compose up -d panel`.
 
+### Panel y una ciudad en el mismo equipo
+
+Desde el panel, `localhost` es su propio contenedor. Usa `host.docker.internal` y el puerto HTTP de la ciudad, y
+arranca esa ciudad en HTTP (`DOMAIN=:80` en su `.env`), porque su certificado interno de `localhost` no lo acepta el
+panel. Cada compose necesita sus propios puertos:
+
+```sh
+# .env de la ciudad (raíz del repositorio)
+DOMAIN=:80
+HTTP_PORT=8081
+HTTPS_PORT=8444
+
+# profesor/.env
+PANEL_GROUPS=g1=http://host.docker.internal:8081
+HTTP_PORT=80
+HTTPS_PORT=443
+```
+
 ### Comprobaciones
 
 - Todas las ciudades con la misma `SIM_SCALE` (el panel avisa si no).
