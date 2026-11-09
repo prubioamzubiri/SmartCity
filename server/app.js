@@ -402,8 +402,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
     if (method === 'POST' && pathname === '/api/sensors') {
       authorize(req);
       const body = await readJson(req);
-      const x = finite(body.x, 'x');
-      const z = finite(body.z, 'z');
+      const { x, z } = pointOf((key) => body[key]);
       const name = typeof body.name === 'string' ? body.name.slice(0, 60) : '';
       const sensor = runtime.mutate((e) => e.sensors.add(x, z, name));
       if (!sensor) throw new HttpError(422, 'No hay ninguna calle cerca de esa posición');
@@ -413,8 +412,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
     if (method === 'POST' && pathname === '/api/pedestrian-sensors') {
       authorize(req);
       const body = await readJson(req);
-      const x = finite(body.x, 'x');
-      const z = finite(body.z, 'z');
+      const { x, z } = pointOf((key) => body[key]);
       const name = typeof body.name === 'string' ? body.name.slice(0, 60) : '';
       const sensor = runtime.mutate((e) => e.pedSensors.add(x, z, name));
       if (!sensor) throw new HttpError(422, 'No hay ninguna calle cerca de esa posición');

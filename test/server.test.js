@@ -155,6 +155,17 @@ test('API is open for writes when no token is configured', async (t) => {
   assert.equal((await call('/api/state')).status, 200);
 });
 
+test('sensors can be placed with lat/lon as well as x/z', async (t) => {
+  const { call } = await api(t, { token: '' });
+  const { xzToLatLon } = await import('../src/city/projection.js');
+  const { lat, lon } = xzToLatLon(0, -250);
+  for (const path of ['/api/sensors', '/api/pedestrian-sensors']) {
+    const res = await call(path, { method: 'POST', body: { lat, lon, name: 'GPS' } });
+    assert.equal(res.status, 201, path);
+    assert.equal((await call(path, { method: 'POST', body: { name: 'sin punto' } })).status, 400, path);
+  }
+});
+
 test('sensors recorded after creation can be exported as CSV by simulated date range', async (t) => {
   const { call, runtime, now } = await api(t);
   const created = await call('/api/sensors', { method: 'POST', body: { x: 0, z: -250, name: 'Entrada' }, auth: 'secreto' });
