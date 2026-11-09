@@ -46,6 +46,11 @@ el gestor mejora la ciudad y por debajo la empeora.
   seguidas resta 5 puntos (máximo 15).
 - Todos los valores están al principio de `panel/metric.js` (`METRIC`) para ajustarlos.
 
+## Pestaña «Evaluaciones»
+
+Muestra los resultados del [evaluador de escenarios ocultos](evaluador/README.md) (la nota final): el panel lee
+`profesor/evaluador/resultados/` en solo lectura. Las instrucciones están en el README del evaluador.
+
 ## Alertas
 
 El panel avisa cuando un grupo no responde, va con retraso, **se ha reiniciado** (la comparación sigue desde el

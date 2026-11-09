@@ -33,10 +33,29 @@ Necesitas **Docker** y **Node.js 24** (o 22.13 o posterior) en el equipo.
    ```sh
    node evaluar.mjs evaluacion.json
    ```
-3. Al terminar abre `resultados/<fecha>/informe.html`.
+3. Al terminar, míralo en el panel (pestaña **Evaluaciones**, ver abajo) o abre `resultados/<fecha>/informe.html`.
 
 Los escenarios se ejecutan uno tras otro y, dentro de cada uno, **todos los grupos a la vez**. Con la escala del curso
 (×52) un día simulado son unos 28 minutos reales: 3 escenarios de 1 día ≈ 1,5 horas.
+
+## Ver los resultados en el panel
+
+El panel del profesor tiene una pestaña **«Evaluaciones»** que muestra los resultados de esta carpeta: el historial de
+evaluaciones, la tabla de grupos por escenario y, al pulsar un grupo, sus gráficas frente a la ciudad sin gestor, el
+desglose, las incidencias, todas las acciones de su gestor y enlaces para descargar el CSV de la ciudad y el registro
+del gestor.
+
+- **Si evalúas en el mismo servidor que el panel**, no hay que hacer nada: `profesor/docker-compose.yml` ya monta
+  `profesor/evaluador/resultados` en el panel (en solo lectura). Lanza la evaluación desde `profesor/evaluador` y, al
+  terminar, abre el panel → **Evaluaciones**.
+- **Si evalúas en otro equipo**, copia la carpeta de la evaluación (`resultados/<fecha>/`, entera) a
+  `profesor/evaluador/resultados/` del servidor del panel, por ejemplo con
+  `scp -r resultados/20261109165651 usuario@servidor:SmartCity/profesor/evaluador/resultados/`.
+- Si el panel ya estaba arrancado antes de actualizarlo, recréalo una vez para que monte la carpeta:
+  `docker compose up -d --build panel` (desde `profesor/`).
+
+Una evaluación aparece en el panel cuando termina (cuando ya tiene `informe.json`). El panel solo lee: no puede lanzar
+evaluaciones ni borrar resultados.
 
 ## Configuración (`evaluacion.json`)
 

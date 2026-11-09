@@ -4,7 +4,10 @@ import path from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Collector, sameParams } from './collector.js';
+import { Evaluations } from './evaluations.js';
 import { BUCKET_SECONDS, INDICATORS, METRIC, scoreWindow } from './metric.js';
+
+const BASE_DATE = Date.UTC(2026, 0, 5); // segundo simulado 0
 
 const WINDOWS = { day: 96, week: 7 * 96, all: Infinity }; // en tramos de 15 min simulados
 export const REFERENCE = 'referencia';
@@ -33,7 +36,7 @@ const derived = {
   lostTripsPct: (r) => (r && r.sums.tripsDone + r.sums.tripsLost > 0 ? (100 * r.sums.tripsLost) / (r.sums.tripsDone + r.sums.tripsLost) : r ? 0 : null),
 };
 
-export function createPanel({ collector, groups, password, now = Date.now }) {
+export function createPanel({ collector, groups, password, evaluations = new Evaluations(null), now = Date.now }) {
   const status = (name) => collector.status.get(name);
   const ref = () => status(REFERENCE);
 
@@ -117,6 +120,21 @@ export function createPanel({ collector, groups, password, now = Date.now }) {
     };
   }
 
+  // Puntos de las gráficas de un grupo en un escenario de una evaluación (misma forma que las de directo).
+  function evaluationSeries(id, escenario, grupo) {
+    const b = evaluations.buckets(id, escenario, grupo);
+    if (!b) return null;
+    const refRows = new Map(b.reference.map((r) => [r.bucket, r]));
+    return {
+      name: grupo,
+      points: b.group.map((row) => ({
+        t: new Date(BASE_DATE + row.bucket * BUCKET_SECONDS * 1000).toISOString().slice(0, 16),
+        group: Object.fromEntries(Object.entries(derived).map(([k, f]) => [k, f(row)])),
+        reference: Object.fromEntries(Object.entries(derived).map(([k, f]) => [k, f(refRows.get(row.bucket))])),
+      })),
+    };
+  }
+
   const expected = Buffer.from(`Basic ${Buffer.from(`profesor:${password}`).toString('base64')}`);
   const authorized = (req) => {
     const got = Buffer.from(req.headers.authorization ?? '');
@@ -140,6 +158,25 @@ export function createPanel({ collector, groups, password, now = Date.now }) {
     const key = WINDOWS[url.searchParams.get('window')] ? url.searchParams.get('window') : 'day';
     if (url.pathname === '/' || url.pathname === '/index.html') return send(200, page, 'text/html; charset=utf-8');
     if (url.pathname === '/data/overview') return send(200, overview(key));
+    // Resultados del evaluador de escenarios ocultos (carpeta montada en solo lectura).
+    if (url.pathname === '/data/evaluations') return send(200, { enabled: evaluations.enabled, runs: evaluations.list() });
+    if (url.pathname.startsWith('/data/evaluation/')) {
+      const id = url.searchParams.get('id') ?? '';
+      if (url.pathname === '/data/evaluation/report') {
+        const report = evaluations.report(id);
+        return report ? send(200, report) : send(404, { error: 'Evaluación no encontrada' });
+      }
+      if (url.pathname === '/data/evaluation/series') {
+        const data = evaluationSeries(id, url.searchParams.get('escenario'), url.searchParams.get('grupo'));
+        return data ? send(200, data) : send(404, { error: 'Sin datos de ese grupo y escenario' });
+      }
+      if (url.pathname === '/data/evaluation/file') {
+        const file = evaluations.file(id, url.searchParams.get('path'));
+        if (!file) return send(404, { error: 'Fichero no encontrado' });
+        res.writeHead(200, { 'Content-Type': file.type, 'Content-Disposition': `attachment; filename="${file.name}"`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        return fs.createReadStream(file.path).pipe(res);
+      }
+    }
     const instance = url.searchParams.get('group');
     if (!names.has(instance)) return send(404, { error: 'Grupo desconocido' });
     if (url.pathname === '/data/series') return send(200, series(instance, key));
@@ -167,7 +204,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   fs.mkdirSync(path.dirname(dbFile), { recursive: true });
   const instances = [{ name: REFERENCE, url: env.REFERENCE_URL ?? 'http://reference:8080', kind: 'reference' }, ...groups];
   const collector = new Collector({ file: dbFile, instances, log });
-  const server = http.createServer(createPanel({ collector, groups, password: env.PANEL_PASSWORD }));
+  const evaluations = new Evaluations(env.RESULTS_DIR ?? null);
+  if (env.RESULTS_DIR && !evaluations.enabled) log(`RESULTS_DIR=${env.RESULTS_DIR} no existe: la pestaña «Evaluaciones» estará vacía`);
+  const server = http.createServer(createPanel({ collector, groups, password: env.PANEL_PASSWORD, evaluations }));
   const port = Number(env.PORT ?? 8090);
   server.listen(port, () => log(`Panel en http://localhost:${port} · ${groups.map((g) => `${g.name}=${g.url}`).join(' · ')}`));
 
