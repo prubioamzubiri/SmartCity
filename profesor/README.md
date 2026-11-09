@@ -55,7 +55,7 @@ alguien modifica la ciudad de referencia.
 
 ```sh
 cd profesor
-cp .env.example .env    # rellena PANEL_GROUPS, PANEL_PASSWORD, REFERENCE_TOKEN y DOMAIN
+cp .env.example .env    # rellena PANEL_GROUPS, PANEL_PASSWORD y DOMAIN
 npm run fetch-osm --prefix ..   # solo si ../public/data/city.json no existe
 docker compose up -d --build
 ```

@@ -8,7 +8,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      SMARTCITY_TOKEN: ${REFERENCE_TOKEN:?Define REFERENCE_TOKEN en .env (openssl rand -hex 24) y no lo compartas}
+      # Opcional: la referencia no se publica (solo la ve el panel por la red interna de Docker).
+      SMARTCITY_TOKEN: ${REFERENCE_TOKEN:-}
       SIM_SCALE: ${SIM_SCALE:-52.142857142857146} # debe ser la misma que la de los grupos
       LOCK_PARAMS: "1"
       CHECKPOINT_SECONDS: 30
