@@ -115,7 +115,8 @@ HTTPS_PORT=443
 ## Limitaciones
 
 - El índice en directo compara la ciudad del grupo con la referencia durante el curso. Para la **nota final** es más
-  justo evaluar todos los gestores sobre los mismos escenarios (otra semilla y otras fechas), que es otra herramienta.
+  justo evaluar todos los gestores sobre los mismos escenarios ocultos (otra semilla y otras fechas): ver
+  [`evaluador/README.md`](evaluador/README.md).
 - Las reglas de semáforo con horario (`schedule`) que ponen `all_red` no se cuentan en el coste; solo los ajustes
   directos.
 - El simulador no modela el beneficio de peatonalizar (los peatones no se ven afectados por los cortes): por eso existe

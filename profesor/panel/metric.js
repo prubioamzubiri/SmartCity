@@ -100,7 +100,8 @@ export function scoreWindow(group, ref, { reversals = 0, suspensions = 0 } = {})
       0.5 * lessIsBetter(g.busWaiting, r.busWaiting) +
       0.25 * lessIsBetter(fullRatio(g), fullRatio(r), 0.01) +
       0.25 * lessIsBetter(g.suspendedLines, r.suspendedLines, f.suspendedLineHours * hours),
-    fleet: lessIsBetter(g.busActive, r.busActive),
+    // Menos autobuses en servicio solo cuenta como eficiencia si no es porque se han suspendido líneas.
+    fleet: g.suspendedLines > r.suspendedLines ? Math.min(0, lessIsBetter(g.busActive, r.busActive)) : lessIsBetter(g.busActive, r.busActive),
     bikes: lessIsBetter(g.badStations, r.badStations, f.badStationHours * hours),
     parkings: lessIsBetter(g.saturatedLots, r.saturatedLots, f.saturatedLotHours * hours),
     cost: costKm > 0 ? -METRIC.clamp * Math.min(1, costKm / METRIC.costFullPenaltyKm) : 0,
@@ -146,4 +147,18 @@ export function scoreWindow(group, ref, { reversals = 0, suspensions = 0 } = {})
     suspensions,
     notes,
   };
+}
+
+// Tramos { bucket, n, sums } a partir de filas de /api/city.csv (`origin`: milisegundos del segundo simulado 0).
+export function rowsToBuckets(rows, origin = Date.UTC(2026, 0, 5)) {
+  const byBucket = new Map();
+  for (const row of rows) {
+    const bucket = bucketOf((Date.parse(`${row.timestamp}Z`) - origin) / 1000);
+    const values = indicatorsOf(row);
+    let b = byBucket.get(bucket);
+    if (!b) byBucket.set(bucket, (b = { bucket, n: 0, sums: Object.fromEntries(INDICATORS.map((k) => [k, 0])) }));
+    b.n++;
+    for (const k of INDICATORS) b.sums[k] += values[k];
+  }
+  return [...byBucket.values()].sort((a, b) => a.bucket - b.bucket);
 }

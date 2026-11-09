@@ -41,6 +41,13 @@ test('longer trips and trips that cannot be made lower the index', () => {
   assert.ok(better.components.trips > 0);
 });
 
+test('suspending bus lines does not count as fleet efficiency', () => {
+  const suspended = scoreWindow(rows({ busActive: 20, suspendedLines: 2 }), rows({}));
+  assert.equal(suspended.components.fleet, 0);
+  const leaner = scoreWindow(rows({ busActive: 30 }), rows({}));
+  assert.ok(leaner.components.fleet > 0);
+});
+
 test('making one service much worse caps the index, and long suspensions are penalised', () => {
   const tradeoff = scoreWindow(rows({ stopped: 0, busWaiting: 4000, badStations: 0, saturatedLots: 0 }), rows({}));
   assert.ok(tradeoff.index <= METRIC.cap);
