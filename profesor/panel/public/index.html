@@ -49,7 +49,7 @@ h2 { font-size: 16px; margin: 28px 0 10px; }
 .fill { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .alerts { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 4px; font-size: 12px; }
-.alerts li { display: flex; gap: 6px; align-items: flex-start; }
+.alerts li { display: flex; gap: 6px; align-items: flex-start; overflow-wrap: anywhere; min-width: 0; }
 .icon { flex: none; width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; }
 .icon.error { background: var(--critical); } .icon.warn { background: var(--warning); color: #0b0b0b; } .icon.ok { background: var(--good); }
 .charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
@@ -146,7 +146,8 @@ function lineChart(points, key, label, digits) {
   const W = 340, H = 170, P = { l: 40, r: 8, t: 8, b: 22 };
   const vals = points.flatMap((p) => [p.group[key], p.reference[key]]).filter((v) => v !== null && v !== undefined);
   if (!points.length || !vals.length) return `<div class="card chart"><h4>${label}</h4><p class="muted">Sin datos</p></div>`;
-  const max = Math.max(...vals, 1e-9) * 1.1, min = Math.min(0, ...vals);
+  const top = Math.max(...vals);
+  const max = top > 0 ? top * 1.1 : 1, min = Math.min(0, ...vals);
   const x = (i) => P.l + (points.length === 1 ? 0 : (i / (points.length - 1)) * (W - P.l - P.r));
   const y = (v) => P.t + (1 - (v - min) / (max - min)) * (H - P.t - P.b);
   const path = (k) => {
@@ -159,8 +160,8 @@ function lineChart(points, key, label, digits) {
   return `<div class="card chart" data-key="${key}" data-digits="${digits}"><h4>${label}</h4>
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${label}: grupo frente a referencia">
       ${ticks}
-      <path d="${path('reference')}" fill="none" stroke="var(--series-ref)" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>
       <path d="${path('group')}" fill="none" stroke="var(--series-group)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      <path d="${path('reference')}" fill="none" stroke="var(--series-ref)" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>
       <line class="cross" y1="${P.t}" y2="${H - P.b}" stroke="var(--text-muted)" stroke-width="1" visibility="hidden"/>
       <text x="${P.l}" y="${H - 4}" font-size="10" fill="var(--text-muted)">${first}</text>
       <text x="${W - P.r}" y="${H - 4}" font-size="10" text-anchor="end" fill="var(--text-muted)">${last}</text>

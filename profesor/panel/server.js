@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { Collector } from './collector.js';
+import { Collector, sameParams } from './collector.js';
 import { BUCKET_SECONDS, INDICATORS, METRIC, scoreWindow } from './metric.js';
 
 const WINDOWS = { day: 96, week: 7 * 96, all: Infinity }; // en tramos de 15 min simulados
@@ -50,7 +50,7 @@ export function createPanel({ collector, groups, password, now = Date.now }) {
     if (!s.ok) out.push({ level: 'error', text: `No responde: ${s.error}` });
     if (s.simSeconds === undefined) return out;
     if (r?.scale && s.scale !== r.scale) out.push({ level: 'error', text: `Escala del reloj distinta de la referencia (×${s.scale?.toFixed(2)} frente a ×${r.scale.toFixed(2)})` });
-    if (r?.params && JSON.stringify(s.params) !== JSON.stringify(r.params)) out.push({ level: 'error', text: `Parámetros de demanda distintos de la referencia ${JSON.stringify(s.params)}: la comparación no es válida` });
+    if (r?.params && !sameParams(s.params, r.params)) out.push({ level: 'error', text: `Parámetros de demanda distintos de la referencia ${JSON.stringify(s.params)}: la comparación no es válida` });
     if (r?.simSeconds !== undefined && s.simSeconds > r.simSeconds + BUCKET_SECONDS) out.push({ level: 'warn', text: 'Va por delante de la referencia: sus últimos tramos no se pueden comparar (arranca la referencia antes que los grupos)' });
     if (s.caughtUp === false) out.push({ level: 'warn', text: 'El simulador va con retraso respecto al reloj (está recuperando tiempo)' });
     if (collector.epochOf(group.name) > 0) out.push({ level: 'warn', text: `La ciudad se ha reiniciado ${collector.epochOf(group.name)} vez/veces: solo cuenta desde el último reinicio` });

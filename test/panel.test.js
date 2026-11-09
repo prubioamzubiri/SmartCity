@@ -165,3 +165,10 @@ test('network errors are explained instead of a bare "fetch failed"', async () =
   assert.match(describeFetchError('https://x', failed('DEPTH_ZERO_SELF_SIGNED_CERT')), /DOMAIN=:80/);
   assert.match(describeFetchError('http://x:1', failed('EWHATEVER')), /EWHATEVER/);
 });
+
+test('demand parameters are compared by value, not by key order', async () => {
+  const { sameParams } = await import('../profesor/panel/collector.js');
+  assert.ok(sameParams({ maxCars: 1500, maxPedestrians: 12000, scenario: 'auto' }, { maxPedestrians: 12000, scenario: 'auto', maxCars: 1500 }));
+  assert.ok(!sameParams({ maxCars: 1500 }, { maxCars: 10 }));
+  assert.ok(!sameParams({ maxCars: 1500 }, { maxCars: 1500, scenario: 'auto' }));
+});

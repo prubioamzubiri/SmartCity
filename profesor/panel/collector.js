@@ -28,6 +28,11 @@ function snapshotOf(state, restrictions) {
 }
 
 const json = (v) => JSON.stringify(v ?? null);
+// Mismos parámetros de demanda aunque las claves vengan en otro orden (al restaurar un checkpoint cambia el orden).
+export const sameParams = (a, b) => {
+  const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
+  return [...keys].every((k) => a?.[k] === b?.[k]);
+};
 
 // CSV de la API (comillas dobles solo cuando hacen falta) → lista de objetos por columna.
 export function parseCsv(text) {
@@ -84,7 +89,7 @@ export function diffSnapshots(prev, next, simSeconds, memory) {
     const b = next.plan?.signals?.[id];
     if (json(a) !== json(b)) out.push({ kind: 'action', text: `Semáforo ${id}: ${b ? json(b) : 'vuelve al plan general'}` });
   }
-  if (json(prev.params) !== json(next.params)) out.push({ kind: 'params', text: `Cambia los parámetros de demanda: ${json(prev.params)} → ${json(next.params)}` });
+  if (!sameParams(prev.params, next.params)) out.push({ kind: 'params', text: `Cambia los parámetros de demanda: ${json(prev.params)} → ${json(next.params)}` });
   for (const [id, p] of Object.entries(next.pending)) {
     if (json(prev.pending[id]) !== json(p)) out.push({ kind: 'action', text: `Bicis ${id}: capacidad → ${p.capacity ?? json(p)}` });
   }
