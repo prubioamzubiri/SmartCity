@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS city_records (
   timestamp TEXT NOT NULL, weekday TEXT NOT NULL, cars INTEGER, stopped INTEGER, avg_speed_kmh REAL, buses INTEGER,
   bus_passengers INTEGER, full_buses INTEGER, bus_waiting INTEGER, suspended_lines INTEGER, bikes_in_use INTEGER,
   stations_empty INTEGER, stations_full INTEGER, parkings_full INTEGER, closed_m INTEGER, bus_only_m INTEGER,
-  limited_m INTEGER, signals_all_red INTEGER
+  limited_m INTEGER, signals_all_red INTEGER, trips_done INTEGER, trip_min REAL, delay_min REAL, trips_lost INTEGER
 );
 CREATE INDEX IF NOT EXISTS city_time ON city_records (timestamp);
 `;
@@ -73,6 +73,12 @@ export class Store {
     this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec('PRAGMA synchronous = NORMAL');
     this.db.exec(SCHEMA);
+    // Bases de datos creadas con una versión anterior: añade las columnas nuevas del histórico global.
+    const have = new Set(this.db.prepare('PRAGMA table_info(city_records)').all().map((c) => c.name));
+    const types = { trips_done: 'INTEGER', trip_min: 'REAL', delay_min: 'REAL', trips_lost: 'INTEGER' };
+    for (const [column, type] of Object.entries(types)) {
+      if (!have.has(column)) this.db.exec(`ALTER TABLE city_records ADD COLUMN ${column} ${type}`);
+    }
     this.inserts = {};
     for (const [kind, { table, columns }] of Object.entries(TABLES)) {
       this.inserts[kind] = this.db.prepare(

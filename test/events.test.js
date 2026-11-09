@@ -117,8 +117,9 @@ function grid(n = 21) {
   const ways = [];
   for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) nodes.push(i * 100, j * 100);
   for (let i = 0; i < n; i++) {
-    ways.push([4, ...Array.from({ length: n }, (_, j) => i * n + j)]);
-    ways.push([4, ...Array.from({ length: n }, (_, j) => j * n + i)]);
+    // [clase, sentido (0 = doble), ...nodos]
+    ways.push([4, 0, ...Array.from({ length: n }, (_, j) => i * n + j)]);
+    ways.push([4, 0, ...Array.from({ length: n }, (_, j) => j * n + i)]);
   }
   return { nodes, ways, signals: [] };
 }

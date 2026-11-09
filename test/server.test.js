@@ -235,3 +235,20 @@ test('sensors recorded after creation can be exported as CSV by simulated date r
   assert.equal((await call(`/api/sensors/${id}`, { method: 'DELETE', auth: 'secreto' })).status, 200);
   assert.equal((await call(`/api/sensors/${id}`, { method: 'DELETE', auth: 'secreto' })).status, 404);
 });
+
+test('a database from an older version gets the new city columns', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'smartcity-')), 'old.db');
+  const old = new DatabaseSync(file);
+  const { CITY_COLUMNS } = await import('../src/sensors/cityTracker.js');
+  const previous = CITY_COLUMNS.filter((c) => !['trips_done', 'trip_min', 'delay_min', 'trips_lost'].includes(c));
+  old.exec(`CREATE TABLE city_records (id INTEGER PRIMARY KEY AUTOINCREMENT, ${previous.map((c) => `${c} ${c === 'timestamp' || c === 'weekday' ? 'TEXT' : 'REAL'}`).join(', ')})`);
+  old.close();
+  const store = new Store(file);
+  const columns = store.db.prepare('PRAGMA table_info(city_records)').all().map((c) => c.name);
+  for (const c of ['trips_done', 'trip_min', 'delay_min', 'trips_lost']) assert.ok(columns.includes(c), c);
+  store.close();
+});

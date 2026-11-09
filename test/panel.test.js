@@ -49,7 +49,7 @@ test('only buckets present in both cities are compared', () => {
 test('indicators are read from a row of the city CSV', () => {
   const row = { timestamp: '2026-01-05T07:05:00', cars: '10', stopped: '2', avg_speed_kmh: '30', buses: '5', bus_passengers: '59', full_buses: '1',
     bus_waiting: '6', suspended_lines: '1', bikes_in_use: '3', stations_empty: '1', stations_full: '1', parkings_full: '1',
-    closed_m: '1000', bus_only_m: '0', limited_m: '1000', signals_all_red: '1' };
+    closed_m: '1000', bus_only_m: '0', limited_m: '1000', signals_all_red: '1', trips_done: '20', trip_min: '6', delay_min: '2', trips_lost: '1' };
   assert.deepEqual(Object.keys(row).sort(), CITY_COLUMNS.filter((c) => c !== 'weekday').sort());
   const v = indicatorsOf(row);
   assert.deepEqual(Object.keys(v).sort(), [...INDICATORS].sort());
