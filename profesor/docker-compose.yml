@@ -35,8 +35,11 @@ services:
       PANEL_PASSWORD: ${PANEL_PASSWORD:?Define PANEL_PASSWORD en .env}
       REFERENCE_URL: http://reference:8080
       POLL_SECONDS: ${POLL_SECONDS:-5}
+      RESULTS_DIR: /resultados
     volumes:
       - panel-data:/data
+      # Resultados del evaluador de escenarios ocultos (pestaña «Evaluaciones»), en solo lectura.
+      - ./evaluador/resultados:/resultados:ro
     depends_on:
       reference:
         condition: service_healthy

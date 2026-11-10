@@ -231,12 +231,17 @@ async function runScenario(s, config, built, runId, dir) {
         acciones: events.filter((e) => e.kind === 'action' || e.kind === 'params').length,
         registro: events.reverse().map((e) => ({ hora: iso(e.sim_seconds), tipo: e.kind, texto: e.text })),
         sinGestor: !c.g.carpeta,
+        // Rutas relativas a la carpeta de la evaluación (las usa la pestaña «Evaluaciones» del panel).
+        archivos: {
+          ciudad: `${path.basename(dir)}/${slug(c.g.nombre)}-ciudad.csv`,
+          registro: c.hasManager ? `${path.basename(dir)}/${slug(c.g.nombre)}-gestor.log` : null,
+        },
         incidencias: [c.note, c.exit && `El gestor terminó antes de tiempo (código ${c.exit.code}, ${c.exit.simTime})`].filter(Boolean),
       });
       log(`  ${c.g.nombre}: índice ${score ? score.index.toFixed(1) : '—'}`);
     }
     collector.close();
-    return results;
+    return { results, referencia: `${path.basename(dir)}/referencia.json` };
   } finally {
     for (const c of cities) await cleanup(c.name);
   }
@@ -310,8 +315,8 @@ async function main() {
   const built = await buildImages(config, runId);
   const perScenario = [];
   for (const s of config.escenarios) {
-    const results = await runScenario(s, config, built, runId, path.join(out, slug(s.nombre)));
-    perScenario.push({ escenario: s, results });
+    const { results, referencia } = await runScenario(s, config, built, runId, path.join(out, slug(s.nombre)));
+    perScenario.push({ escenario: s, referencia, results });
   }
   const summary = summarize(config, perScenario);
   fs.writeFileSync(path.join(out, 'informe.json'), JSON.stringify({ fecha: started, escala: config.scale, pesos: METRIC.weights, resumen: summary, escenarios: perScenario }, null, 2));

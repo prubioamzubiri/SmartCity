@@ -189,3 +189,36 @@ test('demand parameters are compared by value, not by key order', async () => {
   assert.ok(!sameParams({ maxCars: 1500 }, { maxCars: 10 }));
   assert.ok(!sameParams({ maxCars: 1500 }, { maxCars: 1500, scenario: 'auto' }));
 });
+
+test('the panel reads evaluator reports and never serves files outside the results folder', async (t) => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { Evaluations } = await import('../profesor/panel/evaluations.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'resultados-'));
+  const run = path.join(dir, '20261109120000');
+  fs.mkdirSync(path.join(run, 'laborable'), { recursive: true });
+  const iso = (s) => new Date(Date.UTC(2026, 0, 5) + s * 1000).toISOString().slice(0, 19);
+  const row = (s) => Object.fromEntries(CITY_COLUMNS.map((c) => [c, c === 'timestamp' ? iso(s) : c === 'weekday' ? 'lunes' : 1]));
+  const rows = [0, 300, 600, 900, 1200, 1500].map((s) => row(25200 + s));
+  fs.writeFileSync(path.join(run, 'laborable', 'g1-ciudad.csv'), `${CITY_COLUMNS.join(',')}\n${rows.map((r) => CITY_COLUMNS.map((c) => r[c]).join(',')).join('\n')}\n`);
+  fs.writeFileSync(path.join(run, 'laborable', 'referencia.json'), JSON.stringify(rows));
+  fs.writeFileSync(path.join(dir, 'secreto.json'), '{}');
+  const report = { fecha: 'hoy', escala: 52, resumen: [{ grupo: 'g1', media: 50 }], escenarios: [{ escenario: { nombre: 'laborable' }, results: [{ grupo: 'g1' }] }] };
+  fs.writeFileSync(path.join(run, 'informe.json'), JSON.stringify(report));
+  fs.mkdirSync(path.join(dir, '20261109130000')); // evaluación en curso: aún sin informe
+
+  const ev = new Evaluations(dir);
+  assert.equal(ev.enabled, true);
+  assert.deepEqual(ev.list().map((r) => r.id), ['20261109120000']);
+  assert.equal(ev.report('../x'), null);
+  assert.ok(ev.file('20261109120000', 'laborable/g1-ciudad.csv'));
+  assert.equal(ev.file('20261109120000', '../secreto.json'), null);
+  assert.equal(ev.file('20261109120000', '/etc/passwd'), null);
+  assert.equal(ev.file('20261109120000', 'informe.exe'), null);
+  const b = ev.buckets('20261109120000', 'laborable', 'g1'); // sin "archivos": rutas por defecto
+  assert.equal(b.group.length, 2);
+  assert.deepEqual(b.group, b.reference);
+  assert.equal(new Evaluations(null).enabled, false);
+  assert.deepEqual(new Evaluations(path.join(dir, 'no-existe')).list(), []);
+});

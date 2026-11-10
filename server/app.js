@@ -32,9 +32,17 @@ const csvSafe = (v) => {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-function* csvLines(columns, rows) {
-  yield `${columns.join(',')}\n`;
-  for (const row of rows) yield `${columns.map((c) => csvSafe(row[c])).join(',')}\n`;
+// Líneas CSV agrupadas en bloques de ~64 KB: menos trozos que mandar y menos pausas que esperar.
+function* csvLines(columns, rows, chunkSize = 65536) {
+  let chunk = `${columns.join(',')}\n`;
+  for (const row of rows) {
+    chunk += `${columns.map((c) => csvSafe(row[c])).join(',')}\n`;
+    if (chunk.length >= chunkSize) {
+      yield chunk;
+      chunk = '';
+    }
+  }
+  if (chunk) yield chunk;
 }
 
 const CSV_EXPORTS = {

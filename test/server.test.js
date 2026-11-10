@@ -252,3 +252,25 @@ test('a database from an older version gets the new city columns', async () => {
   for (const c of ['trips_done', 'trip_min', 'delay_min', 'trips_lost']) assert.ok(columns.includes(c), c);
   store.close();
 });
+
+test('CSV exports read in batches, keep the order and always end even while rows keep arriving', () => {
+  const store = new Store();
+  const t0 = Date.UTC(2026, 0, 5);
+  const bus = (i, line) => ({ timestamp: new Date(t0 + i * 300000).toISOString().slice(0, 19), weekday: 'lunes', line_id: line, stops: 1, buses: 1, passengers: i, capacity: 80, occupancy_pct: 1, full_buses: 0, waiting: 0 });
+  // Dos líneas con la misma marca de tiempo: el orden es por tiempo y, a igualdad, por orden de llegada.
+  store.checkpoint({}, { buses: Array.from({ length: 250 }, (_, i) => [bus(i, 'L1'), bus(i, 'L2')]).flat() });
+  const seen = [];
+  for (const row of store.iterate('buses', {}, 7)) {
+    seen.push(row);
+    // El simulador sigue escribiendo a mitad de la descarga: no se cuelga ni se alarga.
+    if (seen.length % 50 === 0) store.checkpoint({}, { buses: [bus(1000 + seen.length, 'L1')] });
+    assert.ok(seen.length <= 500, 'la exportación no termina');
+  }
+  assert.equal(seen.length, 500);
+  assert.deepEqual(seen.slice(0, 3).map((r) => [r.passengers, r.line_id]), [[0, 'L1'], [0, 'L2'], [1, 'L1']]);
+  assert.ok(seen.every((r, i) => i === 0 || r.timestamp >= seen[i - 1].timestamp));
+  assert.ok(!('_id' in seen[0]) && !('_ts' in seen[0]));
+  const l2 = [...store.iterate('buses', { id: 'L2', from: new Date(t0 + 100 * 300000).toISOString().slice(0, 19) }, 9)];
+  assert.equal(l2.length, 150);
+  assert.ok(l2.every((r) => r.line_id === 'L2'));
+});

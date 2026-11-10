@@ -66,12 +66,23 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 .kind { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border); white-space: nowrap; }
 .scroll { overflow-x: auto; }
 .notes { font-size: 12px; color: var(--text-secondary); margin: 6px 0 0; padding-left: 16px; }
+.tabs { margin: 4px 0 16px; }
+select { font: inherit; color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; max-width: 100%; }
+.pos { color: var(--pos); } .neg { color: var(--neg); }
+.downloads a { color: var(--series-group); margin-right: 16px; }
+.empty code { background: var(--surface-0); padding: 1px 4px; border-radius: 4px; }
+tr.pick { cursor: pointer; } tr.pick:hover td { background: var(--surface-0); } tr.pick[aria-selected="true"] td { background: var(--surface-0); font-weight: 600; }
 @media (max-width: 600px) { .charts { grid-template-columns: 1fr; } .comp { grid-template-columns: 96px 1fr 40px; } }
 </style>
 </head>
 <body>
 <main>
   <h1>Panel del profesor</h1>
+  <div class="seg tabs" id="tabs" role="tablist" aria-label="Secciones">
+    <button data-tab="live" role="tab" aria-pressed="true">En directo</button>
+    <button data-tab="evals" role="tab" aria-pressed="false">Evaluaciones</button>
+  </div>
+  <section id="live">
   <p class="sub" id="refline">Cargando…</p>
   <div class="bar">
     <span class="muted">Ventana</span>
@@ -93,6 +104,34 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
     <div class="card scroll"><table id="breakdown"></table><ul class="notes" id="notes"></ul></div>
     <h2>Acciones registradas</h2>
     <div class="card scroll"><table id="events"></table></div>
+  </section>
+  </section>
+
+  <section id="evals" hidden>
+    <div class="bar">
+      <label class="muted" for="evalRun">Evaluación</label>
+      <select id="evalRun"></select>
+      <span class="muted" id="evalInfo"></span>
+    </div>
+    <div class="card empty" id="evalEmpty" hidden></div>
+    <div id="evalBody" hidden>
+      <div class="card scroll"><table id="evalSummary"></table></div>
+      <p class="muted">50 = igual que la ciudad sin gestor. Componentes: mejora media frente a ella (±50 %). Pulsa un grupo para ver el detalle.</p>
+      <h2 id="evalTitle"></h2>
+      <div class="bar">
+        <label class="muted" for="evalScenario">Escenario</label>
+        <select id="evalScenario"></select>
+        <span class="muted" id="evalScenarioInfo"></span>
+      </div>
+      <ul class="alerts" id="evalIssues"></ul>
+      <div class="legend"><span><span class="key"></span><span id="evalLegend">Grupo</span></span><span><span class="key ref"></span>Misma ciudad sin gestor</span></div>
+      <div class="charts" id="evalCharts"></div>
+      <h2>Desglose</h2>
+      <div class="card scroll"><table id="evalBreakdown"></table><ul class="notes" id="evalNotes"></ul></div>
+      <p class="downloads" id="evalDownloads"></p>
+      <h2>Acciones del gestor</h2>
+      <div class="card scroll"><table id="evalActions"></table></div>
+    </div>
   </section>
 </main>
 <div class="tip" id="tip"></div>
@@ -170,9 +209,9 @@ function lineChart(points, key, label, digits) {
     </svg></div>`;
 }
 
-function wireTooltips(points) {
+function wireTooltips(points, container = $('charts'), name = selected) {
   const tip = $('tip');
-  for (const card of document.querySelectorAll('.chart[data-key]')) {
+  for (const card of container.querySelectorAll('.chart[data-key]')) {
     const svg = card.querySelector('svg'), cross = card.querySelector('.cross'), key = card.dataset.key, d = Number(card.dataset.digits);
     const move = (ev) => {
       const box = svg.getBoundingClientRect();
@@ -181,7 +220,7 @@ function wireTooltips(points) {
       const p = points[i];
       const cx = 40 + (points.length === 1 ? 0 : (i / (points.length - 1)) * 292);
       cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible');
-      tip.innerHTML = `<b>${p.t.replace('T', ' ')}</b><br><span class="key"></span>${esc(selected)}: ${fmt(p.group[key], d)}<br><span class="key ref"></span>Referencia: ${fmt(p.reference[key], d)}`;
+      tip.innerHTML = `<b>${p.t.replace('T', ' ')}</b><br><span class="key"></span>${esc(name)}: ${fmt(p.group[key], d)}<br><span class="key ref"></span>Sin gestor: ${fmt(p.reference[key], d)}`;
       tip.style.display = 'block';
       tip.style.left = `${Math.min(ev.clientX + 12, innerWidth - tip.offsetWidth - 8)}px`;
       tip.style.top = `${ev.clientY + 12}px`;
@@ -216,6 +255,7 @@ async function renderDetail(group) {
 }
 
 async function refresh() {
+  if ($('live').hidden) return;
   try {
     const data = await get(`data/overview?window=${windowKey}`);
     const r = data.reference;
@@ -237,7 +277,103 @@ for (const b of document.querySelectorAll('#windows button')) b.onclick = () => 
   for (const o of document.querySelectorAll('#windows button')) o.setAttribute('aria-pressed', o === b);
   refresh();
 };
-refresh();
+
+// --- Evaluaciones (resultados del evaluador de escenarios ocultos) ---------------------------------------------------
+const evalState = { runs: [], report: null, group: null, scenario: null };
+const signed = (v) => (v === null || v === undefined ? '—' : `<span class="${v > 0.0005 ? 'pos' : v < -0.0005 ? 'neg' : ''}">${v > 0.0005 ? '+' : ''}${fmt(100 * v)} %</span>`);
+const fileUrl = (rel) => `data/evaluation/file?id=${encodeURIComponent(evalState.report.id)}&path=${encodeURIComponent(rel)}`;
+
+async function loadEvaluations() {
+  const data = await get('data/evaluations');
+  evalState.runs = data.runs.filter((r) => !r.error);
+  const empty = $('evalEmpty');
+  if (!data.enabled || !evalState.runs.length) {
+    empty.hidden = false;
+    $('evalBody').hidden = true;
+    $('evalRun').hidden = true;
+    empty.innerHTML = !data.enabled
+      ? '<p>El panel no tiene acceso a los resultados del evaluador. Comprueba que <code>profesor/docker-compose.yml</code> monta <code>./evaluador/resultados</code> en <code>/resultados</code> y reinicia el panel: <code>docker compose up -d panel</code>.</p>'
+      : '<p>Todavía no hay evaluaciones. Lánzala desde <code>profesor/evaluador</code> con <code>node evaluar.mjs evaluacion.json</code>; al terminar aparecerá aquí. Ver <code>profesor/evaluador/README.md</code>.</p>';
+    return;
+  }
+  empty.hidden = true;
+  $('evalRun').hidden = false;
+  const current = $('evalRun').value || evalState.runs[0].id;
+  $('evalRun').innerHTML = evalState.runs.map((r) => `<option value="${esc(r.id)}">${esc(r.fecha ?? r.id)} · ${r.escenarios.length} escenario(s)</option>`).join('');
+  $('evalRun').value = evalState.runs.some((r) => r.id === current) ? current : evalState.runs[0].id;
+  await loadReport($('evalRun').value);
+}
+
+async function loadReport(id) {
+  const report = await get(`data/evaluation/report?id=${encodeURIComponent(id)}`);
+  report.id = id;
+  evalState.report = report;
+  $('evalBody').hidden = false;
+  $('evalInfo').textContent = `escala ×${fmt(report.escala, 2)} · ${report.escenarios.length} escenario(s)`;
+  const names = report.escenarios.map((s) => s.escenario.nombre);
+  const ranked = [...report.resumen].sort((a, b) => (b.media ?? -1) - (a.media ?? -1));
+  $('evalSummary').innerHTML = `<tr><th>Grupo</th><th class="n">Media</th>${names.map((n) => `<th class="n">${esc(n)}</th>`).join('')}${Object.values(COMPONENTS).map((c) => `<th class="n">${c}</th>`).join('')}</tr>` +
+    ranked.map((g) => `<tr class="pick" data-g="${esc(g.grupo)}" tabindex="0"><td>${esc(g.grupo)}${g.sinGestor ? ' <span class="muted">(control sin gestor)</span>' : ''}</td><td class="n"><b>${fmt(g.media, 1)}</b></td>${g.porEscenario.map((v) => `<td class="n">${fmt(v, 1)}</td>`).join('')}${Object.keys(COMPONENTS).map((k) => `<td class="n">${signed(g.componentes[k])}</td>`).join('')}</tr>`).join('');
+  for (const tr of $('evalSummary').querySelectorAll('tr.pick')) {
+    const pick = () => { evalState.group = tr.dataset.g; renderEvalDetail(); };
+    tr.onclick = pick;
+    tr.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
+  }
+  if (!report.resumen.some((g) => g.grupo === evalState.group)) evalState.group = ranked.find((g) => !g.sinGestor)?.grupo ?? ranked[0]?.grupo;
+  $('evalScenario').innerHTML = names.map((n) => `<option>${esc(n)}</option>`).join('');
+  if (!names.includes(evalState.scenario)) evalState.scenario = names[0];
+  $('evalScenario').value = evalState.scenario;
+  await renderEvalDetail();
+}
+
+async function renderEvalDetail() {
+  const report = evalState.report;
+  for (const tr of $('evalSummary').querySelectorAll('tr.pick')) tr.setAttribute('aria-selected', tr.dataset.g === evalState.group);
+  const sc = report.escenarios.find((s) => s.escenario.nombre === evalState.scenario);
+  const r = sc?.results.find((x) => x.grupo === evalState.group);
+  $('evalTitle').textContent = `${evalState.group} · ${r?.index === null || r?.index === undefined ? 'sin índice' : `índice ${fmt(r.index, 1)}`}`;
+  $('evalLegend').textContent = evalState.group;
+  $('evalScenarioInfo').textContent = sc ? `semilla ${sc.escenario.semilla} · desde ${sc.escenario.inicio.replace('T', ' ')} · ${sc.escenario.horas} h` : '';
+  if (!r) return;
+  $('evalIssues').innerHTML = alertList(r.incidencias.length ? r.incidencias.map((t) => ({ level: 'error', text: t })) : [{ level: 'ok', text: r.sinGestor ? 'Grupo de control: debe dar 50' : 'Sin incidencias' }]);
+  const s = r.score;
+  $('evalBreakdown').innerHTML = s
+    ? `<tr><th>Indicador (escenario completo)</th><th class="n">${esc(r.grupo)}</th><th class="n">Sin gestor</th></tr>` +
+      ROWS.map(([k, label, d]) => `<tr><td>${label}</td><td class="n">${fmt(s.group[k], d)}</td><td class="n">${fmt(s.reference[k], d)}</td></tr>`).join('') +
+      Object.entries(COMPONENTS).map(([k, label]) => `<tr><td>Componente: ${label}</td><td class="n">${signed(s.components[k])}</td><td class="n">—</td></tr>`).join('') +
+      `<tr><td>Marchas atrás</td><td class="n">${s.reversals}</td><td class="n">—</td></tr><tr><td>Líneas suspendidas &gt; 2 h (episodios)</td><td class="n">${s.suspensions}</td><td class="n">—</td></tr>`
+    : '<tr><td class="muted">Sin datos comparables.</td></tr>';
+  $('evalNotes').innerHTML = (s?.notes ?? []).map((n) => `<li>${esc(n)}</li>`).join('');
+  const links = [];
+  if (r.archivos?.ciudad) links.push(`<a href="${fileUrl(r.archivos.ciudad)}">CSV de la ciudad</a>`);
+  if (r.archivos?.registro) links.push(`<a href="${fileUrl(r.archivos.registro)}">Registro del gestor</a>`);
+  if (sc.referencia) links.push(`<a href="${fileUrl(sc.referencia)}">Ciudad sin gestor (JSON)</a>`);
+  $('evalDownloads').innerHTML = links.join('');
+  $('evalActions').innerHTML = `<tr><th>Hora simulada</th><th>Tipo</th><th>Detalle</th></tr>` + (r.registro.length
+    ? r.registro.map((e) => `<tr><td style="white-space:nowrap">${esc(e.hora.replace('T', ' ').slice(0, 16))}</td><td><span class="kind">${KIND[e.tipo] ?? esc(e.tipo)}</span></td><td>${esc(e.texto)}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="muted">Ninguna</td></tr>');
+  try {
+    const series = await get(`data/evaluation/series?id=${encodeURIComponent(report.id)}&escenario=${encodeURIComponent(evalState.scenario)}&grupo=${encodeURIComponent(evalState.group)}`);
+    $('evalCharts').innerHTML = CHARTS.map(([k, label, d]) => lineChart(series.points, k, label, d)).join('');
+    wireTooltips(series.points, $('evalCharts'), evalState.group);
+  } catch {
+    $('evalCharts').innerHTML = '<p class="muted">No se encuentran los datos de este grupo en este escenario.</p>';
+  }
+}
+
+$('evalRun').onchange = () => loadReport($('evalRun').value);
+$('evalScenario').onchange = () => { evalState.scenario = $('evalScenario').value; renderEvalDetail(); };
+
+function showTab(tab) {
+  for (const b of document.querySelectorAll('#tabs button')) b.setAttribute('aria-pressed', b.dataset.tab === tab);
+  $('live').hidden = tab !== 'live';
+  $('evals').hidden = tab !== 'evals';
+  history.replaceState(null, '', tab === 'evals' ? '#evaluaciones' : '#');
+  if (tab === 'evals') loadEvaluations().catch((err) => { $('evalInfo').textContent = `Error: ${err.message}`; });
+  else refresh();
+}
+for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => showTab(b.dataset.tab);
+showTab(location.hash === '#evaluaciones' ? 'evals' : 'live');
 setInterval(refresh, 15000);
 </script>
 <style>.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } .alerts li { position: relative; }</style>
