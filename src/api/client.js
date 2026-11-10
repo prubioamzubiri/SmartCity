@@ -113,6 +113,28 @@ export class ApiClient {
     return this.request('/api/bikes/tracked', { method: 'PUT', body: { ids } });
   }
 
+  // Un semáforo: { mode, green, greenA, greenB, yellow, schedule } (null quita un ajuste) o { reset: true }.
+  setSignal(id, settings) {
+    return this.request(`/api/signals/${encodeURIComponent(id)}`, { method: 'PATCH', body: settings });
+  }
+
+  setBusFleet(line, fleet) {
+    return this.request(`/api/buses/${encodeURIComponent(line)}`, { method: 'PATCH', body: { fleet } });
+  }
+
+  // Restricción: { mode, x, z, radius } o { mode, ways }, con limit (entry_limit) y name opcionales.
+  addRestriction(definition) {
+    return this.request('/api/restrictions', { method: 'POST', body: definition });
+  }
+
+  updateRestriction(id, changes) {
+    return this.request(`/api/restrictions/${encodeURIComponent(id)}`, { method: 'PATCH', body: changes });
+  }
+
+  removeRestriction(id) {
+    return this.request(`/api/restrictions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
   // Guía de la API que publica el servidor (docs/API.md).
   docsUrl() {
     return `${this.baseUrl}/api/docs`;
@@ -120,7 +142,7 @@ export class ApiClient {
 
   // URL de descarga directa: el navegador hace streaming del CSV sin cargarlo en memoria.
   csvUrl(kind, { from, to, id, type } = {}) {
-    if (!['traffic', 'parking', 'pedestrians', 'buses', 'bikes', 'events', 'weather'].includes(kind)) throw new Error('Tipo de CSV desconocido');
+    if (!['traffic', 'parking', 'pedestrians', 'buses', 'bikes', 'events', 'weather', 'city'].includes(kind)) throw new Error('Tipo de CSV desconocido');
     const query = new URLSearchParams();
     for (const [key, value] of [['from', from], ['to', to]]) {
       if (!value) continue;

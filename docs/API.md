@@ -39,8 +39,9 @@ Campos principales: `simTime`, `scale`, `caughtUp`, `cars` (coches circulando), 
 `scenario`), `traffic` (`stopped` coches parados, `avgKmh` velocidad media), `signalPlan`, `sensors` y
 `pedestrianSensors` (con `total` acumulado y `current`), `parkings` (`id`, `name`, `capacity`, `occupancy` de 0 a 1,
 `tracked`), `pedestrians.expected` (peatones en la calle), `buses.lines` (`id`, `fleet`, `suspended`, `tracked`),
-`bikes` (`inUse` y `stations` con `available`, `capacity`, `pending`), `weather`, `holiday`, `events` y `records`
-(filas guardadas por tipo).
+`bikes` (`inUse` y `stations` con `available`, `capacity`, `pending`), `weather`, `holiday`, `events`, `restrictions`
+(las activas, como en `GET /api/restrictions`), `paramsLocked` (la demanda no se puede cambiar), `writeProtected` (los
+cambios necesitan token) y `records` (filas guardadas por tipo).
 
 ### `GET /api/point?x=&z=&radius=` — qué hay cerca de un punto, ahora mismo
 

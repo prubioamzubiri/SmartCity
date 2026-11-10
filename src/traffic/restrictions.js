@@ -15,7 +15,7 @@ export const ROAD_CLASSES = ['motorway', 'primary', 'secondary', 'tertiary', 're
 export class RestrictionError extends Error {}
 
 // Distancia de un punto a un tramo.
-function distanceToEdge(g, e, x, z) {
+export function distanceToEdge(g, e, x, z) {
   const ax = g.nx[g.A[e]];
   const az = g.nz[g.A[e]];
   const t = Math.min(1, Math.max(0, ((x - ax) * g.ux[e] + (z - az) * g.uz[e]) / g.len[e]));

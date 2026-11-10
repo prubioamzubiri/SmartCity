@@ -25,6 +25,7 @@ import { Buses } from './transit/buses.js';
 import { BusView } from './transit/busView.js';
 import { BikeStationView } from './bikes/stationView.js';
 import { SensorView } from './sensors/sensorView.js';
+import { RestrictionView } from './traffic/restrictionView.js';
 import { ServerSync } from './api/serverSync.js';
 import { createHud } from './ui/hud.js';
 import { createEventCalendarPanel } from './ui/eventCalendar.js';
@@ -97,17 +98,25 @@ async function main() {
   scene.add(busView.group);
   sync.on('cars', (payload) => cars.apply(payload));
   sync.on('disconnect', () => cars.clear());
+  const restrictionView = new RestrictionView(scene, graph);
   const serverView = new SensorView(scene, { color: 0x4caf50 });
   const pedestrianSensorView = new SensorView(scene, { color: 0xff5ca8 });
   const simNow = () => sync.simTime() ?? CONFIG.sim.startSeconds;
 
-  // Modo de interacción: navegar o colocar sensores (de tráfico o de peatones) en el servidor
+  // Modo de interacción: navegar, colocar sensores (de tráfico o de peatones) o elegir dónde va una restricción
   let mode = 'navigate';
   const placingViews = { sensor: serverView, pedsensor: pedestrianSensorView };
   const setMode = (m) => {
     mode = m;
     for (const [name, view] of Object.entries(placingViews)) if (m !== name) view.showGhost(0, 0, false);
-    renderer.domElement.style.cursor = m in placingViews ? 'crosshair' : '';
+    if (m !== 'restriction') restrictionView.hover(null);
+    renderer.domElement.style.cursor = m in placingViews || m === 'restriction' ? 'crosshair' : '';
+  };
+  // Punto del suelo bajo el cursor y calle más cercana (para elegir dónde va una restricción).
+  const groundTarget = () => {
+    if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return null;
+    const hit = graph.nearestSegment(hitPoint.x, hitPoint.z, 40);
+    return { x: hitPoint.x, z: hitPoint.z, way: hit ? graph.way[hit.e] : undefined };
   };
   const signalMarker = new THREE.Mesh(
     new THREE.RingGeometry(10, 13, 32).rotateX(-Math.PI / 2),
@@ -152,7 +161,7 @@ async function main() {
     csvUrl: (range) => sync.client?.csvUrl('events', range),
   });
   const hud = createHud({
-    sync, signals, localGraphKey: graphKey, setMode, getMode: () => mode, focusSignal,
+    sync, signals, localGraphKey: graphKey, setMode, getMode: () => mode, focusSignal, focusPoint, graph, restrictionView,
     parking: { layer: parkingLayer, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked) },
     server: { view: serverView },
     pedestrianSensors: { view: pedestrianSensorView },
@@ -178,6 +187,12 @@ async function main() {
   renderer.domElement.addEventListener('pointerdown', (ev) => (down = { x: ev.clientX, y: ev.clientY }));
   renderer.domElement.addEventListener('pointermove', (ev) => {
     setPointer(ev);
+    if (mode === 'restriction') {
+      signalTooltip.hidden = true;
+      const target = groundTarget();
+      restrictionView.hover(target ? hud.restrictionHover(target) : null);
+      return;
+    }
     if (mode in placingViews) {
       const view = placingViews[mode];
       signalTooltip.hidden = true;
@@ -248,6 +263,11 @@ async function main() {
         return;
       }
     }
+    if (mode === 'restriction') {
+      const target = groundTarget();
+      if (target) hud.pickRestriction(target);
+      return;
+    }
     if (mode === 'sensor' || mode === 'pedsensor') {
       if (raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
         if (mode === 'sensor') hud.addServerSensor(hitPoint.x, hitPoint.z);
@@ -260,8 +280,11 @@ async function main() {
     hud.selectSensor(serverView.pick(raycaster));
   });
   window.addEventListener('keydown', (ev) => {
-    if (ev.target instanceof HTMLInputElement) return;
-    if (ev.key === 'Escape') setMode('navigate');
+    if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target instanceof HTMLSelectElement) return;
+    if (ev.key === 'Escape') {
+      setMode('navigate');
+      hud.modeChanged();
+    }
     if (ev.key === 'Delete') hud.removeSelectedSensor();
   });
   window.addEventListener('resize', () => {

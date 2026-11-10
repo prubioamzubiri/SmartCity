@@ -81,3 +81,32 @@ test('client manages sensors and the CSV url downloads the recorded data', async
   await api.removeSensor(id);
   assert.equal((await api.state()).sensors.length, 0);
 });
+
+test('the viewer can manage restrictions, signals and bus fleets through the client', async (t) => {
+  const { base } = await start(t);
+  const reader = new ApiClient({ baseUrl: base });
+  const client = new ApiClient({ baseUrl: base, token: 'secreto' });
+  let s = await reader.state();
+  assert.equal(s.writeProtected, true);
+  assert.equal(s.paramsLocked, false);
+  assert.deepEqual(s.restrictions, []);
+
+  await assert.rejects(reader.addRestriction({ mode: 'pedestrians_only', x: 0, z: -250, radius: 50 }), (err) => err instanceof ApiError && err.status === 401);
+  const r = await client.addRestriction({ mode: 'entry_limit', x: 0, z: -250, radius: 50, limit: 3, name: 'Zona' });
+  assert.equal(r.id, 'R1');
+  await client.updateRestriction('R1', { limit: 0 });
+  s = await reader.state();
+  assert.equal(s.restrictions.length, 1);
+  assert.equal(s.restrictions[0].limit, 0);
+  assert.equal(s.restrictions[0].name, 'Zona');
+  await client.removeRestriction('R1');
+  assert.deepEqual((await reader.state()).restrictions, []);
+
+  const line = (await reader.state()).buses.lines[0];
+  if (line) {
+    assert.ok(line.minFleet >= 1 && line.maxFleet >= line.minFleet);
+    await client.setBusFleet(line.id, line.minFleet);
+    assert.equal((await reader.state()).buses.lines[0].fleet, line.minFleet);
+  }
+  assert.match(client.csvUrl('city', { from: '2026-01-05' }), /\/api\/city\.csv\?from=2026-01-05$/);
+});
