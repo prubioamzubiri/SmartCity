@@ -431,3 +431,61 @@ test('at an uncontrolled junction cars give way to the priority road, never both
   const vmax = Math.sqrt(2 * CONFIG.cars.decel * Math.max(0, gap - CONFIG.cars.minGap));
   assert.ok(vmax < 9, `velocidad permitida cerca de la línea: ${vmax.toFixed(1)} m/s`);
 });
+
+test('at a zebra crossing without signal cars stop while people cross, more often the more people there are', () => {
+  // Paso a mitad de la calle norte-sur x = 1000, entre z = -200 y z = 0 (lejos de los semáforos del centro).
+  const data = { ...city(), crossings: [1000, -100, 1, 0, 2, 0, 10, 1, 0, 2] };
+  const engine = new SimEngine({ data, maxCars: 0, startSeconds: NOON });
+  const { graph: g, sim, signals, crosswalks: zc } = engine;
+  assert.equal(zc.edge[0] >= 0, true, 'el paso se asocia a su calle');
+  assert.equal(zc.edge[1], -1, 'el paso junto al semáforo lo regula el semáforo');
+  const e = zc.edge[0];
+  assert.equal(Math.abs(g.ux[e]) < 0.1, true, 'la calle que cruza va perpendicular al paso');
+  for (const d of [e, g.rev[e]]) assert.equal(zc.start[d + 1] - zc.start[d], 1, 'en los dos sentidos');
+
+  const busyShare = (load) => {
+    signals.setPedestrianLoad(load);
+    let busy = 0;
+    for (let t = 0; t < 4000; t++) busy += zc.window(0, NOON + t).current ? 1 : 0;
+    return busy / 4000;
+  };
+  assert.equal(busyShare(0), 0);
+  const full = busyShare(1);
+  assert.ok(Math.abs(full - Math.min(CONFIG.signals.crosswalks.maxShare, CONFIG.signals.crosswalks.share * zc.weight[0])) < 0.03, `ocupado ${full}`);
+  assert.ok(busyShare(0.3) < full);
+
+  // Un coche que va hacia el paso: se para antes si cruza gente y pasa si no.
+  const at = zc.at[zc.start[e]];
+  sim.activeCount = 1;
+  sim.place(0, e);
+  sim.pos[0] = at - 30;
+  sim.speed[0] = 5;
+  sim.next[0] = sim.next[1] = sim.next[2] = -1;
+  const w = zc.window(0, NOON);
+  signals.now = w.start + 1;
+  assert.equal(zc.busy(0), true);
+  const stopGap = CONFIG.signals.crosswalks.stopGap;
+  assert.ok(Math.abs(sim.freeGap(0) - (30 - stopGap)) < 1e-3, 'para antes del paso');
+  signals.now = w.start + w.length + 1;
+  assert.equal(zc.busy(0), false);
+  assert.ok(sim.freeGap(0) > 30, 'sin peatones pasa');
+  // Sin gente en la calle, nunca para.
+  signals.now = w.start + 1;
+  signals.setPedestrianLoad(0);
+  assert.ok(sim.freeGap(0) > 30);
+
+  // Los peatones solo pisan la calzada del paso dentro de sus ventanas (los demás esperan en el bordillo).
+  signals.setPedestrianLoad(1);
+  const p = engine.pedestrians;
+  const road = CONFIG.roads.halfWidth[2];
+  let onRoad = 0;
+  for (let t = NOON; t < NOON + 2000; t += 3) {
+    p.updateAt(t, 'auto', 365 / 7);
+    for (let i = 0; i < p.activeCount; i++) {
+      if (Math.abs(p.z[i] + 100) > 2 || Math.abs(p.x[i] - 1000) > road - 0.5) continue;
+      onRoad++;
+      assert.equal(zc.window(0, t).current, true, `peatón en la calzada a las ${t} con el paso libre`);
+    }
+  }
+  assert.ok(onRoad > 0, 'alguien cruza');
+});

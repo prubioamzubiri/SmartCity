@@ -197,6 +197,11 @@ su estado en `GET /api/signals` es `uncontrolled`):
 Con poco tráfico (de noche) puede ahorrar esperas; en hora punta forma colas. Apagar todos los semáforos en hora punta
 colapsa la ciudad.
 
+En los **pasos de cebra sin semáforo** pasa lo mismo que con los peatones de un cruce sin regular: cruzan en grupos y
+los coches paran mientras cruzan (salvo que ya no les dé para frenar). Cruzan más a menudo cuanta más gente hay en la
+calle y cuanto más concurrida es la calle del paso (comercios, paradas…); de madrugada apenas frenan el tráfico. En un
+paso a menos de 40 m de un semáforo cruzan con el rojo de los coches.
+
 ### 3.3 Autobuses de una línea — `PATCH /api/buses/<línea>`
 
 `{"fleet": 12}` fija el número de autobuses de la línea (`L1`…) entre `minFleet` y `maxFleet` (1–30). El cambio es

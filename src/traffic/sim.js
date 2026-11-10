@@ -8,11 +8,13 @@ const C = CONFIG.cars;
 const E = CONFIG.events;
 const T = CONFIG.trips;
 const U = CONFIG.signals.unsignalized;
+const Z = CONFIG.signals.crosswalks;
 
 export class TrafficSim {
-  constructor(graph, signals, onCross, { rng = createRng(CONFIG.sim.seed) } = {}) {
+  constructor(graph, signals, onCross, { rng = createRng(CONFIG.sim.seed), crosswalks = null } = {}) {
     this.g = graph;
     this.signals = signals;
+    this.crosswalks = crosswalks;
     this.onCross = onCross;
     this.rng = rng;
     const n = C.max;
@@ -466,7 +468,22 @@ export class TrafficSim {
     }
 
     let dist = g.len[e] - p;
+    const zc = this.crosswalks && sig.pedestrianLoad > 0 ? this.crosswalks : null;
     for (let step = 0; ; step++) {
+      if (zc) {
+        // Paso de cebra sin semáforo: si está cruzando gente, se para antes (salvo que ya no le dé para frenar).
+        const base = dist - g.len[e];
+        for (let k = zc.start[e], end = zc.start[e + 1]; k < end; k++) {
+          const ahead = base + zc.at[k];
+          if (ahead <= 0) continue;
+          const stopDist = ahead - Z.stopGap;
+          if (stopDist >= gap) break;
+          if (stopDist >= -1 && v * v <= 2 * 6 * Math.max(0, stopDist) + 1 && zc.busy(zc.index[k])) {
+            gap = Math.max(0, stopDist);
+            break;
+          }
+        }
+      }
       const state = sig.stateForEdge(e);
       if (state === UNCONTROLLED) {
         // Cruce sin regular: se llega despacio y se para si cruzan peatones o viene un coche por la calle con prioridad.

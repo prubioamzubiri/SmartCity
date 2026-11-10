@@ -242,6 +242,9 @@ export const CONFIG = {
     yellow: 3,
     clusterDistance: 45, // metros para agrupar semáforos de un mismo cruce
     // Semáforo apagado o en ámbar intermitente: cruce sin regular.
+    // Pasos de cebra sin semáforo (ver crosswalks.js): con la calle llena de peatones, un paso de concurrencia media está
+    // ocupado este tanto por uno del tiempo (los más concurridos hasta `maxWeight` veces más, con tope en `maxShare`).
+    crosswalks: { share: 0.2, maxShare: 0.5, minWeight: 0.25, maxWeight: 2, snapDistance: 3, stopGap: 3 },
     unsignalized: {
       approachSpeed: 4, // m/s (~15 km/h) a los que se llega a la línea de parada
       yieldDistance: 30, // metros: un coche de la calle con prioridad a menos de esto obliga a ceder el paso

@@ -12,6 +12,7 @@ import {
 } from './city/parking.js';
 import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
+import { Crosswalks } from './traffic/crosswalks.js';
 import { SignalController } from './traffic/signals.js';
 import { createSignalViz } from './traffic/signalViz.js';
 import { CarView } from './traffic/carView.js';
@@ -90,7 +91,8 @@ async function main() {
   const carView = new CarView(cars);
   scene.add(carView.mesh);
   const weights = pedestrianWeights(graph, data);
-  const pedestrians = new Pedestrians(data.crossings, { graph, water: createWaterMask(data), weights, signals });
+  const crosswalks = new Crosswalks(graph, data.crossings ?? [], signals, { weights: weights.crossing });
+  const pedestrians = new Pedestrians(data.crossings, { graph, water: createWaterMask(data), weights, signals, crosswalks });
   const pedestrianView = new PedestrianView(pedestrians);
   scene.add(pedestrianView.mesh);
   const buses = new Buses(buildTransit(data, graph, { weights: weights.edge }), graph);

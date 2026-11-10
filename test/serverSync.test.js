@@ -9,6 +9,10 @@ import { ApiClient } from '../src/api/client.js';
 import { ServerSync } from '../src/api/serverSync.js';
 import { RemoteCars } from '../src/traffic/remoteCars.js';
 import { Pedestrians } from '../src/pedestrians/pedestrians.js';
+import { SignalController } from '../src/traffic/signals.js';
+import { Crosswalks } from '../src/traffic/crosswalks.js';
+import { pedestrianLoad } from '../src/pedestrians/pedestrians.js';
+import { pedestrianWeights } from '../src/pedestrians/weights.js';
 import { fromBase64 } from '../src/core/binary.js';
 import { CONFIG } from '../src/config.js';
 
@@ -115,7 +119,14 @@ test('server exposes the pedestrians (on the sidewalks and crossings) at the sim
       assert.ok(fromRing <= CONFIG.roads.halfWidth[4] + CONFIG.pedestrians.margin + 1e-3);
     }
     // El visor calcula con la misma función y la hora del servidor: ve exactamente los mismos peatones.
-    const viewer = new Pedestrians(data.crossings, { graph: runtime.engine.graph, water: runtime.engine.pedestrians.water });
+    // Como en main.js: sus propios semáforos y pasos de cebra, con la gente en la calle del minuto simulado.
+    const graph = runtime.engine.graph;
+    const signals = new SignalController(graph);
+    const { params } = runtime.engine;
+    signals.setPedestrianLoad(pedestrianLoad(Math.floor(payload.simSeconds / 60) * 60, params.scenario, params.maxPedestrians));
+    const weights = pedestrianWeights(graph, data);
+    const crosswalks = new Crosswalks(graph, data.crossings, signals, { weights: weights.crossing });
+    const viewer = new Pedestrians(data.crossings, { graph, water: runtime.engine.pedestrians.water, weights, signals, crosswalks });
     viewer.updateAt(payload.simSeconds, runtime.engine.params.scenario, runtime.scale);
     assert.deepEqual([...viewer.x.subarray(0, viewer.activeCount)], [...x]);
     assert.deepEqual([...viewer.z.subarray(0, viewer.activeCount)], [...z]);
