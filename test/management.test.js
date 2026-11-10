@@ -384,10 +384,16 @@ test('at an uncontrolled junction pedestrians occupy the crossing a share of the
     for (let t = 0; t < 4000; t++) busy += s.pedestrianWindow(index, NOON + t).current ? 1 : 0;
     return busy / 4000;
   };
+  s.setSignalOverride(5001, { mode: 'flashing' });
   assert.equal(busyShare(0), 0);
   const full = busyShare(1);
-  assert.ok(Math.abs(full - CONFIG.signals.unsignalized.maxPedestrianShare) < 0.03, `ocupado ${full}`);
+  assert.ok(Math.abs(full - CONFIG.signals.unsignalized.pedestrianShare.flashing) < 0.03, `ocupado ${full}`);
   assert.ok(busyShare(0.3) < full);
+  // Apagado, el peatón espera a que haya hueco: ocupa menos el paso que en ámbar, donde tiene prioridad.
+  s.setSignalOverride(5001, { mode: 'off' });
+  const off = busyShare(1);
+  assert.ok(Math.abs(off - CONFIG.signals.unsignalized.pedestrianShare.off) < 0.03, `ocupado apagado ${off}`);
+  assert.ok(off < full);
 });
 
 test('at an uncontrolled junction cars give way to the priority road, never both at once, and slow down', () => {

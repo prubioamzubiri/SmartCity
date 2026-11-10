@@ -186,12 +186,13 @@ curl -X PATCH http://localhost:8080/api/signals/13965274528 -H "Authorization: B
 reinicios.
 
 Un semáforo **apagado** (`off`) o en **ámbar intermitente** (`flashing`) deja el cruce **sin regular** (los dos modos
-se comportan igual; su estado en `GET /api/signals` es `uncontrolled`):
+su estado en `GET /api/signals` es `uncontrolled`):
 
 - Todos los coches llegan despacio (~15 km/h) y **ceden el paso** si viene un coche por la calle con prioridad (la de
   más categoría; a igual categoría, el eje este-oeste).
-- Los **peatones cruzan cuando llegan**, en grupos, y los coches esperan. Cuanta más gente hay en la calle, más rato
-  está ocupado el paso.
+- Los **peatones** cruzan en grupos y los coches esperan; cuanta más gente hay en la calle, más rato está ocupado el
+  paso. En **ámbar intermitente el peatón tiene prioridad** (cruza en cuanto llega: el paso está ocupado bastante
+  más); **apagado**, cruza cuando hay hueco (ocupa menos el paso, los coches paran menos).
 
 Con poco tráfico (de noche) puede ahorrar esperas; en hora punta forma colas. Apagar todos los semáforos en hora punta
 colapsa la ciudad.
