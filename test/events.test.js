@@ -80,6 +80,7 @@ test('an event ramps up while people arrive, peaks during it and fades afterward
 test('events add demand on top of the daily profile and overlapping events add up with a cap', () => {
   const config = structuredClone(CONFIG.traffic);
   config.dailyVariation = 0;
+  config.hourlyVariation = 0;
   const plain = createDemandModel(config);
   const withEvents = createDemandModel(config, CONFIG.sim.baseDate, calendar);
   const match = year(2026).find((e) => e.type === 'football');

@@ -2,15 +2,19 @@ import { CONFIG } from '../config.js';
 import { createRng } from '../core/random.js';
 import { fromBase64, toBase64 } from '../core/binary.js';
 import { TripPlanner } from './trips.js';
+import { UNCONTROLLED } from './signals.js';
 
 const C = CONFIG.cars;
 const E = CONFIG.events;
 const T = CONFIG.trips;
+const U = CONFIG.signals.unsignalized;
+const Z = CONFIG.signals.crosswalks;
 
 export class TrafficSim {
-  constructor(graph, signals, onCross, { rng = createRng(CONFIG.sim.seed) } = {}) {
+  constructor(graph, signals, onCross, { rng = createRng(CONFIG.sim.seed), crosswalks = null } = {}) {
     this.g = graph;
     this.signals = signals;
+    this.crosswalks = crosswalks;
     this.onCross = onCross;
     this.rng = rng;
     const n = C.max;
@@ -464,9 +468,36 @@ export class TrafficSim {
     }
 
     let dist = g.len[e] - p;
+    const zc = this.crosswalks && sig.pedestrianLoad > 0 ? this.crosswalks : null;
     for (let step = 0; ; step++) {
+      if (zc) {
+        // Paso de cebra sin semáforo: si está cruzando gente, se para antes (salvo que ya no le dé para frenar).
+        const base = dist - g.len[e];
+        for (let k = zc.start[e], end = zc.start[e + 1]; k < end; k++) {
+          const ahead = base + zc.at[k];
+          if (ahead <= 0) continue;
+          const stopDist = ahead - Z.stopGap;
+          if (stopDist >= gap) break;
+          if (stopDist >= -1 && v * v <= 2 * 6 * Math.max(0, stopDist) + 1 && zc.busy(zc.index[k])) {
+            gap = Math.max(0, stopDist);
+            break;
+          }
+        }
+      }
       const state = sig.stateForEdge(e);
-      if (state !== 0) {
+      if (state === UNCONTROLLED) {
+        // Cruce sin regular: se llega despacio y se para si cruzan peatones o viene un coche por la calle con prioridad.
+        const stopDist = dist - C.stopGap;
+        if (stopDist >= -1) {
+          const s = g.sig[e];
+          if (sig.crossingBusy(s) || this.mustYield(e, s)) {
+            if (stopDist < gap) gap = Math.max(0, stopDist);
+          } else {
+            const slow = stopDist + C.minGap + (U.approachSpeed * U.approachSpeed) / (2 * C.decel);
+            if (slow < gap) gap = slow;
+          }
+        }
+      } else if (state !== 0) {
         const stopDist = dist - C.stopGap;
         if (stopDist >= -1) {
           const mustStop = state === 2 || stopDist > (v * v) / (2 * 6);
@@ -495,6 +526,24 @@ export class TrafficSim {
       e = ne;
     }
     return gap;
+  }
+
+  // En el cruce sin regular `s`, el coche que llega por `e` cede el paso si viene alguien por una calle con prioridad
+  // (de más categoría; a igual categoría, el eje este-oeste). Como la prioridad es un orden estricto, nunca se esperan
+  // dos coches mutuamente.
+  mustYield(e, s) {
+    const g = this.g;
+    for (const a of this.signals.signals[s].approaches) {
+      if (g.grp[a] === g.grp[e]) continue;
+      if (g.cls[a] > g.cls[e] || (g.cls[a] === g.cls[e] && g.grp[a] > g.grp[e])) continue;
+      const list = this.edgeCars[a];
+      if (!list) continue;
+      for (const j of list) {
+        const left = g.len[a] - this.pos[j];
+        if (left >= 0 && left <= U.yieldDistance) return true;
+      }
+    }
+    return false;
   }
 
   step(dt) {

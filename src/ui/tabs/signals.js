@@ -4,8 +4,8 @@ import { badge, button, card, cardTitle, empty, field, hint, segmented, stepper 
 
 const MODES = [
   { value: 'normal', label: 'Normal', title: 'Ciclo de verde, ámbar y rojo' },
-  { value: 'off', label: 'Apagado', title: 'Nadie se detiene' },
-  { value: 'flashing', label: 'Ámbar', title: 'Ámbar intermitente: nadie se detiene' },
+  { value: 'off', label: 'Apagado', title: 'Cruce sin regular: los coches ceden el paso; los peatones cruzan cuando hay hueco' },
+  { value: 'flashing', label: 'Ámbar', title: 'Ámbar intermitente: cruce sin regular con prioridad para los peatones' },
   { value: 'all_red', label: 'Rojo', title: 'Todo en rojo: todos se detienen' },
 ];
 const MODE_LABEL = Object.fromEntries(MODES.map((m) => [m.value, m.label]));

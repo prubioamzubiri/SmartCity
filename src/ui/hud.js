@@ -97,7 +97,6 @@ export function createHud(deps) {
     else {
       items.push(state.caughtUp ? ['Conectado', 'ok'] : [`Recuperando ${Math.round(state.behindSimSeconds / 3600)} h`, 'warn']);
       if (!ctx.canWrite()) items.push(['Solo lectura', 'warn']);
-      if (state.paramsLocked) items.push(['Demanda fija', 'info']);
     }
     pills.replaceChildren(...items.map(([text, kind]) => el('span', { class: `ui-pill ${kind}`, textContent: text })));
     shell.flag('connection', !state || !ctx.canWrite(), state ? 'warn' : 'danger');
@@ -106,6 +105,8 @@ export function createHud(deps) {
   sync.on('state', (s) => {
     const first = !state;
     state = s;
+    // La semilla de la ciudad decide la variación de la demanda: el visor usa la del servidor (peatones incluidos).
+    if (Number.isInteger(s.seed)) CONFIG.sim.seed = s.seed;
     signals.setPlan(s.signalPlan);
     if (s.graphKey !== deps.localGraphKey) connection.setStatus('El servidor simula otra ciudad distinta a la del visor: los coches no se dibujan.', 'error');
     else connection.setStatus(s.caughtUp ? 'Conectado y al día.' : `Conectado · recuperando ${Math.round(s.behindSimSeconds / 3600)} h simuladas tras una parada.`, 'ok');

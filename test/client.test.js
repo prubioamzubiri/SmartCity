@@ -88,7 +88,7 @@ test('the viewer can manage restrictions, signals and bus fleets through the cli
   const client = new ApiClient({ baseUrl: base, token: 'secreto' });
   let s = await reader.state();
   assert.equal(s.writeProtected, true);
-  assert.equal(s.paramsLocked, false);
+  assert.equal(typeof s.seed, 'number');
   assert.deepEqual(s.restrictions, []);
 
   await assert.rejects(reader.addRestriction({ mode: 'pedestrians_only', x: 0, z: -250, radius: 50 }), (err) => err instanceof ApiError && err.status === 401);

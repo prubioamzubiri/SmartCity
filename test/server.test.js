@@ -5,6 +5,7 @@ import { SimEngine } from '../src/core/engine.js';
 import { Store } from '../server/store.js';
 import { Runtime, DEFAULT_SCALE } from '../server/runtime.js';
 import { createApp } from '../server/app.js';
+import { CONFIG } from '../src/config.js';
 
 // Anillo cuadrado de 500 m centrado en el origen con circulación en ambos sentidos.
 const city = () => ({
@@ -41,6 +42,7 @@ function run(runtime, now, ms) {
   runtime.checkpoint();
 }
 
+const CONFIG_SEED = CONFIG.sim.seed;
 const csv = (store, kind) => [...store.iterate(kind)].map((r) => JSON.stringify(r));
 
 test('a restored engine continues exactly like the original', () => {
@@ -136,12 +138,12 @@ test('crash between checkpoints loses nothing: the unsaved period is regenerated
   assert.equal(store.count('traffic'), ref.store.count('traffic'));
 });
 
-async function api(t, { token = 'secreto', lockParams = false } = {}) {
+async function api(t, { token = 'secreto' } = {}) {
   const now = clock();
   const store = new Store();
   const runtime = setup(store, now, { sensors: false });
   run(runtime, now, 2 * CHUNK);
-  const server = http.createServer(createApp({ runtime, store, token, lockParams }));
+  const server = http.createServer(createApp({ runtime, store, token }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -160,7 +162,6 @@ test('API requires a token to write and rejects bad input', async (t) => {
   assert.equal((await call('/api/sensors', { method: 'POST', body: { x: 0, z: -250 }, auth: 'mal' })).status, 401);
   assert.equal((await call('/api/sensors', { method: 'POST', body: { x: 'a', z: 0 }, auth: 'secreto' })).status, 400);
   assert.equal((await call('/api/sensors', { method: 'POST', body: { x: 9999, z: 9999 }, auth: 'secreto' })).status, 422);
-  assert.equal((await call('/api/params', { method: 'PUT', body: { scenario: 'nope' }, auth: 'secreto' })).status, 400);
   assert.equal((await call('/api/traffic.csv?from=ayer')).status, 400);
   assert.equal((await call('/api/nada')).status, 404);
 });
@@ -171,13 +172,16 @@ test('API is open for writes when no token is configured', async (t) => {
   assert.equal((await call('/api/state')).status, 200);
 });
 
-test('LOCK_PARAMS blocks changes to the demand parameters', async (t) => {
-  const locked = await api(t, { lockParams: true });
-  const res = await locked.call('/api/params', { method: 'PUT', body: { maxCars: 10 }, auth: 'secreto' });
+test('the demand cannot be changed through the API: the server sets it', async (t) => {
+  const { call, runtime } = await api(t);
+  const before = { ...runtime.engine.params };
+  const res = await call('/api/params', { method: 'PUT', body: { maxCars: 10 }, auth: 'secreto' });
   assert.equal(res.status, 403);
-  assert.notEqual(locked.runtime.engine.params.maxCars, 10);
-  const open = await api(t);
-  assert.equal((await open.call('/api/params', { method: 'PUT', body: { maxCars: 10 }, auth: 'secreto' })).status, 200);
+  assert.deepEqual(runtime.engine.params, before);
+  const state = await (await call('/api/state')).json();
+  assert.equal(state.seed, CONFIG_SEED);
+  assert.equal(typeof state.startSeconds, 'number');
+  assert.ok(!('paramsLocked' in state));
 });
 
 test('sensors can be placed with lat/lon as well as x/z', async (t) => {

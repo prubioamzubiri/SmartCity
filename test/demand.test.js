@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CONFIG } from '../src/config.js';
-import { createDemandModel, demandFactor, simDate, dayIndex } from '../src/traffic/demand.js';
+import { createDemandModel, demandFactor, demandNoise, simDate, dayIndex } from '../src/traffic/demand.js';
 
 const DAY = 86400;
 const HOUR = 3600;
 function settings() {
   const config = structuredClone(CONFIG.traffic);
   config.dailyVariation = 0;
+  config.hourlyVariation = 0;
   return config;
 }
 function close(actual, expected) {
@@ -69,13 +70,23 @@ test('automatic mode switches curves at midnight; forced modes keep their curve'
   close(model.demandFactor(7 * DAY, 'weekend'), weekend);
 });
 
-test('weekday defaults retain the original curve and deterministic daily variation', () => {
-  const plain = createDemandModel(); // sin eventos ni tiempo: solo el perfil del día
+test('demand varies randomly by day and smoothly by hour, but repeats with the same seed', () => {
+  const plain = createDemandModel(); // sin eventos ni tiempo: solo el perfil del día (pico de laborable = 1 a las 8:00)
+  const peaks = [];
   for (let day = 0; day < 5; day++) {
-    const noise = 0.9 + 0.2 * (Math.abs(Math.sin(day * 12.9898) * 43758.5453) % 1);
-    close(plain.demandFactor(day * DAY + 8 * HOUR), noise);
+    const peak = plain.demandFactor(day * DAY + 8 * HOUR);
+    assert.ok(peak >= 0.9 * 0.95 - 1e-9 && peak <= 1.1 * 1.05 + 1e-9, `pico del día ${day}: ${peak}`);
+    peaks.push(peak);
     assert.equal(demandFactor(day * DAY), demandFactor(day * DAY));
   }
+  assert.ok(new Set(peaks.map((p) => p.toFixed(4))).size > 1, 'no todos los días son iguales');
+  for (let s = 0; s < 3600; s += 60) {
+    const step = Math.abs(demandNoise(s + 60, 0.1, 0.05, 7) - demandNoise(s, 0.1, 0.05, 7));
+    assert.ok(step < 0.01, 'la variación horaria cambia sin saltos dentro del día');
+  }
+  assert.equal(demandNoise(3 * DAY + 5000, 0.1, 0.05, 42), demandNoise(3 * DAY + 5000, 0.1, 0.05, 42));
+  assert.notEqual(demandNoise(3 * DAY + 5000, 0.1, 0.05, 42), demandNoise(3 * DAY + 5000, 0.1, 0.05, 43));
+  assert.equal(demandNoise(12345, 0, 0, 1), 1);
   const model = createDemandModel(settings());
   assert.ok(model.demandFactor(5 * DAY + 12 * HOUR) > model.demandFactor(5 * DAY + 8 * HOUR));
   close(model.demandFactor(8 * HOUR), 1);

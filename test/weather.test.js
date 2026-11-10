@@ -120,6 +120,7 @@ test('rain brings more cars, slower traffic, fewer pedestrians and almost no bik
 test('the demand model applies the weather to each kind of activity', () => {
   const config = structuredClone(CONFIG.traffic);
   config.dailyVariation = 0;
+  config.hourlyVariation = 0;
   const plain = createDemandModel(config);
   const model = createDemandModel(config, CONFIG.sim.baseDate, null, weather);
   const wet = find((w) => w.rain > 1, at(2026, 0, 5)); // la hora exacta da igual: se compara con el modelo sin tiempo

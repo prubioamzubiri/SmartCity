@@ -12,11 +12,12 @@ import {
 } from './city/parking.js';
 import { createWater } from './city/water.js';
 import { buildGraph } from './traffic/graph.js';
+import { Crosswalks } from './traffic/crosswalks.js';
 import { SignalController } from './traffic/signals.js';
 import { createSignalViz } from './traffic/signalViz.js';
 import { CarView } from './traffic/carView.js';
 import { RemoteCars } from './traffic/remoteCars.js';
-import { Pedestrians } from './pedestrians/pedestrians.js';
+import { Pedestrians, pedestrianLoad } from './pedestrians/pedestrians.js';
 import { pedestrianWeights } from './pedestrians/weights.js';
 import { createWaterMask } from './city/waterMask.js';
 import { PedestrianView } from './pedestrians/pedestrianView.js';
@@ -90,7 +91,8 @@ async function main() {
   const carView = new CarView(cars);
   scene.add(carView.mesh);
   const weights = pedestrianWeights(graph, data);
-  const pedestrians = new Pedestrians(data.crossings, { graph, water: createWaterMask(data), weights, signals });
+  const crosswalks = new Crosswalks(graph, data.crossings ?? [], signals, { weights: weights.crossing });
+  const pedestrians = new Pedestrians(data.crossings, { graph, water: createWaterMask(data), weights, signals, crosswalks });
   const pedestrianView = new PedestrianView(pedestrians);
   scene.add(pedestrianView.mesh);
   const buses = new Buses(buildTransit(data, graph, { weights: weights.edge }), graph);
@@ -296,6 +298,8 @@ async function main() {
   function frame(now) {
     const simTime = sync.simTime();
     if (simTime !== null) {
+      // Misma ocupación de los cruces sin regular que en el servidor (cada minuto simulado, como el motor).
+      signals.setPedestrianLoad(pedestrianLoad(Math.floor(simTime / 60) * 60, sync.state.params.scenario, sync.state.params.maxPedestrians));
       signals.update(simTime);
       updateParkingOccupancy(parkingLayer, simTime);
       bikeStationView.update(sync.state?.bikes ?? null);

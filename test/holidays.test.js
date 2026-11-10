@@ -61,6 +61,7 @@ test('each day has a kind: weekday, eve of a holiday, weekend or sunday', () => 
 function model(holidays = calendar, tweak = () => {}) {
   const config = structuredClone(CONFIG.traffic);
   config.dailyVariation = 0;
+  config.hourlyVariation = 0;
   tweak(config);
   return createDemandModel(config, CONFIG.sim.baseDate, null, null, holidays);
 }

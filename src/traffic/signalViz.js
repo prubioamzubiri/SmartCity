@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-const STATE_COLORS = [0x22dd55, 0xffcc00, 0xff2a2a];
+// Verde, ámbar, rojo y sin regular (apagado o ámbar intermitente: ámbar apagado).
+const STATE_COLORS = [0x22dd55, 0xffcc00, 0xff2a2a, 0x8a6a1a];
 
 // Una esfera por aproximación regulada, junto a la línea de parada.
 export function createSignalViz(controller) {

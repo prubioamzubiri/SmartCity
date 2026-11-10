@@ -213,6 +213,31 @@ export function buildGraph(data) {
     }
   }
 
+  // Todos los tramos (uno por par de sentidos) a menos de `maxDist` de (x, z), con el punto más cercano de cada uno.
+  function segmentsNear(x, z, maxDist) {
+    const out = [];
+    const r = Math.ceil(maxDist / CELL);
+    const cx0 = Math.floor(x / CELL);
+    const cz0 = Math.floor(z / CELL);
+    const seen = new Set();
+    for (let cx = cx0 - r; cx <= cx0 + r; cx++) {
+      for (let cz = cz0 - r; cz <= cz0 + r; cz++) {
+        const list = grid.get(cellKey(cx, cz));
+        if (!list) continue;
+        for (const e of list) {
+          if (seen.has(e)) continue;
+          seen.add(e);
+          const ax = nx[A[e]];
+          const az = nz[A[e]];
+          const t = Math.min(1, Math.max(0, ((x - ax) * ux[e] + (z - az) * uz[e]) / len[e]));
+          const d = Math.hypot(x - ax - ux[e] * len[e] * t, z - az - uz[e] * len[e] * t);
+          if (d <= maxDist) out.push({ e, t, dist: d });
+        }
+      }
+    }
+    return out;
+  }
+
   function nearestSegment(x, z, maxDist = CONFIG.sensors.snapDistance) {
     let best = null;
     const r = Math.ceil(maxDist / CELL);
@@ -248,5 +273,6 @@ export function buildGraph(data) {
     ringIn: rings.ringIn,
     signals,
     nearestSegment,
+    segmentsNear,
   };
 }

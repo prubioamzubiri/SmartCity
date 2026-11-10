@@ -96,7 +96,7 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 | `PUT /api/buses/tracked` `{ids: [...]}` | Bus lines to record (none by default) |
 | `PUT /api/bikes/capacity` `{changes: {"<station id>": docks, "<id>": null}}` | Change the docks (1-60) of stations; it takes effect after 30 simulated days (`pending` in `GET /api/bikes`), `null` cancels a pending change. Requires the token; all-or-nothing |
 | `PUT /api/bikes/tracked` `{ids: [...]}` | Bike stations to record (none by default) |
-| `PUT /api/params` `{maxCars, maxPedestrians, scenario}` | Traffic and pedestrian parameters (`scenario`: `auto`, `weekday`, `preholiday`, `weekend`, `sunday`) |
+| `PUT /api/params` | Always `403`: the demand is set by the server (`MAX_CARS`, `MAX_PEDESTRIANS`) and varies a little at random each day and hour |
 | `PUT /api/signals/plan` `{plan}` | Signal timing plan (replaces the whole plan) |
 | `GET /api/signals?all=&x=&z=&radius=` / `GET /api/signals/:id` | Traffic signals with current `state` (`ew`/`ns`: green, yellow, red), `mode`, effective `timing` and own `override` |
 | `PATCH /api/signals/:id` `{mode, green, greenA, greenB, yellow, schedule}` | Change one signal: `mode` is `normal`, `off`, `flashing` or `all_red`; `null` removes a field, `{reset: true}` clears the overrides |

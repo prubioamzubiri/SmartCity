@@ -1,6 +1,7 @@
 import { CONFIG } from '../config.js';
 import { buildGraph } from '../traffic/graph.js';
 import { SignalController } from '../traffic/signals.js';
+import { Crosswalks } from '../traffic/crosswalks.js';
 import { TrafficSim } from '../traffic/sim.js';
 import { demandFactor, speedFactor } from '../traffic/demand.js';
 import { eventCalendar } from '../events/calendar.js';
@@ -9,7 +10,7 @@ import { ParkingTracker } from '../sensors/parkingTracker.js';
 import { trackableUndergroundLots, undergroundOccupancy } from '../city/undergroundLots.js';
 import { PedestrianSensors } from '../sensors/pedestrianSensors.js';
 import { createWaterMask } from '../city/waterMask.js';
-import { Pedestrians } from '../pedestrians/pedestrians.js';
+import { Pedestrians, pedestrianLoad } from '../pedestrians/pedestrians.js';
 import { pedestrianWeights } from '../pedestrians/weights.js';
 import { buildTransit } from '../transit/lines.js';
 import { Buses } from '../transit/buses.js';
@@ -37,8 +38,11 @@ export class SimEngine {
     this.params = { maxCars, maxPedestrians, scenario };
     this.graph = buildGraph(data);
     this.signals = new SignalController(this.graph);
+    const weights = pedestrianWeights(this.graph, data);
+    this.crosswalks = new Crosswalks(this.graph, data.crossings ?? [], this.signals, { weights: weights.crossing });
     this.sim = new TrafficSim(this.graph, this.signals, (sensor, dir, speed) => this.sensors.recordCrossing(sensor, dir, speed), {
       rng: createRng(seed),
+      crosswalks: this.crosswalks,
     });
     this.sensors = new SensorManager({ graph: this.graph, sim: this.sim, getSimTime: () => this.simTime, storage: null });
     this.parking = new ParkingTracker({
@@ -47,8 +51,7 @@ export class SimEngine {
       getSimTime: () => this.simTime,
       storage: null,
     });
-    const weights = pedestrianWeights(this.graph, data);
-    this.pedestrians = new Pedestrians(data.crossings, { graph: this.graph, water: createWaterMask(data), weights, signals: this.signals });
+    this.pedestrians = new Pedestrians(data.crossings, { graph: this.graph, water: createWaterMask(data), weights, signals: this.signals, crosswalks: this.crosswalks });
     this.pedSensors = new PedestrianSensors({
       graph: this.graph,
       pedestrians: this.pedestrians,
@@ -175,6 +178,7 @@ export class SimEngine {
     this.environmentMinute = minute;
     this.sim.speedScale = speedFactor(minute * 60);
     this.sim.setAttractors(CONFIG.events.enabled ? eventCalendar.attractorsAt(minute * 60) : []);
+    this.signals.setPedestrianLoad(pedestrianLoad(minute * 60, this.params.scenario, this.params.maxPedestrians));
   }
 
   // Peatones en este instante: son una función del tiempo simulado (sin estado que guardar), así que

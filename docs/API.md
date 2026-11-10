@@ -40,8 +40,8 @@ Campos principales: `simTime`, `scale`, `caughtUp`, `cars` (coches circulando), 
 `pedestrianSensors` (con `total` acumulado y `current`), `parkings` (`id`, `name`, `capacity`, `occupancy` de 0 a 1,
 `tracked`), `pedestrians.expected` (peatones en la calle), `buses.lines` (`id`, `fleet`, `suspended`, `tracked`),
 `bikes` (`inUse` y `stations` con `available`, `capacity`, `pending`), `weather`, `holiday`, `events`, `restrictions`
-(las activas, como en `GET /api/restrictions`), `paramsLocked` (la demanda no se puede cambiar), `writeProtected` (los
-cambios necesitan token) y `records` (filas guardadas por tipo).
+(las activas, como en `GET /api/restrictions`), `seed` (semilla de esta ciudad), `startSeconds` (cuándo empezó),
+`writeProtected` (los cambios necesitan token) y `records` (filas guardadas por tipo).
 
 ### `GET /api/point?x=&z=&radius=` — qué hay cerca de un punto, ahora mismo
 
@@ -170,7 +170,7 @@ propio, `{"reset": true}` borra todos los ajustes del semáforo):
 
 | Campo | Valores |
 | --- | --- |
-| `mode` | `normal` (ciclo), `off` (apagado) o `flashing` (ámbar intermitente): nadie se detiene · `all_red`: todos se detienen |
+| `mode` | `normal` (ciclo) · `off` (apagado) o `flashing` (ámbar intermitente): cruce sin regular (ver abajo) · `all_red`: todos se detienen |
 | `green` | Segundos de verde de ambos ejes (5–180) |
 | `greenA` / `greenB` | Verde del eje este-oeste / norte-sur por separado (5–180) |
 | `yellow` | Segundos de ámbar (1–10) |
@@ -185,8 +185,22 @@ curl -X PATCH http://localhost:8080/api/signals/13965274528 -H "Authorization: B
 (mismos campos; `default` se aplica a todos los semáforos sin ajustes propios). Los ajustes se guardan y sobreviven a
 reinicios.
 
-Notas: `off` y `flashing` se comportan igual en el simulador (no hay conflictos de giros entre coches). Los pasos de
-peatones siguen esperando el ciclo del semáforo aunque lo apaguéis.
+Un semáforo **apagado** (`off`) o en **ámbar intermitente** (`flashing`) deja el cruce **sin regular** (los dos modos
+su estado en `GET /api/signals` es `uncontrolled`):
+
+- Todos los coches llegan despacio (~15 km/h) y **ceden el paso** si viene un coche por la calle con prioridad (la de
+  más categoría; a igual categoría, el eje este-oeste).
+- Los **peatones** cruzan en grupos y los coches esperan; cuanta más gente hay en la calle, más rato está ocupado el
+  paso. En **ámbar intermitente el peatón tiene prioridad** (cruza en cuanto llega: el paso está ocupado bastante
+  más); **apagado**, cruza cuando hay hueco (ocupa menos el paso, los coches paran menos).
+
+Con poco tráfico (de noche) puede ahorrar esperas; en hora punta forma colas. Apagar todos los semáforos en hora punta
+colapsa la ciudad.
+
+En los **pasos de cebra sin semáforo** pasa lo mismo que con los peatones de un cruce sin regular: cruzan en grupos y
+los coches paran mientras cruzan (salvo que ya no les dé para frenar). Cruzan más a menudo cuanta más gente hay en la
+calle y cuanto más concurrida es la calle del paso (comercios, paradas…); de madrugada apenas frenan el tráfico. En un
+paso a menos de 40 m de un semáforo cruzan con el rojo de los coches.
 
 ### 3.3 Autobuses de una línea — `PATCH /api/buses/<línea>`
 
@@ -204,11 +218,11 @@ curl -X PATCH http://localhost:8080/api/buses/L1 -H "Authorization: Bearer $TOKE
 (todo o nada); `null` cancela un cambio pendiente. **Tarda 30 días simulados** (unas 14 h reales) en aplicarse; mientras
 tanto sale en `pending`.
 
-### 3.5 Parámetros globales — `PUT /api/params`
+### 3.5 La demanda no se controla
 
-`{"maxCars": 1500, "maxPedestrians": 12000, "scenario": "auto"}`. `maxCars` (0–3000) es el máximo de coches con la demanda
-máxima; `scenario`: `auto`, `weekday`, `preholiday`, `weekend` o `sunday`. Si el servidor tiene `LOCK_PARAMS=1`, responde `403`: la demanda forma parte
-del escenario y no se puede cambiar.
+Cuántos coches y peatones hay en la ciudad **no se puede cambiar**: lo fija el servidor (`params` en `GET /api/state`:
+`maxCars` y `maxPedestrians` en hora punta) y **varía un poco al azar** cada día (±10 %) y de hora en hora (±5 %), como
+en una ciudad real. `PUT /api/params` responde `403`. Hay que predecirla con los históricos, no fijarla.
 
 ---
 

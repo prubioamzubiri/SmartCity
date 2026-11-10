@@ -21,7 +21,7 @@ function rand(i, k, salt) {
 // del tiempo y, en cada ventana, elige qué hacer: caminar por la acera de una calle o cruzar por un paso de
 // peatones de OSM (en ese caso solo se ve mientras cruza).
 export class Pedestrians {
-  constructor(crossings = [], { max = P.max, graph = null, walkFraction = P.walkFraction, water = null, weights = null, signals = null } = {}) {
+  constructor(crossings = [], { max = P.max, graph = null, walkFraction = P.walkFraction, water = null, weights = null, signals = null, crosswalks = null } = {}) {
     this.crossings = crossings;
     this.count = Math.floor(crossings.length / STRIDE);
     this.graph = graph;
@@ -37,6 +37,7 @@ export class Pedestrians {
     this.crossTotal = this.count ? this.crossCumulative[this.count - 1] : 0;
     // Semáforo que regula cada paso (índice en signals.signals, -1 = sin regular) y el eje de coches que cruzan.
     this.signals = signals;
+    this.crosswalks = crosswalks; // pasos de cebra sin semáforo (ventanas en que cruzan y los coches ceden)
     this.crossSignal = new Int32Array(this.count).fill(-1);
     this.crossGroup = new Uint8Array(this.count);
     if (signals) this.linkSignals();
@@ -107,6 +108,9 @@ export class Pedestrians {
   // Ventana de rojo para los coches del grupo `g` del semáforo `s` que empieza en `from` o la siguiente:
   // { start, length, current } con tiempos simulados absolutos.
   redWindow(s, g, from) {
+    // Semáforo apagado o en ámbar: cruce sin regular, los peatones cruzan en grupo cuando les toca (los coches esperan).
+    const mode = this.signals.modeOf(this.signals.signals[s]);
+    if (mode === 'off' || mode === 'flashing') return this.signals.pedestrianWindow(s, from);
     const { gA, y, cycle, offset } = this.timingOf(s);
     const length = g === 0 ? cycle - gA - y : gA + y;
     const begin = g === 0 ? gA + y : 0;
@@ -212,16 +216,18 @@ export class Pedestrians {
     let start = rand(i, k, 3) * Math.max(0, slot - duration);
     let span = duration;
     const sig = this.crossSignal[j / STRIDE];
+    const zebra = sig < 0 && this.crosswalks && this.crosswalks.edge[j / STRIDE] >= 0;
     let waiting = false;
-    if (sig >= 0) {
+    if (sig >= 0 || zebra) {
       // Paso con semáforo: espera en el bordillo y cruza dentro de la ventana de rojo de los coches (a ritmo de hora
       // simulada, comprimiendo el cruce si el rojo es corto). Si no cabe antes de acabar la ventana de tiempo, no cruza.
+      // Paso de cebra sin semáforo: igual, en la ventana en que cruza su grupo (los coches le ceden el paso).
       const f = this.simPerSecond;
       const slotStart = this.simNow - local * f;
       const wanted = slotStart + start * f;
-      const w = this.redWindow(sig, this.crossGroup[j / STRIDE], wanted);
+      const w = zebra ? this.crosswalks.window(j / STRIDE, wanted) : this.redWindow(sig, this.crossGroup[j / STRIDE], wanted);
       const room = w.length - 2 * P.redMargin;
-      if (room < P.minRedWindow) return n;
+      if (room <= 0 || (!zebra && room < P.minRedWindow)) return n;
       const lengthSim = Math.min(duration * f, room);
       const lo = w.start + P.redMargin;
       const begin = w.current ? Math.min(Math.max(wanted, lo), lo + room - lengthSim) : lo;
@@ -368,3 +374,7 @@ function sidewalkEdges(g, weights) {
 
 // Fracción de peatones activa según la demanda de tráfico (0 a 1 y pico) y el mínimo configurado.
 export const pedestrianDensity = (demand) => P.minDensity + (1 - P.minDensity) * Math.min(1, Math.max(0, demand));
+
+// Cuánta gente hay en la calle (0..1) a una hora simulada: decide cuánto rato ocupan los peatones los cruces sin regular.
+export const pedestrianLoad = (simSeconds, scenario, maxPedestrians = P.max) =>
+  pedestrianDensity(pedestrianDemand(simSeconds, scenario)) * Math.min(1, Math.max(0, maxPedestrians / P.max));

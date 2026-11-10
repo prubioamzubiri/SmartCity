@@ -100,7 +100,7 @@ const radiusOf = (raw, fallback, max) => {
 };
 
 const round1 = (v) => Math.round(v * 10) / 10;
-const LIGHT = ['green', 'yellow', 'red'];
+const LIGHT = ['green', 'yellow', 'red', 'uncontrolled']; // uncontrolled: apagado o ámbar intermitente (cruce sin regular)
 const SIGNAL_KEYS = ['mode', 'green', 'greenA', 'greenB', 'yellow', 'schedule'];
 
 // Estado de un semáforo: ciclo actual por eje (ew = este-oeste, ns = norte-sur), tiempos efectivos y ajustes propios.
@@ -237,7 +237,7 @@ function simSecondsOf(value) {
 const DOCS_FILE = new URL('../docs/API.md', import.meta.url);
 
 // Listener HTTP de la API. Las lecturas son públicas; las escrituras exigen `Authorization: Bearer <token>`.
-export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFile = DOCS_FILE, lockParams = false }) {
+export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFile = DOCS_FILE }) {
   const tokenHash = token ? digest(token) : null;
 
   const authorize = (req) => {
@@ -253,7 +253,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       ...runtime.status(),
       graphKey: engine.graphKey,
       params: engine.params,
-      paramsLocked: lockParams, // PUT /api/params responde 403 (la demanda la fija el profesor)
+      seed: CONFIG.sim.seed, // semilla de esta ciudad (SCENARIO_SEED): tráfico, tiempo, eventos y variación de la demanda
+      startSeconds: runtime.anchor.simSeconds, // segundo simulado en que empezó esta ciudad
       writeProtected: Boolean(tokenHash), // los cambios necesitan token
       restrictions: engine.restrictions.items.map((r) => engine.restrictions.describe(r)),
       traffic: { stopped: traffic.stopped, avgKmh: Math.round(traffic.avgKmh * 10) / 10 },
@@ -528,20 +529,9 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
     }
 
     if (method === 'PUT' && pathname === '/api/params') {
-      authorize(req);
-      // La demanda es parte del escenario, no de la gestión: el profesor puede impedir que se cambie.
-      if (lockParams) throw new HttpError(403, 'Los parámetros de demanda están bloqueados en este servidor');
-      const body = await readJson(req);
-      const patch = {};
-      if (body.maxCars !== undefined) patch.maxCars = finite(body.maxCars, 'maxCars');
-      if (body.maxPedestrians !== undefined) patch.maxPedestrians = finite(body.maxPedestrians, 'maxPedestrians');
-      if (body.scenario !== undefined) patch.scenario = body.scenario;
-      try {
-        runtime.mutate((e) => e.setParams(patch));
-      } catch (err) {
-        throw new HttpError(400, err.message);
-      }
-      return send(200, runtime.engine.params);
+      // La demanda forma parte del escenario, no de la gestión: la fija el servidor (MAX_CARS, MAX_PEDESTRIANS) y varía
+      // un poco cada día y cada hora.
+      throw new HttpError(403, 'La demanda la fija el servidor y varía un poco cada día: no se puede cambiar');
     }
 
     if (method === 'PUT' && pathname === '/api/signals/plan') {

@@ -25,7 +25,8 @@ export const CONFIG = {
 
   traffic: {
     scenario: 'auto', // auto, weekday, preholiday, weekend o sunday
-    dailyVariation: 0.1, // variación determinista ±10%; 0 para desactivarla
+    dailyVariation: 0.1, // demanda de cada día ±10 % al azar (según la semilla); 0 para desactivarla
+    hourlyVariation: 0.05, // y ±5 % más que cambia suavemente de hora en hora; 0 para desactivarla
     scenarios: {
       weekday: {
         multiplier: 1,
@@ -240,6 +241,18 @@ export const CONFIG = {
     green: 20,
     yellow: 3,
     clusterDistance: 45, // metros para agrupar semáforos de un mismo cruce
+    // Semáforo apagado o en ámbar intermitente: cruce sin regular.
+    // Pasos de cebra sin semáforo (ver crosswalks.js): con la calle llena de peatones, un paso de concurrencia media está
+    // ocupado este tanto por uno del tiempo (los más concurridos hasta `maxWeight` veces más, con tope en `maxShare`).
+    crosswalks: { share: 0.2, maxShare: 0.5, minWeight: 0.25, maxWeight: 2, snapDistance: 3, stopGap: 3 },
+    unsignalized: {
+      approachSpeed: 4, // m/s (~15 km/h) a los que se llega a la línea de parada
+      yieldDistance: 30, // metros: un coche de la calle con prioridad a menos de esto obliga a ceder el paso
+      pedestrianPeriod: 40, // segundos simulados: los peatones cruzan en grupo una vez cada tanto
+      // Con la calle llena de peatones, tanto por uno del tiempo con el paso ocupado. En ámbar intermitente el peatón tiene
+      // prioridad (cruza al llegar y los coches paran); apagado, cruza cuando hay hueco (los coches paran menos).
+      pedestrianShare: { flashing: 0.45, off: 0.15 },
+    },
   },
 
   // Rotondas: los coches del anillo tienen prioridad y solo entran si hay hueco y el anillo no está lleno.

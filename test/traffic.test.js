@@ -17,6 +17,7 @@ function simulation() {
 test('scenario changes drive existing population growth, reduction and capacity limits', () => {
   const config = structuredClone(CONFIG.traffic);
   config.dailyVariation = 0;
+  config.hourlyVariation = 0;
   const demand = createDemandModel(config);
   const sim = simulation();
   try {

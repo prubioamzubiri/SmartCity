@@ -41,8 +41,12 @@ function scheduleMatches(rule, date) {
 
 export const SIGNAL_MODES = ['normal', 'off', 'flashing', 'all_red'];
 
-// Estados por grupo: 0 verde, 1 ámbar, 2 rojo. Grupo 0 = aproche E-O, grupo 1 = aproche N-S.
-// Modos: normal (ciclo), off (apagado) y flashing (ámbar intermitente) no detienen a nadie, all_red lo detiene todo.
+// Estados por grupo: 0 verde, 1 ámbar, 2 rojo, 3 sin regular. Grupo 0 = aproche E-O, grupo 1 = aproche N-S.
+// Modos: normal (ciclo); off (apagado) y flashing (ámbar intermitente) dejan el cruce sin regular: los coches frenan,
+// ceden el paso a la calle con prioridad y esperan a que crucen los peatones. En ámbar el peatón tiene prioridad (cruza
+// al llegar); apagado, cruza cuando hay hueco y ocupa menos el paso. all_red lo detiene todo.
+export const UNCONTROLLED = 3;
+const U = CONFIG.signals.unsignalized;
 export class SignalController {
   constructor(graph) {
     this.graph = graph;
@@ -51,6 +55,35 @@ export class SignalController {
     this.states = new Uint8Array(this.signals.length * 2);
     this.plan = { default: { green: CONFIG.signals.green, yellow: CONFIG.signals.yellow }, signals: {} };
     this.offsets = this.signals.map((s) => (Math.imul(s.id, 2654435761) >>> 0) % 1000 / 1000);
+    this.now = 0;
+    this.pedestrianLoad = 0; // cuánta gente hay en la calle (0..1)
+  }
+
+  // Cuánta gente hay en la calle (0..1, como la densidad de peatones): decide cuánto rato ocupan los pasos sin regular.
+  setPedestrianLoad(density) {
+    this.pedestrianLoad = Math.max(0, Math.min(1, density));
+  }
+
+  // Fracción del tiempo con peatones cruzando en el cruce sin regular `s` (más en ámbar, donde tienen prioridad).
+  pedestrianShare(s) {
+    const mode = this.modeOf(this.signals[s]);
+    return (U.pedestrianShare[mode] ?? U.pedestrianShare.off) * this.pedestrianLoad;
+  }
+
+  // Ventana en que cruzan los peatones en el cruce sin regular `s` que empieza en `from` o la siguiente:
+  // { start, length, current }, como las ventanas de rojo de un semáforo que funciona.
+  pedestrianWindow(s, from) {
+    const period = U.pedestrianPeriod;
+    const length = this.pedestrianShare(s) * period;
+    const shift = this.offsets[s] * period;
+    const phase = (((from - shift) % period) + period) % period;
+    if (phase < length) return { start: from - phase, length, current: true };
+    return { start: from + period - phase, length, current: false };
+  }
+
+  // Hay peatones cruzando ahora en el cruce sin regular `s`.
+  crossingBusy(s) {
+    return this.pedestrianLoad > 0 && this.pedestrianWindow(s, this.now).current;
   }
 
   setGlobalGreen(green, yellow = this.plan.default.yellow) {
@@ -114,13 +147,14 @@ export class SignalController {
   }
 
   update(simTime) {
+    this.now = simTime;
     const date = simDate(simTime);
     for (let i = 0; i < this.signals.length; i++) {
       const s = this.signals[i];
       if (!s.active) continue;
       const mode = this.modeOf(s);
       if (mode !== 'normal') {
-        this.states[i * 2] = this.states[i * 2 + 1] = mode === 'all_red' ? 2 : 0;
+        this.states[i * 2] = this.states[i * 2 + 1] = mode === 'all_red' ? 2 : UNCONTROLLED;
         continue;
       }
       const { gA, gB, y } = this.timing(s, simTime, date);

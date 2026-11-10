@@ -1,6 +1,0 @@
-# DOMAIN=localhost usa un certificado interno de Caddy; con un dominio público obtiene Let's Encrypt.
-# Para HTTP sin TLS (pruebas locales) usa DOMAIN=:80
-{$DOMAIN:localhost} {
-	encode zstd gzip
-	reverse_proxy panel:8090
-}
