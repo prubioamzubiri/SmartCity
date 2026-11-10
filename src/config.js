@@ -25,7 +25,8 @@ export const CONFIG = {
 
   traffic: {
     scenario: 'auto', // auto, weekday, preholiday, weekend o sunday
-    dailyVariation: 0.1, // variación determinista ±10%; 0 para desactivarla
+    dailyVariation: 0.1, // demanda de cada día ±10 % al azar (según la semilla); 0 para desactivarla
+    hourlyVariation: 0.05, // y ±5 % más que cambia suavemente de hora en hora; 0 para desactivarla
     scenarios: {
       weekday: {
         multiplier: 1,

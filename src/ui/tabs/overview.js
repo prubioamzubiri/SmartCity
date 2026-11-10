@@ -1,7 +1,7 @@
 import { CONFIG } from '../../config.js';
 import { el } from '../dom.js';
-import { card, cardTitle, field, hint, stat, toggle } from '../widgets.js';
-import { demandFactor, scenarioForTime } from '../../traffic/demand.js';
+import { card, cardTitle, hint, stat, toggle } from '../widgets.js';
+import { demandFactor, demandNoise, scenarioForTime } from '../../traffic/demand.js';
 import { CONDITIONS } from '../../weather/weather.js';
 import { holidayCalendar } from '../../calendar/holidays.js';
 
@@ -10,7 +10,7 @@ export const SCENARIOS = {
   weekend: 'Fin de semana', sunday: 'Domingo o festivo',
 };
 
-// Resumen: cómo está la ciudad ahora, la demanda y las capas del mapa.
+// Resumen: cómo está la ciudad ahora, la demanda (solo lectura) y las capas del mapa.
 export function createOverviewTab(ctx) {
   const stats = {
     cars: stat('Coches circulando'),
@@ -22,28 +22,8 @@ export function createOverviewTab(ctx) {
   };
   const day = el('div', { class: 'ui-lines' });
 
-  // Demanda (parámetros globales). El profesor puede bloquearla en el servidor (LOCK_PARAMS).
-  const scenario = el('select', { onchange: () => ctx.run((c) => c.setParams({ scenario: scenario.value }), 'Escenario cambiado') },
-    ...Object.entries(SCENARIOS).map(([value, textContent]) => el('option', { value, textContent })));
-  const carsValue = el('output');
-  const cars = el('input', {
-    type: 'range', min: 0, max: CONFIG.cars.max, step: 100,
-    oninput: () => (carsValue.textContent = cars.value),
-    onchange: () => ctx.run((c) => c.setParams({ maxCars: Number(cars.value) }), `Coches en hora punta: ${cars.value}`),
-  });
-  const walkersValue = el('output');
-  const walkers = el('input', {
-    type: 'range', min: 0, max: CONFIG.pedestrians.max, step: 500,
-    oninput: () => (walkersValue.textContent = walkers.value),
-    onchange: () => ctx.run((c) => c.setParams({ maxPedestrians: Number(walkers.value) }), `Peatones en hora punta: ${walkers.value}`),
-  });
-  const lockedNote = hint('El profesor ha fijado la demanda en este servidor: forma parte del escenario y no se puede cambiar.');
-  lockedNote.classList.add('warn');
-  const demandControls = el('div', {},
-    field('Escenario', scenario, 'Automático sigue el calendario: laborables, fines de semana, vísperas y festivos.'),
-    field('Coches en hora punta', el('div', { class: 'ui-range' }, cars, carsValue)),
-    field('Peatones en hora punta', el('div', { class: 'ui-range' }, walkers, walkersValue)),
-  );
+  // Demanda: la fija el servidor (no se puede cambiar) y varía un poco cada día y cada hora.
+  const demand = el('div', { class: 'ui-lines' });
 
   const layers = el('div', { class: 'ui-toggles' },
     toggle('Autobuses, líneas y paradas', true, (on) => ctx.transit.view.setVisible(on)).node,
@@ -59,20 +39,14 @@ export function createOverviewTab(ctx) {
   const node = el('div', {},
     card(cardTitle('Ahora en la ciudad'), el('div', { class: 'ui-stats' }, ...Object.values(stats).map((s) => s.node))),
     card(cardTitle('El día'), day),
-    card(cardTitle('Demanda'), lockedNote, demandControls),
+    card(cardTitle('Demanda'), demand,
+      hint('La fija el servidor y cambia un poco cada día y cada hora, como en una ciudad real: no se puede controlar, hay que predecirla.')),
     card(cardTitle('Qué se ve en el mapa'), layers,
       hint('Ratón: arrastrar = girar · botón derecho = mover · rueda = zoom. Pasa por encima de un autobús, parking o puesto para ver sus datos.')),
   );
 
   return {
     node,
-    onState(s) {
-      lockedNote.hidden = !s.paramsLocked;
-      for (const input of [scenario, cars, walkers]) input.disabled = s.paramsLocked || !ctx.canWrite();
-      if (document.activeElement !== scenario) scenario.value = s.params.scenario;
-      if (document.activeElement !== cars) cars.value = carsValue.textContent = s.params.maxCars;
-      if (document.activeElement !== walkers) walkers.value = walkersValue.textContent = s.params.maxPedestrians;
-    },
     update(s, t) {
       const fmt = (n) => Math.round(n).toLocaleString('es-ES');
       stats.cars.set(fmt(s.cars), `de ${fmt(s.params.maxCars)} en hora punta`);
@@ -83,6 +57,11 @@ export function createOverviewTab(ctx) {
       const active = b.stats.reduce((a, st) => a + st.active, 0);
       const riders = b.stats.reduce((a, st) => a + st.passengers, 0);
       stats.buses.set(fmt(active), `${fmt(riders)} pasajeros`);
+      const today = demandNoise(Math.floor(t / 86400) * 86400 + 43200, CONFIG.traffic.dailyVariation, 0);
+      demand.replaceChildren(
+        el('div', {}, el('b', { textContent: 'Coches en hora punta: ' }), fmt(s.params.maxCars)),
+        el('div', {}, el('b', { textContent: 'Peatones en hora punta: ' }), fmt(s.params.maxPedestrians)),
+        el('div', {}, el('b', { textContent: 'Hoy: ' }), `${today >= 1 ? '+' : '−'}${Math.abs(Math.round((today - 1) * 100))} % sobre un día normal`));
       stats.walkers.set(fmt(s.pedestrians.expected), s.bikes ? `${fmt(s.bikes.inUse)} en bici` : '');
       const holiday = CONFIG.holidays.enabled ? holidayCalendar.holidayAt(t) : null;
       const w = s.weather;

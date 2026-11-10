@@ -210,13 +210,13 @@ test('API creates, renames, deletes and exports pedestrian sensors', async (t) =
   assert.ok((await api.state()).records.pedestrians > 0, 'el histórico se conserva');
 });
 
-test('API changes the pedestrian maximum and rejects bad values', async (t) => {
+test('without pedestrians (server setting) the sensors count nobody', async (t) => {
   const { api, runtime, now } = await serve(t);
-  await assert.rejects(() => api.setParams({ maxPedestrians: 'muchos' }), /número/);
-  assert.equal((await api.setParams({ maxPedestrians: 4000 })).maxPedestrians, 4000);
+  runtime.mutate((e) => e.setParams({ maxPedestrians: 4000 }));
+  assert.equal((await api.state()).params.maxPedestrians, 4000);
   const created = await api.addPedestrianSensor(0, -250);
   const before = (await api.state()).pedestrianSensors[0].total;
-  await api.setParams({ maxPedestrians: 0 });
+  runtime.mutate((e) => e.setParams({ maxPedestrians: 0 }));
   run(runtime, now, 2 * CHUNK);
   const state = await api.state();
   assert.equal(state.pedestrianSensors[0].total, before, 'sin peatones no se cuenta a nadie');

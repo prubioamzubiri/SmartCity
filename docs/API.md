@@ -40,8 +40,8 @@ Campos principales: `simTime`, `scale`, `caughtUp`, `cars` (coches circulando), 
 `pedestrianSensors` (con `total` acumulado y `current`), `parkings` (`id`, `name`, `capacity`, `occupancy` de 0 a 1,
 `tracked`), `pedestrians.expected` (peatones en la calle), `buses.lines` (`id`, `fleet`, `suspended`, `tracked`),
 `bikes` (`inUse` y `stations` con `available`, `capacity`, `pending`), `weather`, `holiday`, `events`, `restrictions`
-(las activas, como en `GET /api/restrictions`), `paramsLocked` (la demanda no se puede cambiar), `writeProtected` (los
-cambios necesitan token) y `records` (filas guardadas por tipo).
+(las activas, como en `GET /api/restrictions`), `seed` (semilla de esta ciudad), `startSeconds` (cuándo empezó),
+`writeProtected` (los cambios necesitan token) y `records` (filas guardadas por tipo).
 
 ### `GET /api/point?x=&z=&radius=` — qué hay cerca de un punto, ahora mismo
 
@@ -204,11 +204,11 @@ curl -X PATCH http://localhost:8080/api/buses/L1 -H "Authorization: Bearer $TOKE
 (todo o nada); `null` cancela un cambio pendiente. **Tarda 30 días simulados** (unas 14 h reales) en aplicarse; mientras
 tanto sale en `pending`.
 
-### 3.5 Parámetros globales — `PUT /api/params`
+### 3.5 La demanda no se controla
 
-`{"maxCars": 1500, "maxPedestrians": 12000, "scenario": "auto"}`. `maxCars` (0–3000) es el máximo de coches con la demanda
-máxima; `scenario`: `auto`, `weekday`, `preholiday`, `weekend` o `sunday`. Si el servidor tiene `LOCK_PARAMS=1`, responde `403`: la demanda forma parte
-del escenario y no se puede cambiar.
+Cuántos coches y peatones hay en la ciudad **no se puede cambiar**: lo fija el servidor (`params` en `GET /api/state`:
+`maxCars` y `maxPedestrians` en hora punta) y **varía un poco al azar** cada día (±10 %) y de hora en hora (±5 %), como
+en una ciudad real. `PUT /api/params` responde `403`. Hay que predecirla con los históricos, no fijarla.
 
 ---
 

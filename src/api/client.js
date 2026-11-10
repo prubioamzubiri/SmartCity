@@ -65,10 +65,6 @@ export class ApiClient {
     return this.request('/api/pedestrians');
   }
 
-  setParams(params) {
-    return this.request('/api/params', { method: 'PUT', body: params });
-  }
-
   setSignalPlan(plan) {
     return this.request('/api/signals/plan', { method: 'PUT', body: { plan } });
   }

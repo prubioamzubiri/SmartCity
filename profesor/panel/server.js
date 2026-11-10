@@ -3,14 +3,15 @@ import http from 'node:http';
 import path from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { Collector, sameParams } from './collector.js';
+import { Collector } from './collector.js';
 import { Evaluations } from './evaluations.js';
+import { References, refName } from './reference.js';
 import { BUCKET_SECONDS, INDICATORS, METRIC, scoreWindow } from './metric.js';
 
 const BASE_DATE = Date.UTC(2026, 0, 5); // segundo simulado 0
 
 const WINDOWS = { day: 96, week: 7 * 96, all: Infinity }; // en tramos de 15 min simulados
-export const REFERENCE = 'referencia';
+export { refName };
 
 // "g1=https://a.example.com,g2=https://b.example.com" → [{ name, url }]
 export function parseGroups(text = '') {
@@ -36,9 +37,9 @@ const derived = {
   lostTripsPct: (r) => (r && r.sums.tripsDone + r.sums.tripsLost > 0 ? (100 * r.sums.tripsLost) / (r.sums.tripsDone + r.sums.tripsLost) : r ? 0 : null),
 };
 
-export function createPanel({ collector, groups, password, evaluations = new Evaluations(null), now = Date.now }) {
+export function createPanel({ collector, groups, password, references = null, evaluations = new Evaluations(null), now = Date.now }) {
   const status = (name) => collector.status.get(name);
-  const ref = () => status(REFERENCE);
+  const fmtTime = (sec) => new Date(BASE_DATE + sec * 1000).toISOString().slice(0, 16).replace('T', ' ');
 
   function windowOf(name, key) {
     const s = status(name);
@@ -50,13 +51,15 @@ export function createPanel({ collector, groups, password, evaluations = new Eva
 
   function alertsOf(group, score) {
     const s = status(group.name);
-    const r = ref();
+    const r = references?.status(group.name);
     const out = [];
     if (!s.ok) out.push({ level: 'error', text: `No responde: ${s.error}` });
     if (s.simSeconds === undefined) return out;
-    if (r?.scale && s.scale !== r.scale) out.push({ level: 'error', text: `Escala del reloj distinta de la referencia (×${s.scale?.toFixed(2)} frente a ×${r.scale.toFixed(2)})` });
-    if (r?.params && !sameParams(s.params, r.params)) out.push({ level: 'error', text: `Parámetros de demanda distintos de la referencia ${JSON.stringify(s.params)}: la comparación no es válida` });
-    if (r?.simSeconds !== undefined && s.simSeconds > r.simSeconds + BUCKET_SECONDS) out.push({ level: 'warn', text: 'Va por delante de la referencia: sus últimos tramos no se pueden comparar (arranca la referencia antes que los grupos)' });
+    if (s.seed === undefined) out.push({ level: 'warn', text: 'La ciudad no informa de su semilla (versión antigua del servidor): se supone la de por defecto' });
+    if (r?.error) out.push({ level: 'error', text: `La ciudad de referencia ha fallado: ${r.error}` });
+    else if (r?.simSeconds !== null && r?.simSeconds !== undefined && s.simSeconds > r.simSeconds + BUCKET_SECONDS) {
+      out.push({ level: 'info', text: `Calculando su ciudad sin gestor: va por ${fmtTime(r.simSeconds)}; los tramos posteriores se compararán al llegar` });
+    }
     if (s.caughtUp === false) out.push({ level: 'warn', text: 'El simulador va con retraso respecto al reloj (está recuperando tiempo)' });
     if (collector.epochOf(group.name) > 0) out.push({ level: 'warn', text: `La ciudad se ha reiniciado ${collector.epochOf(group.name)} vez/veces: solo cuenta desde el último reinicio` });
     const mem = collector.memory.get(group.name);
@@ -76,27 +79,23 @@ export function createPanel({ collector, groups, password, evaluations = new Eva
     if (!w) return null;
     const events = collector.events(group.name, { fromSim: w.from * BUCKET_SECONDS, toSim: w.to * BUCKET_SECONDS });
     const count = (kind) => events.filter((e) => e.kind === kind).length;
-    return scoreWindow(collector.buckets(group.name, w.from, w.to), collector.buckets(REFERENCE, w.from, w.to), {
+    return scoreWindow(collector.buckets(group.name, w.from, w.to), collector.buckets(refName(group.name), w.from, w.to), {
       reversals: count('reversal'),
       suspensions: count('suspension'),
     });
   }
 
   function overview(key) {
-    const r = ref();
-    const refEvents = collector.events(REFERENCE, { limit: 5 }).filter((e) => e.kind !== 'reset');
     return {
       window: key,
-      reference: {
-        ok: r.ok, error: r.error, simTime: r.simTime, simSeconds: r.simSeconds, scale: r.scale, params: r.params,
-        alerts: refEvents.length ? [{ level: 'error', text: `Alguien ha modificado la ciudad de referencia: ${refEvents[0].text}` }] : [],
-      },
       groups: groups.map((g) => {
         const score = scoreOf(g, key);
         const s = status(g.name);
         const last = collector.events(g.name, { limit: 50 }).find((e) => e.kind === 'action' || e.kind === 'params');
+        const r = references?.status(g.name);
         return {
           name: g.name, url: g.url, ok: s.ok, simTime: s.simTime, simSeconds: s.simSeconds, cars: s.cars, traffic: s.traffic,
+          seed: s.seed, scale: s.scale, params: s.params, reference: r ? { simSeconds: r.simSeconds, simTime: r.simSeconds === null ? null : fmtTime(r.simSeconds) } : null,
           restrictions: s.restrictions, score, alerts: alertsOf(g, score),
           lastAction: last ? { text: last.text, simSeconds: last.sim_seconds, wallMs: last.wall_ms } : null,
         };
@@ -107,7 +106,7 @@ export function createPanel({ collector, groups, password, evaluations = new Eva
   function series(name, key) {
     const w = windowOf(name, key) ?? { from: -Infinity, to: Infinity };
     const g = collector.buckets(name, w.from, w.to + 1);
-    const refRows = new Map(collector.buckets(REFERENCE, w.from, w.to + 1).map((r) => [r.bucket, r]));
+    const refRows = new Map(collector.buckets(refName(name), w.from, w.to + 1).map((r) => [r.bucket, r]));
     const s = status(name);
     const origin = s?.simTime ? Date.parse(`${s.simTime}Z`) - s.simSeconds * 1000 : Date.UTC(2026, 0, 5);
     return {
@@ -202,11 +201,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   }
   const dbFile = env.DB_FILE ?? 'data/panel.db';
   fs.mkdirSync(path.dirname(dbFile), { recursive: true });
-  const instances = [{ name: REFERENCE, url: env.REFERENCE_URL ?? 'http://reference:8080', kind: 'reference' }, ...groups];
-  const collector = new Collector({ file: dbFile, instances, log });
+  const collector = new Collector({ file: dbFile, instances: groups, log });
+  // La ciudad sin gestor de cada grupo la simula el propio panel (misma semilla, inicio, escala y demanda).
+  const references = new References({ collector, dir: path.join(path.dirname(dbFile), 'referencias'), log });
   const evaluations = new Evaluations(env.RESULTS_DIR ?? null);
   if (env.RESULTS_DIR && !evaluations.enabled) log(`RESULTS_DIR=${env.RESULTS_DIR} no existe: la pestaña «Evaluaciones» estará vacía`);
-  const server = http.createServer(createPanel({ collector, groups, password: env.PANEL_PASSWORD, evaluations }));
+  const server = http.createServer(createPanel({ collector, groups, password: env.PANEL_PASSWORD, references, evaluations }));
   const port = Number(env.PORT ?? 8090);
   server.listen(port, () => log(`Panel en http://localhost:${port} · ${groups.map((g) => `${g.name}=${g.url}`).join(' · ')}`));
 
@@ -216,12 +216,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     while (!stopped) {
       const started = Date.now();
       await collector.pollAll();
+      for (const g of groups) references.sync(g.name);
       await new Promise((r) => setTimeout(r, Math.max(0, periodMs - (Date.now() - started))));
     }
   })();
-  const shutdown = () => {
+  const shutdown = async () => {
     stopped = true;
     server.close();
+    await references.close();
     collector.close();
     process.exit(0);
   };

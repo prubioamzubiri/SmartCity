@@ -124,7 +124,7 @@ async function startCity(name, s, config, simImage, token) {
   await docker([
     'run', '-d', '--name', `${name}-sim`, '-p', '127.0.0.1::8080',
     '-e', `SMARTCITY_TOKEN=${token}`, '-e', `SCENARIO_SEED=${s.semilla}`, '-e', `SCENARIO_START=${s.inicio}`,
-    '-e', `SIM_SCALE=${config.scale}`, '-e', 'LOCK_PARAMS=1', '-e', 'DB_FILE=/data/ciudad.db',
+    '-e', `SIM_SCALE=${config.scale}`, '-e', 'DB_FILE=/data/ciudad.db',
     // Checkpoints frecuentes: las filas del histórico se graban en cada uno y el evaluador las necesita al acabar.
     '-e', 'CHECKPOINT_SECONDS=2', simImage,
   ]);

@@ -8,6 +8,7 @@ import { Store } from './store.js';
 import { DEFAULT_SCALE, Runtime } from './runtime.js';
 import { createApp } from './app.js';
 import { withBikeStations } from '../src/bikes/sharing.js';
+import { CONFIG } from '../src/config.js';
 
 const env = process.env;
 const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -36,9 +37,31 @@ const runtime = new Runtime({
   log,
 });
 if (scenario.seed !== undefined || scenario.start) log(`Escenario: ${JSON.stringify(scenario)} (solo cuenta si la base de datos es nueva)`);
+// La semilla queda ligada a la ciudad: cambiarla con la ciudad en marcha mezclaría dos historias distintas.
+const savedSeed = store.getMeta('seed');
+if (savedSeed === null) store.setMeta('seed', CONFIG.sim.seed);
+else if (savedSeed !== CONFIG.sim.seed) {
+  console.error(`Esta ciudad se creó con SCENARIO_SEED=${savedSeed} y ahora es ${CONFIG.sim.seed}. Vuelve a poner ${savedSeed} o borra su volumen para empezar una ciudad nueva.`);
+  process.exit(1);
+}
 if (!env.SMARTCITY_TOKEN) log('SMARTCITY_TOKEN no definido: cualquiera puede modificar la ciudad');
 
-const server = http.createServer(createApp({ runtime, store, token: env.SMARTCITY_TOKEN, corsOrigin: env.CORS_ORIGIN ?? '*', lockParams: env.LOCK_PARAMS === '1' }));
+// Demanda en hora punta (la fija el servidor; los alumnos no la pueden cambiar).
+const demand = {};
+for (const [key, name] of [['maxCars', 'MAX_CARS'], ['maxPedestrians', 'MAX_PEDESTRIANS']]) {
+  if (!env[name]) continue;
+  const value = Number(env[name]);
+  if (!Number.isFinite(value) || value < 0) {
+    console.error(`${name} debe ser un número positivo: ${env[name]}`);
+    process.exit(1);
+  }
+  demand[key] = value;
+}
+if (Object.keys(demand).length) {
+  runtime.mutate((e) => e.setParams(demand));
+  log(`Demanda en hora punta: ${JSON.stringify(runtime.engine.params)}`);
+}
+const server = http.createServer(createApp({ runtime, store, token: env.SMARTCITY_TOKEN, corsOrigin: env.CORS_ORIGIN ?? '*' }));
 server.listen(port, () => log(`API en http://localhost:${port} · escala ×${runtime.scale.toFixed(2)} · ${JSON.stringify(runtime.status())}`));
 
 const loop = runtime.start();

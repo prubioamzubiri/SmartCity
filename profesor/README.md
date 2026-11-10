@@ -1,7 +1,7 @@
 # Panel del profesor
 
-Seguimiento en directo de las ciudades de los grupos. Cada ciudad se compara, **a la misma hora simulada**, con una
-**ciudad de referencia sin gestor**, y el panel calcula un índice de 0 a 100: **50 = igual que sin gestor**, por encima
+Seguimiento en directo de las ciudades de los grupos. Cada ciudad se compara, **a la misma hora simulada**, con **su
+misma ciudad sin gestor** (misma semilla, inicio y demanda), y el panel calcula un índice de 0 a 100: **50 = igual que sin gestor**, por encima
 el gestor mejora la ciudad y por debajo la empeora.
 
 > Este directorio contiene la métrica de evaluación (`panel/metric.js`). Si el repositorio es público, los alumnos
@@ -9,9 +9,12 @@ el gestor mejora la ciudad y por debajo la empeora.
 
 ## Cómo funciona
 
-- **Una ciudad de referencia** (`reference`) corre en el servidor del profesor con el mismo simulador y sin que nadie
-  la toque. La simulación es determinista: todas las ciudades empiezan en la misma fecha simulada y, sin
-  intervenciones, evolucionan igual. Por eso la referencia es exactamente «lo que habría pasado sin gestor».
+- **Cada grupo puede tener su semilla** (`SCENARIO_SEED`): su tráfico, su tiempo, sus eventos y la variación diaria de
+  la demanda son distintos de los de otro grupo. La simulación es determinista: con la misma semilla, inicio y demanda,
+  y sin intervenciones, una ciudad evoluciona siempre igual.
+- **El panel simula por dentro la ciudad sin gestor de cada grupo** («referencia»): lee de la ciudad del grupo su
+  semilla, su inicio, su escala y su demanda (`GET /api/state`) y la reproduce en un hilo aparte, siguiendo su hora.
+  Es exactamente «lo que habría pasado sin gestor». Guarda su estado cada día simulado para reanudar si se reinicia.
 - **El simulador graba** cada 5 min simulados, siempre y a horas exactas, los indicadores globales de la ciudad
   (`GET /api/city.csv`). Como es determinista, una ciudad sin gestor graba exactamente las mismas filas que la
   referencia: su índice es 50 exacto, sin ruido de muestreo.
@@ -19,9 +22,12 @@ el gestor mejora la ciudad y por debajo la empeora.
   de los grupos), lo agrupa en tramos de 15 min simulados y lo guarda en SQLite. Cada `POLL_SECONDS` consulta también
   el estado actual para registrar las acciones (restricciones, semáforos, flotas…), los reinicios y las líneas
   suspendidas.
-- **Compara por hora simulada**, no por hora real: los grupos pueden arrancar en días distintos. Basta con que la
-  referencia arranque **antes** que cualquier grupo. Si el panel se para, al volver recupera el histórico que falte;
-  solo se pierde el registro de acciones de ese rato.
+- **Compara por hora simulada**, no por hora real: los grupos pueden arrancar en días distintos. La referencia de un
+  grupo simula unas 1000 veces más rápido que el tiempo real, así que alcanza enseguida a una ciudad recién arrancada;
+  si el panel se arranca semanas después que los grupos, tarda en ponerse al día (unas 9 h por cada año simulado), y
+  mientras tanto el grupo muestra «Calculando su ciudad sin gestor». Lo mejor es arrancar el panel a la vez que los
+  grupos. Si el panel se para, al volver recupera el histórico que falte; solo se pierde el registro de acciones de ese
+  rato.
 
 ## Indicadores y pesos (no los compartas con los alumnos)
 
@@ -54,13 +60,12 @@ Muestra los resultados del [evaluador de escenarios ocultos](evaluador/README.md
 ## Alertas
 
 El panel avisa cuando un grupo no responde, va con retraso, **se ha reiniciado** (la comparación sigue desde el
-reinicio), tiene **otra escala de reloj o parámetros de demanda distintos** (la comparación no es válida), lleva una
-línea suspendida mucho tiempo, no ha hecho ninguna acción en 6 h simuladas o deshace cambios a menudo. También avisa si
-alguien modifica la ciudad de referencia.
+reinicio y su referencia empieza de cero), su ciudad sin gestor aún se está calculando, lleva una línea suspendida
+mucho tiempo, no ha hecho ninguna acción en 6 h simuladas o deshace cambios a menudo.
 
 ## Despliegue
 
-### 1. Servidor del profesor (primero)
+### 1. Servidor del profesor
 
 ```sh
 cd profesor
@@ -69,8 +74,7 @@ npm run fetch-osm --prefix ..   # solo si ../public/data/city.json no existe
 docker compose up -d --build
 ```
 
-Abre `https://<DOMAIN>` con el usuario `profesor` y `PANEL_PASSWORD`. La ciudad de referencia no se publica: solo la
-ve el panel.
+Abre `https://<DOMAIN>` con el usuario `profesor` y `PANEL_PASSWORD`. Arráncalo a la vez que los grupos (o antes).
 
 ### 2. Servidor de cada grupo
 
@@ -79,8 +83,10 @@ En la raíz del repositorio, con su propio `.env`:
 ```sh
 SMARTCITY_TOKEN=<distinto para cada grupo: openssl rand -hex 24>
 DOMAIN=grupo1.ejemplo.es
-LOCK_PARAMS=1           # los alumnos no pueden cambiar la demanda (maxCars, scenario…)
-SIM_SCALE=              # vacío = igual que la referencia
+SCENARIO_SEED=1234      # una distinta para cada grupo: cada ciudad es un poco diferente
+SIM_SCALE=              # vacío = la del curso (365/7)
+MAX_CARS=               # demanda en hora punta (vacío = 1500 coches y 12000 peatones); los alumnos no la cambian
+MAX_PEDESTRIANS=
 ```
 
 ```sh
@@ -110,8 +116,10 @@ HTTPS_PORT=443
 
 ### Comprobaciones
 
-- Todas las ciudades con la misma `SIM_SCALE` (el panel avisa si no).
-- `LOCK_PARAMS=1` en los grupos: si cambian la demanda, la ciudad deja de ser comparable con la referencia.
+- La semilla de una ciudad no se puede cambiar con la ciudad en marcha: el servidor se niega a arrancar. Para cambiarla,
+  borra su volumen (`docker compose down -v`) y empieza una ciudad nueva.
+- La demanda (`MAX_CARS`, `MAX_PEDESTRIANS`) sí se puede cambiar reiniciando el servidor: la referencia la sigue desde
+  ese momento.
 - No reinicies ni borres el volumen de un grupo salvo que quieras empezar de cero: el panel lo detecta y vuelve a
   contar desde ese momento.
 - El panel solo lee. Si se cae, las ciudades siguen funcionando; al volver, recupera el histórico (no las acciones de

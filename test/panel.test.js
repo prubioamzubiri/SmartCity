@@ -4,7 +4,8 @@ import http from 'node:http';
 import { METRIC, INDICATORS, BUCKET_SECONDS, ROWS_PER_BUCKET, scoreWindow, indicatorsOf } from '../profesor/panel/metric.js';
 import { Collector, diffSnapshots, parseCsv } from '../profesor/panel/collector.js';
 import { CITY_COLUMNS } from '../src/sensors/cityTracker.js';
-import { createPanel, parseGroups, REFERENCE } from '../profesor/panel/server.js';
+import { createPanel, parseGroups, refName } from '../profesor/panel/server.js';
+import { References } from '../profesor/panel/reference.js';
 
 const base = { cars: 1000, stopped: 100, speedXcars: 30000, busWaiting: 400, busActive: 40, busFull: 4, busPassengers: 2000, suspendedLines: 0, badStations: 10, saturatedLots: 3, restrictedKm: 0, allRed: 0, tripsDone: 100, tripMinutes: 1200, delayMinutes: 300, tripsLost: 1 };
 const times = (values, k) => Object.fromEntries(Object.entries(values).map(([key, v]) => [key, v * k]));
@@ -105,7 +106,7 @@ function fakeCity() {
     sim: 25200, restrictions: [], fleet: 5, params: { maxCars: 1500, maxPedestrians: 12000, scenario: 'auto' },
     state() {
       return {
-        simSeconds: this.sim, simTime: iso(this.sim), scale: 52, caughtUp: true, cars: 100, params: this.params,
+        simSeconds: this.sim, simTime: iso(this.sim), scale: 52, caughtUp: true, cars: 100, params: this.params, seed: 77, startSeconds: 25200,
         traffic: { stopped: 10, avgKmh: 30 }, signalPlan: { default: {}, signals: {} }, parkings: [], bikes: { stations: [] },
         buses: { lines: [{ id: 'L1', fleet: this.fleet, suspended: false }] },
       };
@@ -157,7 +158,7 @@ test('the panel requires the password and serves the overview', async (t) => {
   const { fetchJson, fetchText } = fakeCity();
   const groups = parseGroups('g1=http://g1');
   assert.throws(() => parseGroups('sin-igual'));
-  const collector = new Collector({ file: ':memory:', instances: [{ name: REFERENCE, url: 'http://ref', kind: 'reference' }, ...groups], fetchJson, fetchText });
+  const collector = new Collector({ file: ':memory:', instances: groups, fetchJson, fetchText });
   await collector.pollAll();
   const server = http.createServer(createPanel({ collector, groups, password: 'clave' }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -168,7 +169,7 @@ test('the panel requires the password and serves the overview', async (t) => {
   const auth = { Authorization: `Basic ${btoa('profesor:clave')}` };
   const overview = await (await fetch(`${url}/data/overview`, { headers: auth })).json();
   assert.equal(overview.groups[0].name, 'g1');
-  assert.equal(overview.reference.ok, true);
+  assert.equal(overview.groups[0].seed, 77);
   assert.equal((await fetch(`${url}/data/series?group=nadie`, { headers: auth })).status, 404);
   assert.equal((await fetch(`${url}/data/overview`, { method: 'POST', headers: auth })).status, 405);
   assert.equal((await fetch(`${url}/health`)).status, 200);
@@ -221,4 +222,90 @@ test('the panel reads evaluator reports and never serves files outside the resul
   assert.deepEqual(b.group, b.reference);
   assert.equal(new Evaluations(null).enabled, false);
   assert.deepEqual(new Evaluations(path.join(dir, 'no-existe')).list(), []);
+});
+
+// Hilo falso: guarda los mensajes que recibe y deja simular sus respuestas.
+function fakeWorker(created) {
+  return (workerData) => {
+    const handlers = {};
+    const worker = {
+      workerData, sent: [], terminated: false,
+      postMessage: (m) => worker.sent.push(m),
+      on: (event, fn) => { (handlers[event] ??= []).push(fn); },
+      off: () => {},
+      emit: (event, msg) => (handlers[event] ?? []).forEach((fn) => fn(msg)),
+      terminate: () => { worker.terminated = true; },
+    };
+    created.push(worker);
+    return worker;
+  };
+}
+
+test('each group gets its own reference with its seed, start, scale and demand', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { city, fetchJson, fetchText } = fakeCity();
+  const collector = new Collector({ file: ':memory:', instances: [{ name: 'g1', url: 'http://g1' }], fetchJson, fetchText });
+  const created = [];
+  const refs = new References({ collector, dir: fs.mkdtempSync(path.join(os.tmpdir(), 'refs-')), createWorker: fakeWorker(created) });
+  await collector.pollAll();
+  refs.sync('g1');
+  assert.equal(created.length, 1);
+  assert.deepEqual([created[0].workerData.seed, created[0].workerData.startSeconds, created[0].workerData.scale], [77, 25200, 52]);
+  assert.deepEqual(created[0].sent.at(-1), { type: 'advance', to: 25200 });
+
+  // Las filas de la referencia se guardan aparte, con el nombre `<grupo>·referencia`.
+  const iso = (sec) => new Date(Date.UTC(2026, 0, 5) + sec * 1000).toISOString().slice(0, 19);
+  const row = (sec) => Object.fromEntries(CITY_COLUMNS.map((c) => [c, c === 'timestamp' ? iso(sec) : c === 'weekday' ? 'lunes' : 2]));
+  created[0].emit('message', { type: 'rows', rows: [row(25200), row(25500), row(25800)], simSeconds: 25800 });
+  assert.equal(collector.buckets(refName('g1'))[0].n, 3);
+  assert.equal(refs.status('g1').simSeconds, 25800);
+
+  // El profesor cambia la demanda de la ciudad: la referencia la sigue, sin empezar de nuevo.
+  city.params = { ...city.params, maxCars: 900 };
+  city.sim += 300;
+  await collector.pollAll();
+  refs.sync('g1');
+  assert.equal(created.length, 1);
+  assert.deepEqual(created[0].sent.find((m) => m.type === 'params').params.maxCars, 900);
+
+  // La ciudad del grupo se reinicia: su referencia empieza de cero en una época nueva.
+  city.sim = 25200;
+  await collector.pollAll();
+  refs.sync('g1');
+  assert.equal(created.length, 2);
+  assert.equal(created[0].terminated, true);
+  assert.equal(collector.epochOf(refName('g1')), 1);
+  assert.deepEqual(collector.buckets(refName('g1')), []);
+  collector.close();
+});
+
+test('the reference thread reproduces exactly the server city with the same seed', async () => {
+  const { Worker } = await import('node:worker_threads');
+  const { execFileSync } = await import('node:child_process');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const params = { maxCars: 1500, maxPedestrians: 12000, scenario: 'auto' };
+  const worker = new Worker(path.join(root, 'profesor/panel/referenceWorker.mjs'), {
+    workerData: { seed: 4242, startSeconds: 7 * 3600, scale: 365 / 7, params, root, snapshotFile: path.join((await import('node:os')).tmpdir(), `ref-${process.pid}.json`) },
+  });
+  const rows = [];
+  await new Promise((resolve, reject) => {
+    worker.on('error', reject);
+    worker.on('message', (m) => {
+      if (m.type === 'ready') worker.postMessage({ type: 'advance', to: 8 * 3600 });
+      if (m.type === 'rows') rows.push(...m.rows);
+      if (m.type === 'idle') resolve();
+    });
+  });
+  await worker.terminate();
+  // Misma ciudad montada como el servidor (server/scenario.js + server/index.js), en otro proceso.
+  const out = execFileSync(process.execPath, [path.join(root, 'profesor/evaluador/referencia.mjs'), '1', String(365 / 7)], {
+    env: { ...process.env, SCENARIO_SEED: '4242', SCENARIO_START: '2026-01-05T07:00' }, maxBuffer: 1 << 26,
+  });
+  const expected = JSON.parse(out).rows;
+  assert.ok(rows.length >= 12);
+  assert.deepEqual(rows.map((r) => JSON.stringify(r)), expected.slice(0, rows.length).map((r) => JSON.stringify(r)));
 });

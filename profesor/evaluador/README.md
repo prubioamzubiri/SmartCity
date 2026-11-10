@@ -87,7 +87,7 @@ tiempo (se cayó): en ese caso la ciudad siguió sin gestor el resto del escenar
 
 ## Cómo funciona
 
-- Cada ciudad es el simulador del repositorio con `SCENARIO_SEED`, `SCENARIO_START`, `LOCK_PARAMS=1` y un token nuevo.
+- Cada ciudad es el simulador del repositorio con `SCENARIO_SEED`, `SCENARIO_START` y un token nuevo.
   Ver `server/scenario.js`.
 - La ciudad sin gestor se calcula aparte a máxima velocidad (`referencia.mjs`): la simulación es determinista y da
   exactamente las mismas filas que una ciudad del servidor a la que nadie toca (el grupo de control lo comprueba).

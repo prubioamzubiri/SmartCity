@@ -134,6 +134,7 @@ export class Collector {
       Object.assign(status, {
         ok: true, error: null, lastOkWall: this.now(), simSeconds: state.simSeconds, simTime: state.simTime,
         scale: state.scale, caughtUp: state.caughtUp, params: state.params, cars: state.cars, traffic: state.traffic,
+        seed: state.seed, startSeconds: state.startSeconds,
         restrictions: (restrictions.restrictions ?? []).length,
         suspendedLines: (state.buses?.lines ?? []).filter((l) => l.suspended).map((l) => l.id),
       });
@@ -176,24 +177,39 @@ export class Collector {
     mem.snapshot = snapshot;
     mem.lastSim = sim;
 
-    // Histórico global: cada fila (cada 5 min simulados) se suma una sola vez a su tramo de 15 min.
     const origin = Math.round((Date.parse(`${responses.state.simTime}Z`) - sim * 1000) / 60000) * 60000;
+    this.ingest(inst.name, mem.epoch, responses.rows, origin);
+  }
+
+  // Época (número de reinicios) de una instancia sin consultas propias, como la referencia de un grupo.
+  setEpoch(name, epoch) {
+    const mem = this.memory.get(name) ?? { epoch: 0, lastSim: null, lastTs: null, snapshot: null, fleet: {}, suspendedSince: {}, penalized: {} };
+    mem.epoch = epoch;
+    this.memory.set(name, mem);
+    this.db.prepare('INSERT OR REPLACE INTO instance_state (instance, data) VALUES (?, ?)').run(name, JSON.stringify(mem));
+  }
+
+  // Histórico global: cada fila (cada 5 min simulados) se suma una sola vez a su tramo de 15 min.
+  // `origin`: milisegundos del segundo simulado 0.
+  ingest(name, epoch, rows, origin) {
+    const mem = this.memory.get(name) ?? { epoch, lastTs: null };
+    if (!this.memory.has(name)) this.memory.set(name, mem);
     const seen = this.db.prepare('INSERT OR IGNORE INTO seen_rows (instance, epoch, ts) VALUES (?, ?, ?)');
     const getBucket = this.db.prepare('SELECT n, sums FROM buckets WHERE instance = ? AND epoch = ? AND bucket = ?');
     const putBucket = this.db.prepare('INSERT OR REPLACE INTO buckets (instance, epoch, bucket, n, sums) VALUES (?, ?, ?, ?, ?)');
     this.db.exec('BEGIN');
     try {
-      for (const row of responses.rows) {
-        if (!row.timestamp || seen.run(inst.name, mem.epoch, row.timestamp).changes === 0) continue;
+      for (const row of rows) {
+        if (!row.timestamp || seen.run(name, epoch, row.timestamp).changes === 0) continue;
         const bucket = bucketOf((Date.parse(`${row.timestamp}Z`) - origin) / 1000);
         const values = indicatorsOf(row);
-        const current = getBucket.get(inst.name, mem.epoch, bucket);
+        const current = getBucket.get(name, epoch, bucket);
         const sums = current ? JSON.parse(current.sums) : Object.fromEntries(INDICATORS.map((k) => [k, 0]));
         for (const k of INDICATORS) sums[k] += values[k];
-        putBucket.run(inst.name, mem.epoch, bucket, (current?.n ?? 0) + 1, JSON.stringify(sums));
+        putBucket.run(name, epoch, bucket, (current?.n ?? 0) + 1, JSON.stringify(sums));
         if (!mem.lastTs || row.timestamp > mem.lastTs) mem.lastTs = row.timestamp;
       }
-      this.db.prepare('INSERT OR REPLACE INTO instance_state (instance, data) VALUES (?, ?)').run(inst.name, JSON.stringify(mem));
+      this.db.prepare('INSERT OR REPLACE INTO instance_state (instance, data) VALUES (?, ?)').run(name, JSON.stringify(mem));
       this.db.exec('COMMIT');
     } catch (err) {
       this.db.exec('ROLLBACK');
