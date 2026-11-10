@@ -253,6 +253,9 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       ...runtime.status(),
       graphKey: engine.graphKey,
       params: engine.params,
+      paramsLocked: lockParams, // PUT /api/params responde 403 (la demanda la fija el profesor)
+      writeProtected: Boolean(tokenHash), // los cambios necesitan token
+      restrictions: engine.restrictions.items.map((r) => engine.restrictions.describe(r)),
       traffic: { stopped: traffic.stopped, avgKmh: Math.round(traffic.avgKmh * 10) / 10 },
       signalPlan: engine.signals.plan,
       sensors: engine.sensors.sensors.map((s) => ({
@@ -278,7 +281,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       })),
       buses: {
         lines: engine.transit.lines.map((l, i) => ({
-          id: l.id, color: l.color, stops: l.stops.length, fleet: l.buses, suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
+          id: l.id, color: l.color, stops: l.stops.length, fleet: l.buses, minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet,
+          suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
         })),
       },
       bikes: engine.bikes.state(),
