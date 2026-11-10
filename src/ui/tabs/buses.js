@@ -45,11 +45,13 @@ export function createBusesTab(ctx) {
     button('Registrar todas', () => setTracked(b.lines.map((l) => l.id), 'Se registran todas las líneas'), 'ghost'),
     button('Ninguna', () => setTracked([], 'No se registra ninguna línea'), 'ghost'));
 
+  const reserveInfo = el('span', { class: 'ui-muted' });
   const node = el('div', {},
     card(el('div', { class: 'ui-stats three' }, ...Object.values(stats).map((s) => s.node))),
     b.lines.length
       ? card(cardTitle('Líneas'),
-        hint(`Con − y + cambias cuántos autobuses tiene cada línea (de ${CONFIG.transit.minFleet} a ${CONFIG.transit.maxFleet}); con poca demanda solo sale una parte. «Registrar» guarda su histórico en el servidor (CSV de autobuses).`),
+        hint(`Con − y + cambias cuántos autobuses tiene cada línea (de ${CONFIG.transit.minFleet} a ${CONFIG.transit.maxFleet}); con poca demanda solo sale una parte. La flota total es fija: para dar más autobuses a una línea, usa la reserva o quítaselos a otra. «Registrar» guarda su histórico en el servidor (CSV de autobuses).`),
+        reserveInfo,
         el('div', { class: 'ui-stack' }, ...rows.map((r) => r.node)), allNone)
       : card(empty('Sin paradas de autobús en los datos de la ciudad.')),
     card(cardTitle('Leyenda'), legend));
@@ -59,6 +61,8 @@ export function createBusesTab(ctx) {
     onState(s) {
       const byId = new Map((s.buses?.lines ?? []).map((l) => [l.id, l]));
       const writable = ctx.canWrite();
+      const reserve = s.buses?.reserve;
+      reserveInfo.textContent = reserve === undefined ? '' : `En reserva: ${reserve} de ${s.buses.fleetTotal} autobuses`;
       for (const r of rows) {
         const live = byId.get(r.line.id);
         if (!live) continue;

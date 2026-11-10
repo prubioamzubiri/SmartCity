@@ -281,6 +281,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
         total: s.total, current: Math.round(engine.pedSensors.presentNow(s, engine.simTime)),
       })),
       buses: {
+        fleetTotal: engine.buses.fleetTotal,
+        reserve: engine.buses.reserve(),
         lines: engine.transit.lines.map((l, i) => ({
           id: l.id, color: l.color, stops: l.stops.length, fleet: l.buses, minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet,
           suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
@@ -336,6 +338,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       return send(200, {
         graphKey: engine.graphKey,
         simSeconds: engine.simTime,
+        fleetTotal: engine.buses.fleetTotal,
+        reserve: engine.buses.reserve(),
         lines: engine.transit.lines.map((l, i) => ({
           id: l.id, stops: l.stops.length, fleet: l.buses, minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet, capacity: CONFIG.transit.capacity,
           suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id), ...engine.buses.stats[i],
@@ -682,10 +686,13 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       if (!Number.isInteger(fleet) || fleet < CONFIG.transit.minFleet || fleet > CONFIG.transit.maxFleet) {
         throw new HttpError(400, `fleet debe ser un entero entre ${CONFIG.transit.minFleet} y ${CONFIG.transit.maxFleet}`);
       }
+      if (fleet - engine.transit.lines[index].buses > engine.buses.reserve()) {
+        throw new HttpError(409, `No hay autobuses suficientes: quedan ${engine.buses.reserve()} en reserva (flota total ${engine.buses.fleetTotal}). Quita autobuses de otra línea primero`);
+      }
       runtime.mutate((e) => e.setBusFleet(id, fleet));
       engine.buses.updateAt(engine.simTime, engine.params.scenario, runtime.scale);
       const line = engine.transit.lines[index];
-      return send(200, { id, stops: line.stops.length, fleet: line.buses, suspended: engine.buses.suspended[index], ...engine.buses.stats[index] });
+      return send(200, { id, stops: line.stops.length, fleet: line.buses, reserve: engine.buses.reserve(), fleetTotal: engine.buses.fleetTotal, suspended: engine.buses.suspended[index], ...engine.buses.stats[index] });
     }
 
     throw new HttpError(404, 'No encontrado');

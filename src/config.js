@@ -126,7 +126,7 @@ export const CONFIG = {
 
   cars: {
     max: 3000,
-    initialMax: 1500,
+    initialMax: 2500,
     radius: 2.2,
     length: 5,
     minGap: 2,
@@ -213,6 +213,7 @@ export const CONFIG = {
     maxBuses: 16,
     minFleet: 1, // rango de autobuses por línea que se puede fijar desde la API
     maxFleet: 30,
+    reserve: 0.1, // flota total = la inicial de todas las líneas + este tanto por uno de reserva (fija: solo se reparte)
     clockScale: 12, // ritmo del reloj de los autobuses respecto al tiempo real; nunca supera la escala del servidor
     minService: 0.35, // fracción de la flota en servicio con la demanda mínima (con la máxima, toda)
     capacity: 80, // pasajeros por autobús
@@ -240,6 +241,7 @@ export const CONFIG = {
   signals: {
     green: 20,
     yellow: 3,
+    lostSeconds: 2, // segundos de rojo para todos al empezar cada verde (despeje y arranque)
     clusterDistance: 45, // metros para agrupar semáforos de un mismo cruce
     // Semáforo apagado o en ámbar intermitente: cruce sin regular.
     // Pasos de cebra sin semáforo (ver crosswalks.js): con la calle llena de peatones, un paso de concurrencia media está
