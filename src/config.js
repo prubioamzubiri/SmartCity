@@ -241,6 +241,13 @@ export const CONFIG = {
     green: 20,
     yellow: 3,
     clusterDistance: 45, // metros para agrupar semáforos de un mismo cruce
+    // Semáforo apagado o en ámbar intermitente: cruce sin regular.
+    unsignalized: {
+      approachSpeed: 4, // m/s (~15 km/h) a los que se llega a la línea de parada
+      yieldDistance: 30, // metros: un coche de la calle con prioridad a menos de esto obliga a ceder el paso
+      pedestrianPeriod: 40, // segundos simulados: los peatones cruzan en grupo una vez cada tanto
+      maxPedestrianShare: 0.45, // con la calle llena de peatones, el paso está ocupado este tanto por uno del tiempo
+    },
   },
 
   // Rotondas: los coches del anillo tienen prioridad y solo entran si hay hueco y el anillo no está lleno.

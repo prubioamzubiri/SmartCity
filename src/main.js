@@ -16,7 +16,7 @@ import { SignalController } from './traffic/signals.js';
 import { createSignalViz } from './traffic/signalViz.js';
 import { CarView } from './traffic/carView.js';
 import { RemoteCars } from './traffic/remoteCars.js';
-import { Pedestrians } from './pedestrians/pedestrians.js';
+import { Pedestrians, pedestrianLoad } from './pedestrians/pedestrians.js';
 import { pedestrianWeights } from './pedestrians/weights.js';
 import { createWaterMask } from './city/waterMask.js';
 import { PedestrianView } from './pedestrians/pedestrianView.js';
@@ -296,6 +296,8 @@ async function main() {
   function frame(now) {
     const simTime = sync.simTime();
     if (simTime !== null) {
+      // Misma ocupación de los cruces sin regular que en el servidor (cada minuto simulado, como el motor).
+      signals.setPedestrianLoad(pedestrianLoad(Math.floor(simTime / 60) * 60, sync.state.params.scenario, sync.state.params.maxPedestrians));
       signals.update(simTime);
       updateParkingOccupancy(parkingLayer, simTime);
       bikeStationView.update(sync.state?.bikes ?? null);

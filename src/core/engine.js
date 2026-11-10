@@ -9,7 +9,7 @@ import { ParkingTracker } from '../sensors/parkingTracker.js';
 import { trackableUndergroundLots, undergroundOccupancy } from '../city/undergroundLots.js';
 import { PedestrianSensors } from '../sensors/pedestrianSensors.js';
 import { createWaterMask } from '../city/waterMask.js';
-import { Pedestrians } from '../pedestrians/pedestrians.js';
+import { Pedestrians, pedestrianLoad } from '../pedestrians/pedestrians.js';
 import { pedestrianWeights } from '../pedestrians/weights.js';
 import { buildTransit } from '../transit/lines.js';
 import { Buses } from '../transit/buses.js';
@@ -175,6 +175,7 @@ export class SimEngine {
     this.environmentMinute = minute;
     this.sim.speedScale = speedFactor(minute * 60);
     this.sim.setAttractors(CONFIG.events.enabled ? eventCalendar.attractorsAt(minute * 60) : []);
+    this.signals.setPedestrianLoad(pedestrianLoad(minute * 60, this.params.scenario, this.params.maxPedestrians));
   }
 
   // Peatones en este instante: son una función del tiempo simulado (sin estado que guardar), así que

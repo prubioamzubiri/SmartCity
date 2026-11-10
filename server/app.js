@@ -100,7 +100,7 @@ const radiusOf = (raw, fallback, max) => {
 };
 
 const round1 = (v) => Math.round(v * 10) / 10;
-const LIGHT = ['green', 'yellow', 'red'];
+const LIGHT = ['green', 'yellow', 'red', 'uncontrolled']; // uncontrolled: apagado o ámbar intermitente (cruce sin regular)
 const SIGNAL_KEYS = ['mode', 'green', 'greenA', 'greenB', 'yellow', 'schedule'];
 
 // Estado de un semáforo: ciclo actual por eje (ew = este-oeste, ns = norte-sur), tiempos efectivos y ajustes propios.

@@ -170,7 +170,7 @@ propio, `{"reset": true}` borra todos los ajustes del semáforo):
 
 | Campo | Valores |
 | --- | --- |
-| `mode` | `normal` (ciclo), `off` (apagado) o `flashing` (ámbar intermitente): nadie se detiene · `all_red`: todos se detienen |
+| `mode` | `normal` (ciclo) · `off` (apagado) o `flashing` (ámbar intermitente): cruce sin regular (ver abajo) · `all_red`: todos se detienen |
 | `green` | Segundos de verde de ambos ejes (5–180) |
 | `greenA` / `greenB` | Verde del eje este-oeste / norte-sur por separado (5–180) |
 | `yellow` | Segundos de ámbar (1–10) |
@@ -185,8 +185,16 @@ curl -X PATCH http://localhost:8080/api/signals/13965274528 -H "Authorization: B
 (mismos campos; `default` se aplica a todos los semáforos sin ajustes propios). Los ajustes se guardan y sobreviven a
 reinicios.
 
-Notas: `off` y `flashing` se comportan igual en el simulador (no hay conflictos de giros entre coches). Los pasos de
-peatones siguen esperando el ciclo del semáforo aunque lo apaguéis.
+Un semáforo **apagado** (`off`) o en **ámbar intermitente** (`flashing`) deja el cruce **sin regular** (los dos modos
+se comportan igual; su estado en `GET /api/signals` es `uncontrolled`):
+
+- Todos los coches llegan despacio (~15 km/h) y **ceden el paso** si viene un coche por la calle con prioridad (la de
+  más categoría; a igual categoría, el eje este-oeste).
+- Los **peatones cruzan cuando llegan**, en grupos, y los coches esperan. Cuanta más gente hay en la calle, más rato
+  está ocupado el paso.
+
+Con poco tráfico (de noche) puede ahorrar esperas; en hora punta forma colas. Apagar todos los semáforos en hora punta
+colapsa la ciudad.
 
 ### 3.3 Autobuses de una línea — `PATCH /api/buses/<línea>`
 

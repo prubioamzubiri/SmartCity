@@ -107,6 +107,9 @@ export class Pedestrians {
   // Ventana de rojo para los coches del grupo `g` del semáforo `s` que empieza en `from` o la siguiente:
   // { start, length, current } con tiempos simulados absolutos.
   redWindow(s, g, from) {
+    // Semáforo apagado o en ámbar: cruce sin regular, los peatones cruzan en grupo cuando les toca (los coches esperan).
+    const mode = this.signals.modeOf(this.signals.signals[s]);
+    if (mode === 'off' || mode === 'flashing') return this.signals.pedestrianWindow(s, from);
     const { gA, y, cycle, offset } = this.timingOf(s);
     const length = g === 0 ? cycle - gA - y : gA + y;
     const begin = g === 0 ? gA + y : 0;
@@ -368,3 +371,7 @@ function sidewalkEdges(g, weights) {
 
 // Fracción de peatones activa según la demanda de tráfico (0 a 1 y pico) y el mínimo configurado.
 export const pedestrianDensity = (demand) => P.minDensity + (1 - P.minDensity) * Math.min(1, Math.max(0, demand));
+
+// Cuánta gente hay en la calle (0..1) a una hora simulada: decide cuánto rato ocupan los peatones los cruces sin regular.
+export const pedestrianLoad = (simSeconds, scenario, maxPedestrians = P.max) =>
+  pedestrianDensity(pedestrianDemand(simSeconds, scenario)) * Math.min(1, Math.max(0, maxPedestrians / P.max));
