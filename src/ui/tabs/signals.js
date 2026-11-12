@@ -48,7 +48,7 @@ export function createSignalsTab(ctx) {
   const timing = (key, label, min, max) => stepper({ min, max, label, onChange: (v) => send({ [key]: v }, `Semáforo ${selected}: ${label.toLowerCase()} ${v} s`) });
   const greenA = timing('greenA', 'Verde este-oeste', 5, 180);
   const greenB = timing('greenB', 'Verde norte-sur', 5, 180);
-  const yellow = timing('yellow', 'Ámbar', 1, 10);
+  const yellow = timing('yellow', 'Ámbar', ...CONFIG.signals.yellowRange);
   const timings = el('div', { class: 'ui-grid3' },
     field('Verde E-O (s)', greenA.node), field('Verde N-S (s)', greenB.node), field('Ámbar (s)', yellow.node));
   const scheduleNote = hint('');
@@ -63,7 +63,7 @@ export function createSignalsTab(ctx) {
   const general = (patch, ok) => sendPlan({ default: { ...signals.plan.default, ...patch }, signals: signals.plan.signals }, ok);
   const defMode = segmented(MODES, (m) => general({ mode: m === 'normal' ? undefined : m }, `Todos los semáforos: ${MODE_LABEL[m]}`), { ariaLabel: 'Modo general' });
   const defGreen = stepper({ min: 5, max: 180, label: 'Verde general', onChange: (v) => general({ green: v }, `Verde general: ${v} s`) });
-  const defYellow = stepper({ min: 1, max: 10, label: 'Ámbar general', onChange: (v) => general({ yellow: v }, `Ámbar general: ${v} s`) });
+  const defYellow = stepper({ min: CONFIG.signals.yellowRange[0], max: CONFIG.signals.yellowRange[1], label: 'Ámbar general', onChange: (v) => general({ yellow: v }, `Ámbar general: ${v} s`) });
   const overridesInfo = el('span', { class: 'ui-muted' });
   const clearAll = button('Quitar todos los ajustes propios', () => sendPlan({ default: signals.plan.default, signals: {} }, 'Todos los semáforos siguen el plan general'), 'ghost danger');
   const generalCard = card(cardTitle('Todos los semáforos'),

@@ -313,6 +313,9 @@ test('API: point query, signals and bus fleet', async (t) => {
   assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { reset: true } })).body.override, null);
   assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { mode: 'roto' } })).status, 400);
   assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { greenA: 1 } })).status, 400);
+  // El ámbar no puede bajar de 3 s (seguridad) ni subir de 6.
+  assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { yellow: 1 } })).status, 400);
+  assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { yellow: 7 } })).status, 400);
   assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { color: 'rojo' } })).status, 400);
   assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { mode: 'off' }, auth: 'mal' })).status, 401);
   assert.equal((await call('/api/signals/1234', { method: 'PATCH', body: { mode: 'off' } })).status, 404);

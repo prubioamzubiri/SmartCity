@@ -241,6 +241,7 @@ export const CONFIG = {
   signals: {
     green: 20,
     yellow: 3,
+    yellowRange: [3, 6], // segundos de ámbar permitidos (por seguridad, no menos de 3)
     lostSeconds: 2, // segundos de rojo para todos al empezar cada verde (despeje y arranque)
     clusterDistance: 45, // metros para agrupar semáforos de un mismo cruce
     // Semáforo apagado o en ámbar intermitente: cruce sin regular.

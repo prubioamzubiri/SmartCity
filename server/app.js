@@ -125,7 +125,7 @@ function checkSignalSettings(settings, where) {
   range('green', 5, 180);
   range('greenA', 5, 180);
   range('greenB', 5, 180);
-  range('yellow', 1, 10);
+  range('yellow', ...CONFIG.signals.yellowRange);
   const { schedule } = settings;
   if (schedule !== undefined && schedule !== null && (!Array.isArray(schedule) || schedule.length > 20 || !schedule.every((r) => r && typeof r === 'object' && !Array.isArray(r)))) {
     throw new HttpError(400, `${where}schedule debe ser una lista de hasta 20 reglas`);

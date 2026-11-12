@@ -142,7 +142,7 @@ export class SignalController {
     const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || lo));
     const gA = clamp(p.greenA ?? p.green, 5, 180);
     const gB = clamp(p.greenB ?? p.green, 5, 180);
-    const y = clamp(p.yellow, 1, 10);
+    const y = clamp(p.yellow, ...CONFIG.signals.yellowRange);
     return { gA, gB, y };
   }
 

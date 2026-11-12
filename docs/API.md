@@ -174,7 +174,7 @@ propio, `{"reset": true}` borra todos los ajustes del semáforo):
 | `mode` | `normal` (ciclo) · `off` (apagado) o `flashing` (ámbar intermitente): cruce sin regular (ver abajo) · `all_red`: todos se detienen |
 | `green` | Segundos de verde de ambos ejes (5–180) |
 | `greenA` / `greenB` | Verde del eje este-oeste / norte-sur por separado (5–180) |
-| `yellow` | Segundos de ámbar (1–10) |
+| `yellow` | Segundos de ámbar (3–6: por seguridad, no se puede bajar de 3) |
 | `schedule` | Lista (hasta 20) de reglas con horario: `[{"when": {"start": "07:00", "end": "09:00", "weekdays": [1,2,3,4,5]}, "greenA": 40}]`. `when` admite `start`/`end` (HH:MM, juntos), `weekdays` (0 = domingo), `months`, `daysOfMonth`, `years` y `dates` (AAAA-MM-DD) |
 
 ```sh
