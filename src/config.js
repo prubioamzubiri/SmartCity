@@ -242,6 +242,7 @@ export const CONFIG = {
     green: 20,
     yellow: 3,
     yellowRange: [3, 6], // segundos de ámbar permitidos (por seguridad, no menos de 3)
+    detectorRange: 100, // metros antes de la línea de parada que cubre el detector de cada semáforo (GET /api/signals)
     lostSeconds: 2, // segundos de rojo para todos al empezar cada verde (despeje y arranque)
     clusterDistance: 45, // metros para agrupar semáforos de un mismo cruce
     // Semáforo apagado o en ámbar intermitente: cruce sin regular.

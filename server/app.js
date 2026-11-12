@@ -111,7 +111,13 @@ function signalJson(engine, s, index) {
     state: { ew: LIGHT[engine.signals.states[index * 2]], ns: LIGHT[engine.signals.states[index * 2 + 1]] },
     timing: { greenEw: gA, greenNs: gB, yellow: y, cycle: gA + gB + 2 * y },
     override: engine.signals.plan.signals[s.id] ?? null,
+    ...(s.active ? detectorJson(engine.sim.detectorCounts(index)) : {}),
   };
+}
+
+// Detector del semáforo por eje: coches que llegan (a menos de CONFIG.signals.detectorRange m) y cuántos esperan parados.
+function detectorJson([[ewCars, ewStopped], [nsCars, nsStopped]]) {
+  return { approaching: { ew: ewCars, ns: nsCars }, queue: { ew: ewStopped, ns: nsStopped } };
 }
 
 // Valida los campos de un semáforo (o del plan por defecto).

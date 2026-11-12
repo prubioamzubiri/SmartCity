@@ -74,7 +74,9 @@ capacidad en curso). Anclajes libres = `capacity − available`. Son estimacione
 
 Lista los semáforos que regulan tráfico (`?all=1` incluye también los pasos de peatones; `?x=&z=&radius=` filtra por
 zona). Cada uno: `id`, `x`, `z`, `mode`, `state` (`ew` = eje este-oeste, `ns` = norte-sur: `green`/`yellow`/`red`),
-`timing` (`greenEw`, `greenNs`, `yellow`, `cycle` en segundos) y `override` (ajustes propios, o `null`).
+`timing` (`greenEw`, `greenNs`, `yellow`, `cycle` en segundos), `override` (ajustes propios, o `null`) y, como las espiras
+de un cruce real, el **detector** de cada eje: `approaching` (coches a menos de 100 m de la línea de parada) y `queue`
+(cuántos de ellos están parados).
 `GET /api/signals/<id>` devuelve uno solo.
 
 ### Calles — `GET /api/roads?x=&z=&radius=&limit=`

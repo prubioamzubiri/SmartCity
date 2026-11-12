@@ -528,6 +528,24 @@ export class TrafficSim {
     return gap;
   }
 
+  // Detector de un semáforo (como las espiras de un cruce real): coches a menos de `range` metros de la línea de parada
+  // en las calles que llegan por cada eje, y cuántos de ellos están parados. Devuelve [[coches, parados] × eje].
+  detectorCounts(s, range = CONFIG.signals.detectorRange) {
+    const g = this.g;
+    const out = [[0, 0], [0, 0]];
+    for (const a of this.signals.signals[s].approaches ?? []) {
+      const list = this.edgeCars[a];
+      if (!list) continue;
+      const axis = out[g.grp[a]];
+      for (const j of list) {
+        if (g.len[a] - this.pos[j] > range) continue;
+        axis[0]++;
+        if (this.speed[j] < 1) axis[1]++;
+      }
+    }
+    return out;
+  }
+
   // En el cruce sin regular `s`, el coche que llega por `e` cede el paso si viene alguien por una calle con prioridad
   // (de más categoría; a igual categoría, el eje este-oeste). Como la prioridad es un orden estricto, nunca se esperan
   // dos coches mutuamente.

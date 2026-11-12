@@ -302,6 +302,9 @@ test('API: point query, signals and bus fleet', async (t) => {
 
   const list = await call('/api/signals');
   assert.deepEqual(list.body.signals.map((s) => s.id).sort(), [5001, 5002]);
+  for (const s of list.body.signals) {
+    assert.ok(Number.isInteger(s.queue.ew) && Number.isInteger(s.queue.ns) && s.queue.ew <= s.approaching.ew && s.queue.ns <= s.approaching.ns);
+  }
   assert.equal((await call('/api/signals?x=0&z=0&radius=1')).body.signals.length, 1);
   const off = await call('/api/signals/5001', { method: 'PATCH', body: { mode: 'off' } });
   assert.equal(off.status, 200);
@@ -511,4 +514,25 @@ test('at a zebra crossing without signal cars stop while people cross, more ofte
     }
   }
   assert.ok(onRoad > 0, 'alguien cruza');
+});
+
+test('each signal has a detector per axis: cars approaching within range and how many are stopped', async (t) => {
+  const engine = engineOf(0);
+  const g = engine.graph;
+  const sim = engine.sim;
+  const index = engine.signals.signals.findIndex((x) => x.id === 5001);
+  const approaches = engine.signals.signals[index].approaches;
+  const ew = approaches.find((e) => g.grp[e] === 0);
+  const ns = approaches.find((e) => g.grp[e] === 1);
+  sim.activeCount = 3;
+  sim.place(0, ew);
+  sim.pos[0] = g.len[ew] - 20; // parado cerca de la línea
+  sim.speed[0] = 0;
+  sim.place(1, ew);
+  sim.pos[1] = g.len[ew] - 60; // llegando
+  sim.speed[1] = 8;
+  sim.place(2, ns);
+  sim.pos[2] = g.len[ns] - CONFIG.signals.detectorRange - 30; // fuera del alcance del detector
+  sim.speed[2] = 0;
+  assert.deepEqual(sim.detectorCounts(index), [[2, 1], [0, 0]]);
 });
