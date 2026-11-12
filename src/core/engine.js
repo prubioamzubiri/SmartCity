@@ -94,10 +94,10 @@ export class SimEngine {
   }
 
   // Cambia los autobuses de una línea (por id, p. ej. "L1"); lanza RangeError si el número no es válido.
-  setBusFleet(lineId, count) {
+  setBusFleet(lineId, count, options) {
     const li = this.transit.lines.findIndex((l) => l.id === lineId);
     if (li < 0) return false;
-    this.buses.setFleet(li, count);
+    this.buses.setFleet(li, count, options);
     return true;
   }
 
@@ -283,11 +283,13 @@ export class SimEngine {
     else this.cityStats.nextSample = Math.ceil(this.simTime / this.cityStats.intervalSeconds) * this.cityStats.intervalSeconds;
     for (const [id, count] of Object.entries(state.fleet ?? {})) {
       try {
-        this.setBusFleet(id, count);
+        this.setBusFleet(id, count, { limit: false });
       } catch {
         // flota fuera del rango actual: se queda la de por defecto
       }
     }
+    // Un reparto guardado que ya no cabe en la flota total (p. ej. de antes de que la flota fuera fija): la de por defecto.
+    if (this.buses.reserve() < 0) this.buses.lines.forEach((_, li) => this.buses.setFleet(li, this.buses.defaultFleet[li], { limit: false }));
     const compatible = state.graphKey === this.graphKey;
     if (compatible && state.restrictions) this.restrictions.restore(state.restrictions);
     if (compatible) this.sim.restore(state.sim);

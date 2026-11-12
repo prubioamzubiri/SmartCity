@@ -37,6 +37,9 @@ function serviceRank(n) {
   return rank;
 }
 
+// Se pide más flota de la que hay (la flota total es fija): el servidor responde 409.
+export class FleetError extends Error {}
+
 // Autobuses de la ciudad. No guardan estado: la posición y la ocupación de cada uno son una función del tiempo
 // (como los peatones), así que no hace falta que el servidor los simule. Cada autobús recorre su línea de ida y vuelta,
 // para en cada parada, deja bajar a parte de los pasajeros y sube a los que esperan hasta llenarse.
@@ -54,6 +57,9 @@ export class Buses {
     this.dwelling = new Uint8Array(this.max);
     this.activeCount = 0;
     this.ranks = this.lines.map((l) => serviceRank(l.buses));
+    // Flota total fija: la inicial de cada línea más una reserva. Se puede repartir entre líneas, pero no crecer.
+    this.defaultFleet = this.lines.map((l) => l.buses);
+    this.fleetTotal = Math.round(this.defaultFleet.reduce((a, b) => a + b, 0) * (1 + T.reserve));
     this.suspended = this.lines.map(() => false); // línea sin servicio porque su recorrido está cortado
     // Gente esperando en cada parada de cada línea (índice = offset de la línea + parada).
     this.stopOffset = [];
@@ -68,11 +74,24 @@ export class Buses {
     this.scratch = {};
   }
 
-  // Autobuses de una línea (entre minFleet y maxFleet): los que entran en servicio se recalculan al instante.
-  setFleet(li, count) {
+  // Autobuses asignados ahora a todas las líneas y los que quedan en reserva.
+  fleetInUse() {
+    return this.lines.reduce((a, l) => a + l.buses, 0);
+  }
+
+  reserve() {
+    return this.fleetTotal - this.fleetInUse();
+  }
+
+  // Autobuses de una línea (entre minFleet y maxFleet, y sin pasarse de la flota total): los que entran en servicio se
+  // recalculan al instante. `limit: false` solo lo usa quien aplica un reparto ya validado (el visor, un snapshot).
+  setFleet(li, count, { limit = true } = {}) {
     const line = this.lines[li];
     if (!line || !Number.isInteger(count) || count < T.minFleet || count > T.maxFleet) {
       throw new RangeError(`La flota debe ser un entero entre ${T.minFleet} y ${T.maxFleet}`);
+    }
+    if (limit && count - line.buses > this.reserve()) {
+      throw new FleetError(`No hay autobuses suficientes: quedan ${this.reserve()} en reserva (flota total ${this.fleetTotal}). Quita autobuses de otra línea primero`);
     }
     line.buses = count;
     line.headway = line.cycle / count;
@@ -88,7 +107,7 @@ export class Buses {
     lines.forEach(({ id, fleet, suspended }) => {
       const li = this.lines.findIndex((l) => l.id === id);
       if (li < 0) return;
-      if (Number.isInteger(fleet) && fleet !== this.lines[li].buses && fleet >= T.minFleet && fleet <= T.maxFleet) this.setFleet(li, fleet);
+      if (Number.isInteger(fleet) && fleet !== this.lines[li].buses && fleet >= T.minFleet && fleet <= T.maxFleet) this.setFleet(li, fleet, { limit: false });
       this.suspended[li] = !!suspended;
     });
   }

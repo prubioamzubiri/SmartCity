@@ -160,11 +160,16 @@ export class SignalController {
       const { gA, gB, y } = this.timing(s, simTime, date);
       const cycle = gA + gB + 2 * y;
       const t = (simTime + this.offsets[i] * cycle) % cycle;
+      // Al empezar cada verde, unos segundos en rojo para todos (despeje del cruce y arranque): es el tiempo que se
+      // pierde en cada cambio de fase, así que un ciclo muy corto deja pasar menos coches.
+      const lost = CONFIG.signals.lostSeconds ?? 0;
+      const lostA = Math.min(lost, gA - 1);
+      const lostB = Math.min(lost, gB - 1);
       let a = 2;
       let b = 2;
-      if (t < gA) a = 0;
+      if (t < gA) a = t < lostA ? 2 : 0;
       else if (t < gA + y) a = 1;
-      else if (t < gA + y + gB) b = 0;
+      else if (t < gA + y + gB) b = t - gA - y < lostB ? 2 : 0;
       else b = 1;
       this.states[i * 2] = a;
       this.states[i * 2 + 1] = b;

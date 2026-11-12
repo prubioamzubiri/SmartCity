@@ -96,26 +96,55 @@ for (const [name, crossing] of [['E-W street', EW_STREET], ['N-S street', NS_STR
   });
 }
 
-test('the red window matches the signal states for both groups and asymmetric greens', () => {
+test('cars of each group wait a lost time in red at the start of their green, and pedestrians never cross on green', () => {
+  const lost = CONFIG.signals.lostSeconds;
+  assert.ok(lost > 0);
   const plan = { default: { green: 20, yellow: 3 }, signals: { 7: { greenA: 12, greenB: 31, yellow: 4 } } };
-  const w = world({ plan });
-  const { controller, pedestrians } = w;
+  const { controller, pedestrians } = world({ plan });
   for (const g of [0, 1]) {
-    for (let sim = T0; sim < T0 + 400; sim += 0.5) {
+    let redRun = 0;
+    let lostRuns = 0;
+    for (let sim = T0; sim < T0 + 400; sim += 0.25) {
       controller.update(sim);
       pedestrians.simNow = sim;
       pedestrians.timings.length = 0;
-      const win = pedestrians.redWindow(0, g, sim);
-      const red = controller.states[g] === RED;
-      assert.equal(win.current, red, `grupo ${g} en ${sim}`);
-      if (win.current) assert.ok(win.start <= sim + 1e-9 && sim < win.start + win.length);
-      else assert.ok(win.start >= sim - 1e-9, 'la próxima ventana empieza en el futuro');
-      // Dentro de la ventana el color es rojo; justo fuera, no.
-      controller.update(win.start + win.length / 2);
-      assert.equal(controller.states[g], RED);
-      controller.update(win.start + win.length + 0.01);
-      assert.notEqual(controller.states[g], RED);
+      if (controller.states[g] === 0) {
+        // En verde los peatones de ese eje no están en su ventana.
+        assert.equal(pedestrians.redWindow(0, g, sim).current, false, `grupo ${g} en ${sim}`);
+        if (redRun) lostRuns++;
+        redRun = 0;
+      } else if (controller.states[0] === RED && controller.states[1] === RED) redRun += 0.25;
     }
+    assert.ok(lostRuns >= 5, 'cada verde empieza con rojo para todos');
+  }
+});
+
+test('the red window matches the signal states for both groups and asymmetric greens', () => {
+  const lost = CONFIG.signals.lostSeconds;
+  CONFIG.signals.lostSeconds = 0; // sin tiempo perdido: el rojo de los coches es exactamente la ventana de los peatones
+  try {
+    const plan = { default: { green: 20, yellow: 3 }, signals: { 7: { greenA: 12, greenB: 31, yellow: 4 } } };
+    const w = world({ plan });
+    const { controller, pedestrians } = w;
+    for (const g of [0, 1]) {
+      for (let sim = T0; sim < T0 + 400; sim += 0.5) {
+        controller.update(sim);
+        pedestrians.simNow = sim;
+        pedestrians.timings.length = 0;
+        const win = pedestrians.redWindow(0, g, sim);
+        const red = controller.states[g] === RED;
+        assert.equal(win.current, red, `grupo ${g} en ${sim}`);
+        if (win.current) assert.ok(win.start <= sim + 1e-9 && sim < win.start + win.length);
+        else assert.ok(win.start >= sim - 1e-9, 'la próxima ventana empieza en el futuro');
+        // Dentro de la ventana el color es rojo; justo fuera, no.
+        controller.update(win.start + win.length / 2);
+        assert.equal(controller.states[g], RED);
+        controller.update(win.start + win.length + 0.01);
+        assert.notEqual(controller.states[g], RED);
+      }
+    }
+  } finally {
+    CONFIG.signals.lostSeconds = lost;
   }
 });
 

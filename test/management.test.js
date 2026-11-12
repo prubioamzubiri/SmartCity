@@ -6,6 +6,7 @@ import { SimEngine } from '../src/core/engine.js';
 import { Store } from '../server/store.js';
 import { Runtime } from '../server/runtime.js';
 import { createApp } from '../server/app.js';
+import { FleetError } from '../src/transit/buses.js';
 
 const SIDE = 41; // cuadrícula de 41 × 41 cruces cada 200 m, centrada en el origen
 const STEP = 200;
@@ -146,18 +147,28 @@ test('closing a street on a bus route suspends the line unless buses may pass', 
 
 test('the fleet of a line can be changed within limits', () => {
   const engine = engineOf(50);
-  const [line] = engine.transit.lines;
+  const [line, other] = engine.transit.lines;
+  const b = engine.buses;
   const before = line.buses;
-  assert.equal(engine.setBusFleet(line.id, 20), true);
+  // La flota total es la inicial más la reserva.
+  assert.equal(b.fleetTotal, Math.round(b.defaultFleet.reduce((x, y) => x + y, 0) * (1 + CONFIG.transit.reserve)));
+  const target = before + b.reserve();
+  assert.equal(engine.setBusFleet(line.id, target), true);
   engine.buses.updateAt(NOON, engine.params.scenario, 1);
-  assert.equal(line.buses, 20);
-  assert.equal(line.headway, line.cycle / 20);
-  assert.ok(engine.buses.stats[0].active <= 20 && engine.buses.stats[0].active >= before * CONFIG.transit.minService - 1);
+  assert.equal(line.buses, target);
+  assert.equal(b.reserve(), 0);
+  assert.equal(line.headway, line.cycle / target);
+  assert.ok(engine.buses.stats[0].active <= target && engine.buses.stats[0].active >= before * CONFIG.transit.minService - 1);
+  // Sin reserva no se pueden añadir más; quitándoselos a otra línea, sí.
+  assert.throws(() => engine.setBusFleet(line.id, target + 1), FleetError);
+  engine.setBusFleet(other.id, other.buses - 1);
+  assert.equal(engine.setBusFleet(line.id, target + 1), true);
+  assert.equal(b.reserve(), 0);
   assert.equal(engine.setBusFleet('L99', 5), false);
   assert.throws(() => engine.setBusFleet(line.id, 0), RangeError);
   assert.throws(() => engine.setBusFleet(line.id, CONFIG.transit.maxFleet + 1), RangeError);
   assert.throws(() => engine.setBusFleet(line.id, 3.5), RangeError);
-  assert.equal(line.buses, 20);
+  assert.equal(line.buses, target + 1);
 });
 
 test('signals can be switched off, set to all-red and timed individually', () => {
@@ -312,10 +323,19 @@ test('API: point query, signals and bus fleet', async (t) => {
   const buses = await call('/api/buses');
   const line = buses.body.lines[0];
   assert.deepEqual([line.minFleet, line.maxFleet, line.suspended], [CONFIG.transit.minFleet, CONFIG.transit.maxFleet, false]);
-  const fleet = await call(`/api/buses/${line.id}`, { method: 'PATCH', body: { fleet: 22 } });
+  const { reserve, fleetTotal } = (await call('/api/buses')).body;
+  assert.ok(reserve > 0 && fleetTotal > reserve);
+  const wanted = line.fleet + reserve;
+  const fleet = await call(`/api/buses/${line.id}`, { method: 'PATCH', body: { fleet: wanted } });
   assert.equal(fleet.status, 200);
-  assert.equal(fleet.body.fleet, 22);
-  assert.equal((await call('/api/state')).body.buses.lines[0].fleet, 22);
+  assert.equal(fleet.body.fleet, wanted);
+  assert.equal(fleet.body.reserve, 0);
+  assert.equal((await call('/api/state')).body.buses.lines[0].fleet, wanted);
+  assert.equal((await call('/api/state')).body.buses.reserve, 0);
+  // La flota total es fija: sin reserva, 409.
+  const tooMany = await call(`/api/buses/${line.id}`, { method: 'PATCH', body: { fleet: wanted + 1 } });
+  assert.equal(tooMany.status, 409);
+  assert.match(tooMany.body.error, /reserva/);
   assert.equal((await call(`/api/buses/${line.id}`, { method: 'PATCH', body: { fleet: 0 } })).status, 400);
   assert.equal((await call(`/api/buses/${line.id}`, { method: 'PATCH', body: { fleet: 5 }, auth: '' })).status, 401);
   assert.equal((await call('/api/buses/L99', { method: 'PATCH', body: { fleet: 5 } })).status, 404);

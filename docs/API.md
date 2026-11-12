@@ -57,7 +57,8 @@ curl "http://localhost:8080/api/point?lat=43.3166&lon=-1.9800&radius=200"
 
 Por línea (`id` = `L1`…): `fleet` (autobuses asignados), `minFleet`/`maxFleet`, `capacity` (plazas por autobús),
 `active` (en servicio ahora), `passengers` (a bordo), `full` (autobuses llenos), `waiting` (gente esperando en las
-paradas), `suspended` (recorrido cortado, ver §3) y `tracked`.
+paradas), `suspended` (recorrido cortado, ver §3) y `tracked`. Además, para toda la ciudad: `fleetTotal` (autobuses
+que tiene la ciudad) y `reserve` (los que no están asignados a ninguna línea).
 Ocupación de una línea = `passengers / (active × capacity)`.
 
 ### Bicicletas — `GET /api/bikes`
@@ -181,6 +182,10 @@ curl -X PATCH http://localhost:8080/api/signals/13965274528 -H "Authorization: B
      -d '{"mode":"normal","greenA":45,"greenB":15}'
 ```
 
+Cada cambio de fase **pierde tiempo**: al empezar el verde de un eje, los primeros 2 segundos siguen en rojo para todos
+(despeje del cruce y arranque). Por eso un ciclo muy corto deja pasar menos coches y en hora punta forma colas; uno muy
+largo hace esperar más a todos. El mejor verde depende de cuánto tráfico hay.
+
 `PUT /api/signals/plan` `{"plan": {"default": {...}, "signals": {"<id>": {...}}}}` sustituye **todo** el plan de golpe
 (mismos campos; `default` se aplica a todos los semáforos sin ajustes propios). Los ajustes se guardan y sobreviven a
 reinicios.
@@ -207,6 +212,10 @@ paso a menos de 40 m de un semáforo cruzan con el rojo de los coches.
 `{"fleet": 12}` fija el número de autobuses de la línea (`L1`…) entre `minFleet` y `maxFleet` (1–30). El cambio es
 **inmediato** y se conserva tras un reinicio. Cuántos circulan a la vez depende además de la demanda de la hora
 (`active` en `GET /api/buses`): con poca demanda solo sale una parte de la flota.
+
+La **flota total es fija**: la ciudad tiene los autobuses iniciales de todas las líneas más un 10 % de reserva
+(`fleetTotal`). Se pueden repartir como se quiera entre las líneas, pero no añadir más: para dar autobuses a una línea
+hay que tomarlos de la reserva (`reserve`) o quitárselos antes a otra. Si no hay bastantes, responde `409`.
 
 ```sh
 curl -X PATCH http://localhost:8080/api/buses/L1 -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"fleet":12}'
