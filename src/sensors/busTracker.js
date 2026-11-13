@@ -3,7 +3,7 @@ import { simDate } from '../traffic/demand.js';
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MAX_RECORDS = 200000;
-export const BUS_COLUMNS = ['timestamp', 'weekday', 'line_id', 'stops', 'buses', 'passengers', 'capacity', 'occupancy_pct', 'full_buses', 'waiting'];
+export const BUS_COLUMNS = ['timestamp', 'weekday', 'line_id', 'stops', 'buses', 'passengers', 'capacity', 'occupancy_pct', 'full_buses', 'waiting', 'left_behind'];
 
 // Registra periódicamente qué ocurre en las líneas de autobús elegidas: autobuses en servicio, pasajeros a bordo,
 // ocupación, autobuses llenos y gente esperando en las paradas. `lines`: [{ id, stops: [...] }];
@@ -71,6 +71,7 @@ export class BusTracker {
         occupancy_pct: capacity ? Math.round((s.passengers / capacity) * 1000) / 10 : 0,
         full_buses: s.full,
         waiting: s.waiting,
+        left_behind: s.leftBehind ?? 0,
       });
     }
     if (this.pending.length > MAX_RECORDS) this.pending.splice(0, this.pending.length - MAX_RECORDS);

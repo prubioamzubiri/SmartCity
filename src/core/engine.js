@@ -35,6 +35,9 @@ export class SimEngine {
   }) {
     this.simTime = startSeconds;
     this.environmentMinute = null;
+    this.carFactor = 1; // demanda de coches por el cambio de modo y las calles cortadas (se recalcula cada minuto)
+    this.unserved = 0; // fracción de la gente que quería ir en autobús y no ha podido
+    this.busDay = { day: Math.floor(startSeconds / 86400), used: 0, included: 0 }; // horas de autobús del día
     this.params = { maxCars, maxPedestrians, scenario };
     this.graph = buildGraph(data);
     this.signals = new SignalController(this.graph);
@@ -97,7 +100,7 @@ export class SimEngine {
   setBusFleet(lineId, count, options) {
     const li = this.transit.lines.findIndex((l) => l.id === lineId);
     if (li < 0) return false;
-    this.buses.setFleet(li, count, options);
+    this.buses.setFleet(li, count, { now: this.simTime, ...options });
     return true;
   }
 
@@ -156,8 +159,9 @@ export class SimEngine {
       if (steps >= maxSteps) return false;
       this.simTime += STEP;
       this.signals.update(this.simTime);
+      this.buses.tick(this.simTime);
       this.updateEnvironment();
-      this.sim.setTarget(this.params.maxCars * demandFactor(this.simTime, this.params.scenario));
+      this.sim.setTarget(this.params.maxCars * demandFactor(this.simTime, this.params.scenario) * this.carFactor);
       this.sim.step(STEP);
       this.sensors.tick(this.simTime);
       this.parking.tick(this.simTime);
@@ -179,6 +183,40 @@ export class SimEngine {
     this.sim.speedScale = speedFactor(minute * 60);
     this.sim.setAttractors(CONFIG.events.enabled ? eventCalendar.attractorsAt(minute * 60) : []);
     this.signals.setPedestrianLoad(pedestrianLoad(minute * 60, this.params.scenario, this.params.maxPedestrians));
+    this.updateTransit(minute * 60);
+  }
+
+  // Autobuses, cada minuto: las calles cortadas pasan gente del coche al autobús; quien no cabe en el autobús o se
+  // cansa de esperar coge el coche; y se cuentan las horas de autobús en servicio del día frente a las de la flota
+  // inicial (las que entran en el precio; las de más son sobrecoste).
+  updateTransit(seconds) {
+    const T = CONFIG.transit;
+    const c = T.closures;
+    const closedKm = Math.min(c.maxKm, this.restrictedKm());
+    this.buses.extraDemand = 1 + c.transitPerKm * closedKm;
+    this.buses.updateAt(seconds, this.params.scenario, this.scale);
+    this.unserved = this.buses.unservedShare();
+    // Por debajo de `modeShiftFrom` (gente que se queda en tierra de vez en cuando en hora punta) no cambia nada: así un
+    // servicio normal no perturba el tráfico.
+    const shifted = Math.max(0, this.unserved - T.modeShiftFrom) / (1 - T.modeShiftFrom);
+    this.carFactor = (1 - c.carsPerKm * closedKm) * (1 + T.modeShift * shifted);
+
+    const day = Math.floor(seconds / 86400);
+    if (day !== this.busDay.day) this.busDay = { day, used: 0, included: 0 };
+    const service = T.minService + (1 - T.minService) * this.buses.demand;
+    let active = 0;
+    for (const s of this.buses.stats) active += s.active;
+    let included = 0;
+    for (const f of this.buses.defaultFleet) included += Math.min(f, Math.ceil(f * service));
+    this.busDay.used += active / 60;
+    this.busDay.included += included / 60;
+  }
+
+  // Km de calles cortadas o restringidas (un límite de entrada cuenta la mitad).
+  restrictedKm() {
+    let m = 0;
+    for (const item of this.restrictions.items) m += this.restrictions.lengthOf(item.edges) * (item.mode === 'entry_limit' ? 0.5 : 1);
+    return m / 1000;
   }
 
   // Peatones en este instante: son una función del tiempo simulado (sin estado que guardar), así que
@@ -220,6 +258,8 @@ export class SimEngine {
       bus_passengers: sum('passengers'),
       full_buses: sum('full'),
       bus_waiting: sum('waiting'),
+      // Gente que quería subir y no ha podido (no cabía o se ha cansado de esperar).
+      bus_unserved: Math.round(lines.reduce((acc, s, li) => acc + s.demanded * this.buses.unservedOf(li), 0)),
       suspended_lines: this.buses.suspended.filter(Boolean).length,
       bikes_in_use: bikes.inUse,
       stations_empty: bikes.stations.filter((s) => s.available <= 0).length,
@@ -262,6 +302,8 @@ export class SimEngine {
       bikes: this.bikes.serialize(),
       city: this.cityStats.serialize(),
       fleet: Object.fromEntries(this.transit.lines.map((l) => [l.id, l.buses])),
+      pendingFleet: Object.fromEntries(this.transit.lines.map((l, li) => [l.id, this.buses.pendingOf(li)])),
+      busDay: { ...this.busDay },
       restrictions: this.restrictions.serialize(),
     };
   }
@@ -288,8 +330,11 @@ export class SimEngine {
         // flota fuera del rango actual: se queda la de por defecto
       }
     }
+    this.transit.lines.forEach((l, li) => this.buses.restorePending(li, state.pendingFleet?.[l.id]));
+    if (state.busDay) this.busDay = { ...state.busDay };
     // Un reparto guardado que ya no cabe en la flota total (p. ej. de antes de que la flota fuera fija): la de por defecto.
     if (this.buses.reserve() < 0) this.buses.lines.forEach((_, li) => this.buses.setFleet(li, this.buses.defaultFleet[li], { limit: false }));
+    this.carFactor = 1;
     const compatible = state.graphKey === this.graphKey;
     if (compatible && state.restrictions) this.restrictions.restore(state.restrictions);
     if (compatible) this.sim.restore(state.sim);

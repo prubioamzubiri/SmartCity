@@ -158,6 +158,30 @@ const MAX_EVENT_RANGE = 366 * 86400;
 const iso = (seconds) => simDate(seconds).toISOString().slice(0, 19);
 
 // La asistencia y la demanda extra solo se publican cuando el evento ha terminado: antes hay que predecirlas.
+// Autobuses que van de camino desde la cochera a una línea.
+function pendingJson(engine, li) {
+  return engine.buses.pendingOf(li).map((p) => ({ count: p.count, readyAt: iso(p.at) }));
+}
+
+// Una línea en GET /api/buses y PATCH /api/buses/<línea>.
+function busLineJson(engine, i) {
+  const l = engine.transit.lines[i];
+  const { active, passengers, full, waiting, leftBehind } = engine.buses.stats[i];
+  return {
+    id: l.id, stops: l.stops.length, fleet: l.buses, target: engine.buses.committed(i), pending: pendingJson(engine, i),
+    minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet, capacity: CONFIG.transit.capacity,
+    suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
+    active, passengers, full, waiting, leftBehind,
+  };
+}
+
+// Horas de autobús en servicio hoy frente a las incluidas (las que haría la flota inicial): las de más son sobrecoste.
+function busDayJson(engine) {
+  const { used, included } = engine.busDay;
+  const r = (x) => Math.round(x * 10) / 10;
+  return { busHours: r(used), includedHours: r(included), overtimeHours: r(Math.max(0, used - included)) };
+}
+
 function eventJson(event, simSeconds) {
   const venue = eventCalendar.venues[event.venue];
   const over = event.end <= simSeconds;
@@ -289,9 +313,11 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       buses: {
         fleetTotal: engine.buses.fleetTotal,
         reserve: engine.buses.reserve(),
+        extraDemand: Math.round(engine.buses.extraDemand * 1000) / 1000,
+        today: busDayJson(engine),
         lines: engine.transit.lines.map((l, i) => ({
           id: l.id, color: l.color, stops: l.stops.length, fleet: l.buses, minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet,
-          suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
+          pending: pendingJson(engine, i), suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
         })),
       },
       bikes: engine.bikes.state(),
@@ -346,10 +372,9 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
         simSeconds: engine.simTime,
         fleetTotal: engine.buses.fleetTotal,
         reserve: engine.buses.reserve(),
-        lines: engine.transit.lines.map((l, i) => ({
-          id: l.id, stops: l.stops.length, fleet: l.buses, minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet, capacity: CONFIG.transit.capacity,
-          suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id), ...engine.buses.stats[i],
-        })),
+        deployMinutes: CONFIG.transit.deployMinutes,
+        today: busDayJson(engine),
+        lines: engine.transit.lines.map((l, i) => busLineJson(engine, i)),
       });
     }
 
@@ -680,7 +705,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       return send(200, engine.restrictions.describe(item));
     }
 
-    // Número de autobuses de una línea: { fleet: 12 }. Cambia al instante y se conserva tras un reinicio.
+    // Número de autobuses de una línea: { fleet: 12 }. Quitar es inmediato; los que se añaden salen de la cochera y
+    // entran en servicio `deployMinutes` después (en `pending`). Se conserva tras un reinicio.
     const busMatch = /^\/api\/buses\/(L\d{1,3})$/.exec(pathname);
     if (busMatch && method === 'PATCH') {
       authorize(req);
@@ -692,13 +718,12 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       if (!Number.isInteger(fleet) || fleet < CONFIG.transit.minFleet || fleet > CONFIG.transit.maxFleet) {
         throw new HttpError(400, `fleet debe ser un entero entre ${CONFIG.transit.minFleet} y ${CONFIG.transit.maxFleet}`);
       }
-      if (fleet - engine.transit.lines[index].buses > engine.buses.reserve()) {
+      if (fleet - engine.buses.committed(index) > engine.buses.reserve()) {
         throw new HttpError(409, `No hay autobuses suficientes: quedan ${engine.buses.reserve()} en reserva (flota total ${engine.buses.fleetTotal}). Quita autobuses de otra línea primero`);
       }
       runtime.mutate((e) => e.setBusFleet(id, fleet));
       engine.buses.updateAt(engine.simTime, engine.params.scenario, runtime.scale);
-      const line = engine.transit.lines[index];
-      return send(200, { id, stops: line.stops.length, fleet: line.buses, reserve: engine.buses.reserve(), fleetTotal: engine.buses.fleetTotal, suspended: engine.buses.suspended[index], ...engine.buses.stats[index] });
+      return send(200, { ...busLineJson(engine, index), reserve: engine.buses.reserve(), fleetTotal: engine.buses.fleetTotal });
     }
 
     throw new HttpError(404, 'No encontrado');

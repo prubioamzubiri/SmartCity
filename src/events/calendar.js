@@ -23,7 +23,8 @@ const onOrBefore = (ms, weekday) => ms - ((new Date(ms).getUTCDay() - weekday + 
 
 // `count` fechas repartidas por igual entre `from` y `to` (ms).
 function spread(from, to, count) {
-  return Array.from({ length: count }, (_, k) => from + ((to - from) * k) / Math.max(1, count - 1));
+  // Siempre a medianoche: luego se suma la hora del evento.
+  return Array.from({ length: count }, (_, k) => Math.round((from + ((to - from) * k) / Math.max(1, count - 1)) / DAY_MS) * DAY_MS);
 }
 
 const pick = (rng, options) => options[Math.floor(rng() * options.length)];
@@ -217,6 +218,15 @@ export function createEventCalendar(config = CONFIG.events, baseDate = CONFIG.si
     }));
   }
 
+  // Demanda de autobús de los eventos en curso: posición, radio, fuerza y fase ('arrive' mientras llega la gente,
+  // 'during' durante el evento y 'leave' mientras se va).
+  function busDemandAt(seconds) {
+    return activeAt(seconds).map(({ event, intensity: level }) => ({
+      id: event.id, x: event.x, z: event.z, radius: event.radius, weight: event.boost * level, level,
+      phase: seconds < event.start ? 'arrive' : seconds > event.end ? 'leave' : 'during',
+    }));
+  }
+
   // Eventos cuyo horario (sin las rampas de llegada y salida) se solapa con [from, to).
   function eventsBetween(from, to) {
     if (!(to > from)) return [];
@@ -235,7 +245,7 @@ export function createEventCalendar(config = CONFIG.events, baseDate = CONFIG.si
     return result.sort((a, b) => a.start - b.start).slice(0, count);
   }
 
-  return { venues, types, secondsOf, intensity, activeAt, boostAt, attractorsAt, eventsBetween, upcoming };
+  return { venues, types, secondsOf, intensity, activeAt, boostAt, attractorsAt, busDemandAt, eventsBetween, upcoming };
 }
 
 export const eventCalendar = createEventCalendar();

@@ -6,7 +6,7 @@ const MAX_RECORDS = 200000;
 export const CITY_COLUMNS = [
   'timestamp', 'weekday', 'cars', 'stopped', 'avg_speed_kmh', 'buses', 'bus_passengers', 'full_buses', 'bus_waiting',
   'suspended_lines', 'bikes_in_use', 'stations_empty', 'stations_full', 'parkings_full', 'closed_m', 'bus_only_m',
-  'limited_m', 'signals_all_red', 'trips_done', 'trip_min', 'delay_min', 'trips_lost',
+  'limited_m', 'signals_all_red', 'trips_done', 'trip_min', 'delay_min', 'trips_lost', 'bus_unserved',
 ];
 
 // Indicadores globales de la ciudad cada `intervalSeconds` simulados, siempre activos (no hay que elegir nada).

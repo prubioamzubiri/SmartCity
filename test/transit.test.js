@@ -134,13 +134,13 @@ test('passengers board at stops and everyone gets off at the end of the outbound
   const during = buses.loadAt(line, 0, 0, trip, turn, 0.5);
   const after = buses.loadAt(line, 0, 0, trip, turn, 1);
   assert.ok(during < before && during > after - 1);
-  buses.demand = 1;
-  assert.ok(buses.loadAt(line, 0, 0, trip, turn, 1) <= buses.boardingMean(line.stops[turn]) * 1.5 + 1);
+  buses.demand = buses.rawDemand = 1;
+  assert.ok(buses.loadAt(line, 0, 0, trip, turn, 1) <= buses.arrivalRate(0, turn) * line.headway * 1.5 + 1);
 });
 
 test('people wait at stops and queue up again after a bus leaves', () => {
   const buses = new Buses(transit, graph);
-  buses.demand = 1;
+  buses.demand = buses.rawDemand = 1;
   const line = transit.lines[0];
   const stop = 3;
   const first = line.arrive[stop];
@@ -149,9 +149,14 @@ test('people wait at stops and queue up again after a bus leaves', () => {
     return buses.waiting[buses.stopOffset[0] + stop];
   };
   assert.equal(at(first + 1e-3 + line.stops[stop].dwell * 0.999), 0);
-  assert.ok(at(line.depart[stop] + 1) < at(line.depart[stop] + T.waitingSeconds));
-  assert.ok(at(line.depart[stop] + T.waitingSeconds) > 0);
-  assert.ok(at(line.depart[stop] + T.waitingSeconds) <= T.maxWaiting);
+  assert.ok(at(line.depart[stop] + 1) < at(line.depart[stop] + T.patienceSeconds / 2));
+  assert.ok(at(line.depart[stop] + T.patienceSeconds / 2) > 0);
+  assert.ok(at(line.depart[stop] + T.patienceSeconds) <= T.maxWaiting);
+  // Pasada la paciencia, la gente que llega se va: la cola deja de crecer.
+  buses.updateWaiting(line, 0, [line.depart[stop] + T.patienceSeconds]);
+  const tired = buses.stats[0].waiting;
+  buses.updateWaiting(line, 0, [line.depart[stop] + T.patienceSeconds * 1.5]);
+  assert.ok(Math.abs(buses.stats[0].waiting - tired) <= tired * 0.05, `${buses.stats[0].waiting} ≈ ${tired}`);
 });
 
 test('without bus stops there are no lines and no buses', () => {
