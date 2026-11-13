@@ -268,6 +268,13 @@ export const CONFIG = {
       // prioridad (cruza al llegar y los coches paran); apagado, cruza cuando hay hueco (los coches paran menos).
       pedestrianShare: { flashing: 0.45, off: 0.15 },
     },
+    // Espera de los peatones en los cruces con semáforo. Quien llega con su semáforo en rojo espera hasta su verde: de
+    // media rojo² / (2 × ciclo) por sentido de cruce (con un ciclo de 24 s, unos 6 s; con uno de 60 s, unos 15 s).
+    pedestrianWait: {
+      arrivalsPerSecond: 0.3, // peatones que llegan a cruzar por segundo a cada cruce con la calle llena (se escala con la gente)
+      maxSeconds: 90, // más de esto no espera nadie (cruza en rojo o da la vuelta): es lo que cuenta en rojo para todos
+      unsignalized: { flashing: 2, off: 8 }, // en ámbar cruza casi al llegar; apagado, espera un hueco entre coches
+    },
   },
 
   // Rotondas: los coches del anillo tienen prioridad y solo entran si hay hueco y el anillo no está lleno.

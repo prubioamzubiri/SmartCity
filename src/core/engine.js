@@ -269,8 +269,15 @@ export class SimEngine {
       bus_only_m: Math.round(metres.busOnly),
       limited_m: Math.round(metres.limited),
       signals_all_red: this.signals.signals.filter((sig) => sig.active && this.signals.modeOf(sig) === 'all_red').length,
+      ...this.pedestrianWaitRow(time),
       ...this.cityStats.tripsSince(this.sim.tripTotals),
     };
+  }
+
+  // Peatones en los cruces con semáforo: espera media (s) y gente esperando ahora.
+  pedestrianWaitRow(time) {
+    const { meanWait, waiting } = this.signals.pedestrianWait(time);
+    return { ped_wait_s: Math.round(meanWait * 10) / 10, ped_waiting: Math.round(waiting) };
   }
 
   // Extrae los registros cerrados desde la última llamada (para persistirlos).

@@ -38,7 +38,7 @@ Los puntos se dan en **metros desde el origen del mapa** (`x` hacia el este, `z`
 Campos principales: `simTime`, `scale`, `caughtUp`, `cars` (coches circulando), `params` (`maxCars`, `maxPedestrians`,
 `scenario`), `traffic` (`stopped` coches parados, `avgKmh` velocidad media), `signalPlan`, `sensors` y
 `pedestrianSensors` (con `total` acumulado y `current`), `parkings` (`id`, `name`, `capacity`, `occupancy` de 0 a 1,
-`tracked`), `pedestrians.expected` (peatones en la calle), `buses.lines` (`id`, `fleet`, `suspended`, `tracked`),
+`tracked`), `pedestrians.expected` (peatones en la calle), `pedestrians.meanWaitSeconds` (espera media de quien llega a cruzar en un cruce con semáforo: con un ciclo más largo o un reparto muy desigual, más) y `pedestrians.waitingAtSignals` (gente esperando ahora en esos cruces), `buses.lines` (`id`, `fleet`, `suspended`, `tracked`),
 `bikes` (`inUse` y `stations` con `available`, `capacity`, `pending`), `weather`, `holiday`, `events`, `restrictions`
 (las activas, como en `GET /api/restrictions`), `seed` (semilla de esta ciudad), `startSeconds` (cuándo empezó),
 `writeProtected` (los cambios necesitan token) y `records` (filas guardadas por tipo).
@@ -117,7 +117,7 @@ hayáis activado**, y **desde que los activáis** (no hay pasado anterior): acti
 | Ocupación de parkings | `PUT /api/parking/tracked` `{"ids": ["U-125_53", …]}` | `GET /api/parking.csv?from=&to=&id=` |
 | Autobuses por línea | `PUT /api/buses/tracked` `{"ids": ["L1", …]}` | `GET /api/buses.csv?from=&to=&id=` (cada 5 min: `buses`, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`, `left_behind`, `fleet` —autobuses asignados que ya circulan—) |
 | Bicis por puesto | `PUT /api/bikes/tracked` `{"ids": ["municipal/0", …]}` | `GET /api/bikes.csv?from=&to=&id=` (cada 15 min: `bikes`, `free_docks`, `takes`, `returns`, `occupancy_pct`) |
-| Toda la ciudad | — (siempre activo, desde que arranca el servidor) | `GET /api/city.csv?from=&to=` (cada 5 min: `cars`, `stopped`, `avg_speed_kmh`, `buses`, `bus_passengers`, `full_buses`, `bus_waiting`, `suspended_lines`, `bikes_in_use`, `stations_empty`, `stations_full`, `parkings_full`, metros de calle `closed_m` / `bus_only_m` / `limited_m`, `signals_all_red` y los viajes del intervalo: `trips_done`, `trip_min` (duración media), `delay_min` (retraso medio frente a ir sin tráfico ni cortes) y `trips_lost`; y `bus_unserved`, la gente que quería ir en autobús y no ha podido) |
+| Toda la ciudad | — (siempre activo, desde que arranca el servidor) | `GET /api/city.csv?from=&to=` (cada 5 min: `cars`, `stopped`, `avg_speed_kmh`, `buses`, `bus_passengers`, `full_buses`, `bus_waiting`, `suspended_lines`, `bikes_in_use`, `stations_empty`, `stations_full`, `parkings_full`, metros de calle `closed_m` / `bus_only_m` / `limited_m`, `signals_all_red` y los viajes del intervalo: `trips_done`, `trip_min` (duración media), `delay_min` (retraso medio frente a ir sin tráfico ni cortes) y `trips_lost`; `bus_unserved`, la gente que quería ir en autobús y no ha podido; `ped_wait_s` y `ped_waiting`, la espera media y la gente esperando en los cruces con semáforo) |
 | Tiempo, eventos | — (siempre disponibles, también del pasado) | `GET /api/weather.csv`, `GET /api/events.csv` |
 
 Cada `PUT …/tracked` **sustituye** la lista anterior: enviad todos los ids que queráis grabar.

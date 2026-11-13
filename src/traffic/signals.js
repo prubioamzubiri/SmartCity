@@ -86,6 +86,32 @@ export class SignalController {
     return this.pedestrianLoad > 0 && this.pedestrianWindow(s, this.now).current;
   }
 
+  // Peatones en los cruces con semáforo ahora: espera media de quien llega a cruzar (s) y gente esperando.
+  pedestrianWait(simTime = this.now) {
+    const W = CONFIG.signals.pedestrianWait;
+    const date = simDate(simTime);
+    let sum = 0;
+    let n = 0;
+    for (const s of this.signals) {
+      if (!s.active) continue;
+      const mode = this.modeOf(s);
+      let wait;
+      if (mode === 'all_red') wait = W.maxSeconds;
+      else if (mode !== 'normal') wait = W.unsignalized[mode] ?? W.unsignalized.off;
+      else {
+        // Cada sentido de cruce va con el verde de los coches que circulan en paralelo: su rojo es el resto del ciclo.
+        const { gA, gB, y } = this.timing(s, simTime, date);
+        const cycle = gA + gB + 2 * y;
+        const side = (green) => Math.min(W.maxSeconds, (cycle - green) ** 2 / (2 * cycle));
+        wait = (side(gA) + side(gB)) / 2;
+      }
+      sum += wait;
+      n++;
+    }
+    const meanWait = n ? sum / n : 0;
+    return { meanWait, waiting: W.arrivalsPerSecond * this.pedestrianLoad * meanWait * n };
+  }
+
   setGlobalGreen(green, yellow = this.plan.default.yellow) {
     this.plan = { default: { green, yellow }, signals: {} };
   }

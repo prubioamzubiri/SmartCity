@@ -158,6 +158,12 @@ const MAX_EVENT_RANGE = 366 * 86400;
 const iso = (seconds) => simDate(seconds).toISOString().slice(0, 19);
 
 // La asistencia y la demanda extra solo se publican cuando el evento ha terminado: antes hay que predecirlas.
+// Peatones en los cruces con semáforo: espera media de quien llega a cruzar y gente esperando ahora.
+function pedestrianWaitJson(engine) {
+  const { meanWait, waiting } = engine.signals.pedestrianWait(engine.simTime);
+  return { meanWaitSeconds: Math.round(meanWait * 10) / 10, waitingAtSignals: Math.round(waiting) };
+}
+
 // Autobuses que van de camino desde la cochera a una línea.
 function pendingJson(engine, li) {
   return engine.buses.pendingOf(li).map((p) => ({ count: p.count, readyAt: iso(p.at) }));
@@ -305,7 +311,10 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
           ...eventJson(event, engine.simTime), intensity: Math.round(intensity * 100) / 100,
         })),
       },
-      pedestrians: { expected: Math.round(engine.pedestrians.flowAt(engine.simTime, engine.params.scenario, engine.params.maxPedestrians).onStreet) },
+      pedestrians: {
+        expected: Math.round(engine.pedestrians.flowAt(engine.simTime, engine.params.scenario, engine.params.maxPedestrians).onStreet),
+        ...pedestrianWaitJson(engine),
+      },
       pedestrianSensors: engine.pedSensors.sensors.map((s) => ({
         id: s.id, name: s.name, x: Math.round(s.x * 10) / 10, z: Math.round(s.z * 10) / 10,
         total: s.total, current: Math.round(engine.pedSensors.presentNow(s, engine.simTime)),

@@ -244,6 +244,30 @@ test('an event fills the lines that stop near its venue; closed streets mean few
   assert.ok(b.extraDemand > 1, `autobús × ${b.extraDemand}`);
 });
 
+test('pedestrians wait longer at signals with long cycles or unequal splits, and most with all-red', () => {
+  const engine = engineOf(50);
+  const s = engine.signals;
+  s.setPedestrianLoad(1);
+  const wait = () => s.pedestrianWait(NOON);
+  s.setGlobalGreen(10, 3);
+  const short = wait();
+  s.setGlobalGreen(30, 3);
+  const long = wait();
+  assert.ok(long.meanWait > 1.9 * short.meanWait, `${short.meanWait} -> ${long.meanWait}`);
+  assert.ok(long.waiting > short.waiting);
+  // Ciclo 26 s (10 + 10 + 2 × 3): cada sentido espera 16² / 52 ≈ 4,9 s de media.
+  assert.ok(Math.abs(short.meanWait - 16 ** 2 / 52) < 1e-9);
+  s.setPlan({ default: { green: 10, yellow: 3, mode: 'all_red' } });
+  assert.equal(wait().meanWait, CONFIG.signals.pedestrianWait.maxSeconds);
+  s.setPlan({ default: { green: 10, yellow: 3, mode: 'flashing' } });
+  assert.equal(wait().meanWait, CONFIG.signals.pedestrianWait.unsignalized.flashing);
+  // Sin gente en la calle, nadie espera.
+  s.setPedestrianLoad(0);
+  assert.equal(wait().waiting, 0);
+  const row = engine.cityRow(NOON);
+  assert.ok('ped_wait_s' in row && 'ped_waiting' in row);
+});
+
 test('signals can be switched off, set to all-red and timed individually', () => {
   const engine = engineOf(50);
   const s = engine.signals;
