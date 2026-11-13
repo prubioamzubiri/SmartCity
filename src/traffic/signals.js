@@ -57,6 +57,33 @@ export class SignalController {
     this.offsets = this.signals.map((s) => (Math.imul(s.id, 2654435761) >>> 0) % 1000 / 1000);
     this.now = 0;
     this.pedestrianLoad = 0; // cuánta gente hay en la calle (0..1)
+    // ¿El tramo está cerrado a los coches (calle peatonal o solo bus)? Lo conecta el motor con las restricciones.
+    this.isClosed = () => false;
+    // Concurrencia de peatones de cada cruce respecto a la media (1 = media): el centro, con comercios y servicios,
+    // tiene mucha más gente cruzando que las afueras.
+    this.pedestrianWeight = new Float32Array(this.signals.length).fill(1);
+  }
+
+  // Pesos de los cruces a partir de los de las calles que llegan a ellos (los de los peatones del visor).
+  setPedestrianWeights(edgeWeights) {
+    const raw = this.signals.map((s) => {
+      const list = s.approaches ?? [];
+      return list.length ? list.reduce((a, e) => a + edgeWeights[e], 0) / list.length : 0;
+    });
+    const active = this.signals.map((s, i) => (s.active ? raw[i] : null)).filter((v) => v !== null);
+    const mean = active.length ? active.reduce((a, b) => a + b, 0) / active.length : 1;
+    raw.forEach((v, i) => (this.pedestrianWeight[i] = mean > 0 ? v / mean : 1));
+  }
+
+  // ¿Todos los tramos que llegan al cruce `s` por el eje `group` están cerrados a los coches?
+  axisClosed(s, group) {
+    let any = false;
+    for (const e of s.approaches ?? []) {
+      if (this.graph.grp[e] !== group) continue;
+      any = true;
+      if (!this.isClosed(e)) return false;
+    }
+    return any;
   }
 
   // Cuánta gente hay en la calle (0..1, como la densidad de peatones): decide cuánto rato ocupan los pasos sin regular.
@@ -92,24 +119,31 @@ export class SignalController {
     const date = simDate(simTime);
     let sum = 0;
     let n = 0;
-    for (const s of this.signals) {
+    for (let i = 0; i < this.signals.length; i++) {
+      const s = this.signals[i];
       if (!s.active) continue;
       const mode = this.modeOf(s);
+      // Cruzar una calzada cerrada a los coches no tiene espera: el peatón cruza cuando quiere.
+      const closedA = this.axisClosed(s, 0);
+      const closedB = this.axisClosed(s, 1);
       let wait;
-      if (mode === 'all_red') wait = W.maxSeconds;
+      if (closedA && closedB) wait = 0;
+      else if (mode === 'all_red') wait = W.maxSeconds;
       else if (mode !== 'normal') wait = W.unsignalized[mode] ?? W.unsignalized.off;
       else {
         // Cada sentido de cruce va con el verde de los coches que circulan en paralelo: su rojo es el resto del ciclo.
         const { gA, gB, y } = this.timing(s, simTime, date);
         const cycle = gA + gB + 2 * y;
         const side = (green) => Math.min(W.maxSeconds, (cycle - green) ** 2 / (2 * cycle));
-        wait = (side(gA) + side(gB)) / 2;
+        // Quien cruza con el verde de A atraviesa la calzada de B (y al revés).
+        wait = ((closedB ? 0 : side(gA)) + (closedA ? 0 : side(gB))) / 2;
       }
-      sum += wait;
-      n++;
+      sum += wait * this.pedestrianWeight[i];
+      n += this.pedestrianWeight[i];
     }
+    // Media ponderada por la gente que cruza en cada cruce; gente esperando = la que llega × lo que espera.
     const meanWait = n ? sum / n : 0;
-    return { meanWait, waiting: W.arrivalsPerSecond * this.pedestrianLoad * meanWait * n };
+    return { meanWait, waiting: W.arrivalsPerSecond * this.pedestrianLoad * sum };
   }
 
   setGlobalGreen(green, yellow = this.plan.default.yellow) {

@@ -66,6 +66,8 @@ export class SimEngine {
     this.scale = 1;
     this.transit = buildTransit(data, this.graph, { weights: weights.edge });
     this.buses = new Buses(this.transit, this.graph);
+    this.signals.isClosed = (e) => this.sim.closed[e] === 1;
+    this.signals.setPedestrianWeights(weights.edge);
     this.restrictions = new Restrictions({
       graph: this.graph,
       sim: this.sim,

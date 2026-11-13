@@ -261,6 +261,13 @@ test('pedestrians wait longer at signals with long cycles or unequal splits, and
   assert.equal(wait().meanWait, CONFIG.signals.pedestrianWait.maxSeconds);
   s.setPlan({ default: { green: 10, yellow: 3, mode: 'flashing' } });
   assert.equal(wait().meanWait, CONFIG.signals.pedestrianWait.unsignalized.flashing);
+  // En una calle cerrada a los coches se cruza sin esperar.
+  s.setPlan({ default: { green: 30, yellow: 3 } });
+  const signal = s.signals.find((x) => x.active && x.approaches?.length);
+  const before = wait().meanWait;
+  engine.restrictions.add({ mode: 'pedestrians_only', ways: [...new Set(signal.approaches.map((e) => engine.graph.way[e]))] });
+  assert.ok(s.axisClosed(signal, 0) || s.axisClosed(signal, 1));
+  assert.ok(wait().meanWait < before, `${before} -> ${wait().meanWait}`);
   // Sin gente en la calle, nadie espera.
   s.setPedestrianLoad(0);
   assert.equal(wait().waiting, 0);
