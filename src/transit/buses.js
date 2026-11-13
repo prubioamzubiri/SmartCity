@@ -205,13 +205,16 @@ export class Buses {
   updateAt(simSeconds, scenario, scale = 1) {
     const clock = Math.min(T.clockScale, scale);
     this.updateStopFactors(simSeconds);
-    this.update((simSeconds * clock) / scale, transitDemand(simSeconds, scenario) * this.extraDemand);
+    const demand = transitDemand(simSeconds, scenario);
+    // Cuántos autobuses de la flota salen depende de la demanda normal; la que traen las calles cortadas la tiene que
+    // cubrir el gestor (si no, contaría como sobrecoste de un grupo que no ha pedido ningún autobús).
+    this.update((simSeconds * clock) / scale, demand * this.extraDemand, demand);
   }
 
   // `seconds`: reloj de autobuses; `demand`: demanda de la hora simulada (0..1).
-  update(seconds, demand = 1) {
+  update(seconds, demand = 1, serviceDemand = demand) {
     this.rawDemand = Math.max(0, demand);
-    this.demand = Math.min(1, this.rawDemand);
+    this.demand = Math.min(1, Math.max(0, serviceDemand));
     const service = T.minService + (1 - T.minService) * this.demand;
     let n = 0;
     this.lines.forEach((line, li) => {
@@ -313,6 +316,15 @@ export class Buses {
     }
     st.demanded = Math.round(st.demanded);
     st.leftBehind = Math.round(st.leftBehind);
+  }
+
+  // Gente que quiere ir en autobús, por hora de reloj de autobús (todas las paradas): la base de la métrica por viajero.
+  riders() {
+    let rate = 0;
+    this.lines.forEach((line, li) => {
+      for (let j = 0; j < line.stops.length; j++) rate += this.arrivalRate(li, j);
+    });
+    return rate * 3600;
   }
 
   // Fracción de quien quería ir en autobús que no ha podido (se queda en tierra o se cansa de esperar): es la gente que

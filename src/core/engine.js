@@ -68,6 +68,7 @@ export class SimEngine {
     this.buses = new Buses(this.transit, this.graph);
     this.signals.isClosed = (e) => this.sim.closed[e] === 1;
     this.signals.setPedestrianWeights(weights.edge);
+    this.pedEdgeWeight = weights.edge;
     this.restrictions = new Restrictions({
       graph: this.graph,
       sim: this.sim,
@@ -260,6 +261,7 @@ export class SimEngine {
       bus_passengers: sum('passengers'),
       full_buses: sum('full'),
       bus_waiting: sum('waiting'),
+      bus_demand: Math.round(this.buses.riders()),
       // Gente que quería subir y no ha podido (no cabía o se ha cansado de esperar).
       bus_unserved: Math.round(lines.reduce((acc, s, li) => acc + s.demanded * this.buses.unservedOf(li), 0)),
       suspended_lines: this.buses.suspended.filter(Boolean).length,
@@ -279,7 +281,27 @@ export class SimEngine {
   // Peatones en los cruces con semáforo: espera media (s) y gente esperando ahora.
   pedestrianWaitRow(time) {
     const { meanWait, waiting } = this.signals.pedestrianWait(time);
-    return { ped_wait_s: Math.round(meanWait * 10) / 10, ped_waiting: Math.round(waiting) };
+    return { ped_wait_s: Math.round(meanWait * 10) / 10, ped_waiting: Math.round(waiting), ped_space: Math.round(this.pedestrianSpace() * 100) / 100 };
+  }
+
+  // Espacio ganado por los peatones: km de calle sin coches × lo concurrida que es × cuánta gente hay en la calle. Una
+  // calle peatonal concurrida del centro con buen tiempo cuenta mucho; una calle vacía de las afueras de noche, casi nada.
+  pedestrianSpace() {
+    const g = this.graph;
+    const share = CONFIG.pedestrians.spaceShare;
+    const seen = new Uint8Array(g.edgeCount);
+    let sum = 0;
+    for (const item of this.restrictions.items) {
+      const f = share[item.mode] ?? 0;
+      if (!f) continue;
+      for (const e of item.edges) {
+        if (seen[e]) continue;
+        seen[e] = 1;
+        if (g.rev[e] >= 0) seen[g.rev[e]] = 1; // las calles de doble sentido cuentan una vez
+        sum += g.len[e] * this.pedEdgeWeight[e] * f;
+      }
+    }
+    return (sum / 1000) * this.signals.pedestrianLoad;
   }
 
   // Extrae los registros cerrados desde la última llamada (para persistirlos).

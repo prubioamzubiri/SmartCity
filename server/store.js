@@ -76,7 +76,7 @@ export class Store {
     this.db.exec(SCHEMA);
     // Bases de datos creadas con una versión anterior: añade las columnas nuevas del histórico global.
     const have = new Set(this.db.prepare('PRAGMA table_info(city_records)').all().map((c) => c.name));
-    const types = { trips_done: 'INTEGER', trip_min: 'REAL', delay_min: 'REAL', trips_lost: 'INTEGER', bus_unserved: 'INTEGER', ped_wait_s: 'REAL', ped_waiting: 'INTEGER' };
+    const types = { trips_done: 'INTEGER', trip_min: 'REAL', delay_min: 'REAL', trips_lost: 'INTEGER', bus_unserved: 'INTEGER', bus_demand: 'INTEGER', ped_wait_s: 'REAL', ped_waiting: 'INTEGER', ped_space: 'REAL' };
     for (const [column, type] of Object.entries(types)) {
       if (!have.has(column)) this.db.exec(`ALTER TABLE city_records ADD COLUMN ${column} ${type}`);
     }

@@ -154,6 +154,8 @@ export const CONFIG = {
   // Peatones: triángulos que caminan por las aceras y cruzan por los pasos de peatones de OSM (solo visual).
   pedestrians: {
     max: 12000, // con la demanda máxima
+    // Espacio peatonal (ped_space): cuánto cuenta cada km de calle cortada según el modo (solo bus: pasan autobuses).
+    spaceShare: { pedestrians_only: 1, buses_and_pedestrians: 0.7 },
     walkFraction: 0.75, // fracción que camina por las aceras; el resto cruza por los pasos de peatones
     minDensity: 0.15, // fracción de peatones activos aunque la demanda sea nula
     speed: 1.4, // m/s de paseo real (en pantalla: speed × clockScale m/s)
@@ -225,7 +227,7 @@ export const CONFIG = {
     modeShift: 0.5,
     modeShiftFrom: 0.05, // fracción sin servicio a partir de la cual hay cambio de modo
     // Calles cortadas o solo para autobuses y peatones: menos coches y más gente en autobús, por km (con un tope).
-    closures: { carsPerKm: 0.03, transitPerKm: 0.05, maxKm: 8 },
+    closures: { carsPerKm: 0.03, transitPerKm: 0.025, maxKm: 8 },
     clockScale: 12, // ritmo del reloj de los autobuses respecto al tiempo real; nunca supera la escala del servidor
     minService: 0.35, // fracción de la flota en servicio con la demanda mínima (con la máxima, toda)
     capacity: 80, // pasajeros por autobús

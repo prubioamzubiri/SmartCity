@@ -232,6 +232,18 @@ test('an event fills the lines that stop near its venue; closed streets mean few
   for (const li of near) assert.ok(factorOf(li) > 1.5, `línea ${li}: ${factorOf(li)}`);
   b.lines.forEach((_, li) => { if (!near.includes(li)) assert.equal(factorOf(li), 1); });
 
+  // La demanda que traen los cortes no saca autobuses por sí sola (si no, sería sobrecoste sin haber pedido nada),
+  // pero sí hay más gente que quiere subir.
+  b.extraDemand = 1;
+  b.updateAt(NOON, engine.params.scenario, 1);
+  const active1 = b.stats.reduce((a, x) => a + x.active, 0);
+  const riders1 = b.riders();
+  b.extraDemand = 1.4;
+  b.updateAt(NOON, engine.params.scenario, 1);
+  assert.equal(b.stats.reduce((a, x) => a + x.active, 0), active1);
+  assert.ok(b.riders() > riders1 * 1.2, `${riders1} -> ${b.riders()}`);
+  b.extraDemand = 1;
+
   // Horas de autobús del día: con la flota inicial, todas incluidas.
   engine.updateTransit(NOON);
   assert.ok(engine.busDay.used > 0 && Math.abs(engine.busDay.used - engine.busDay.included) < 1e-9);
@@ -268,6 +280,12 @@ test('pedestrians wait longer at signals with long cycles or unequal splits, and
   engine.restrictions.add({ mode: 'pedestrians_only', ways: [...new Set(signal.approaches.map((e) => engine.graph.way[e]))] });
   assert.ok(s.axisClosed(signal, 0) || s.axisClosed(signal, 1));
   assert.ok(wait().meanWait < before, `${before} -> ${wait().meanWait}`);
+  // La calle cortada es espacio ganado por los peatones, más cuanta más gente hay en la calle.
+  assert.ok(engine.pedestrianSpace() > 0);
+  const full = engine.pedestrianSpace();
+  s.setPedestrianLoad(0.5);
+  assert.ok(Math.abs(engine.pedestrianSpace() - full / 2) < 1e-9);
+  s.setPedestrianLoad(1);
   // Sin gente en la calle, nadie espera.
   s.setPedestrianLoad(0);
   assert.equal(wait().waiting, 0);
