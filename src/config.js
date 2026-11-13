@@ -136,7 +136,8 @@ export const CONFIG = {
     laneOffset: 2.2,
     lookAhead: 60,
     stopGap: 3,
-    stuckSeconds: 300, // un coche parado tanto tiempo reaparece en otro punto (rompe bloqueos sin salida)
+    stuckSeconds: 120, // un coche parado tanto tiempo abandona y reaparece en otro punto: deshace los bloqueos (con más, un
+    // atasco que no se deshace hacía el tráfico caótico: un cambio mínimo movía el índice del día ±8 puntos)
     // m/s por clase de vía: autovía, primaria, secundaria, terciaria, residencial
     speedByClass: [22, 16, 13, 11, 8],
   },
