@@ -414,6 +414,11 @@ test('API: point query, signals and bus fleet', async (t) => {
   assert.match(fleet.body.pending[0].readyAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/);
   assert.equal(fleet.body.reserve, 0);
   assert.equal((await call('/api/state')).body.buses.lines[0].pending[0].count, reserve);
+  const route = await call(`/api/buses/${line.id}`);
+  assert.equal(route.status, 200);
+  assert.equal(route.body.stops.length, line.stops);
+  assert.ok(route.body.stops.every((st) => Number.isFinite(st.x) && Number.isFinite(st.z)));
+  assert.equal((await call('/api/buses/L99')).status, 404);
   const today = (await call('/api/buses')).body.today;
   assert.deepEqual(Object.keys(today), ['busHours', 'includedHours', 'overtimeHours']);
   assert.equal((await call('/api/state')).body.buses.reserve, 0);

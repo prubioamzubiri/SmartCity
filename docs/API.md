@@ -63,7 +63,9 @@ una parada y no ha cabido), `suspended` (recorrido cortado, ver §3) y `tracked`
 `fleetTotal` (autobuses que tiene la ciudad), `reserve` (los que no están asignados a ninguna línea),
 `deployMinutes` (lo que tarda en entrar en servicio un autobús que se añade) y `today` (horas de autobús en servicio del
 día simulado: `busHours`, `includedHours` —las que haría la flota inicial— y `overtimeHours`, las de más).
-Ocupación de una línea = `passengers / (active × capacity)`.
+Ocupación de una línea = `passengers / (active × capacity)`. `GET /api/buses/<línea>` da lo mismo de una línea y además
+su recorrido: `stops`, las paradas en orden con sus coordenadas `x`, `z` (para saber, por ejemplo, qué líneas pasan
+cerca de la sede de un evento).
 
 Cuánta gente quiere ir en autobús depende de la hora, del día, de la **lluvia** (bastante más gente), de los
 **eventos** (antes de que empiecen, las líneas que pasan cerca de la sede se llenan; al acabar, sale todo el mundo a la
@@ -113,7 +115,7 @@ hayáis activado**, y **desde que los activáis** (no hay pasado anterior): acti
 | Coches por punto | `POST /api/sensors` `{x, z, name}` → `id` (`S1`…). También `PATCH`/`DELETE /api/sensors/<id>` | `GET /api/traffic.csv?from=&to=&id=` (cada 5 min: `count`, `count_fwd`, `count_bwd`, `avg_speed_kmh`) |
 | Peatones por punto | `POST /api/pedestrian-sensors` `{x, z, name}` → `id` (`P1`…) | `GET /api/pedestrians.csv?from=&to=&id=` (`count`, `count_walk`, `count_cross`, `present`) |
 | Ocupación de parkings | `PUT /api/parking/tracked` `{"ids": ["U-125_53", …]}` | `GET /api/parking.csv?from=&to=&id=` |
-| Autobuses por línea | `PUT /api/buses/tracked` `{"ids": ["L1", …]}` | `GET /api/buses.csv?from=&to=&id=` (cada 5 min: `buses`, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`, `left_behind`) |
+| Autobuses por línea | `PUT /api/buses/tracked` `{"ids": ["L1", …]}` | `GET /api/buses.csv?from=&to=&id=` (cada 5 min: `buses`, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`, `left_behind`, `fleet` —autobuses asignados que ya circulan—) |
 | Bicis por puesto | `PUT /api/bikes/tracked` `{"ids": ["municipal/0", …]}` | `GET /api/bikes.csv?from=&to=&id=` (cada 15 min: `bikes`, `free_docks`, `takes`, `returns`, `occupancy_pct`) |
 | Toda la ciudad | — (siempre activo, desde que arranca el servidor) | `GET /api/city.csv?from=&to=` (cada 5 min: `cars`, `stopped`, `avg_speed_kmh`, `buses`, `bus_passengers`, `full_buses`, `bus_waiting`, `suspended_lines`, `bikes_in_use`, `stations_empty`, `stations_full`, `parkings_full`, metros de calle `closed_m` / `bus_only_m` / `limited_m`, `signals_all_red` y los viajes del intervalo: `trips_done`, `trip_min` (duración media), `delay_min` (retraso medio frente a ir sin tráfico ni cortes) y `trips_lost`; y `bus_unserved`, la gente que quería ir en autobús y no ha podido) |
 | Tiempo, eventos | — (siempre disponibles, también del pasado) | `GET /api/weather.csv`, `GET /api/events.csv` |

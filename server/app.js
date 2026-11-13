@@ -378,6 +378,20 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       });
     }
 
+    // Recorrido de una línea: sus paradas en orden (ida y vuelta), con coordenadas.
+    const routeMatch = /^\/api\/buses\/(L\d{1,3})$/.exec(pathname);
+    if (routeMatch && method === 'GET') {
+      const { engine } = runtime;
+      const index = engine.transit.lines.findIndex((l) => l.id === routeMatch[1]);
+      if (index < 0) throw new HttpError(404, 'Línea no encontrada');
+      engine.buses.updateAt(engine.simTime, engine.params.scenario, runtime.scale);
+      const line = engine.transit.lines[index];
+      return send(200, {
+        ...busLineJson(engine, index),
+        stops: line.stops.map((s, j) => ({ index: j, x: Math.round(s.x), z: Math.round(s.z), turnaround: !!s.turnaround })),
+      });
+    }
+
     // Calendario de eventos entre dos fechas (por defecto, los próximos 30 días simulados).
     if (method === 'GET' && pathname === '/api/events') {
       const { simTime } = runtime.engine;

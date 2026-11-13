@@ -221,6 +221,7 @@ export class Buses {
       // Tiempo (reloj de autobús) entre dos autobuses en cada parada: con más autobuses, menos gente sube a cada uno.
       const gap = active ? line.cycle / active : Infinity;
       stats.gap = gap;
+      stats.fleet = line.buses;
       this.gap = gap;
       const us = [];
       for (let b = 0; b < line.buses; b++) {

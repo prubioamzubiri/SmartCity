@@ -38,7 +38,7 @@ CREATE INDEX IF NOT EXISTS pedestrian_sensor ON pedestrian_records (sensor_id, t
 CREATE TABLE IF NOT EXISTS bus_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp TEXT NOT NULL, weekday TEXT NOT NULL, line_id TEXT NOT NULL, stops INTEGER, buses INTEGER,
-  passengers INTEGER, capacity INTEGER, occupancy_pct REAL, full_buses INTEGER, waiting INTEGER, left_behind INTEGER
+  passengers INTEGER, capacity INTEGER, occupancy_pct REAL, full_buses INTEGER, waiting INTEGER, left_behind INTEGER, fleet INTEGER
 );
 CREATE INDEX IF NOT EXISTS bus_time ON bus_records (timestamp);
 CREATE INDEX IF NOT EXISTS bus_line ON bus_records (line_id, timestamp);
@@ -81,7 +81,7 @@ export class Store {
       if (!have.has(column)) this.db.exec(`ALTER TABLE city_records ADD COLUMN ${column} ${type}`);
     }
     const busHave = new Set(this.db.prepare('PRAGMA table_info(bus_records)').all().map((c) => c.name));
-    if (!busHave.has('left_behind')) this.db.exec('ALTER TABLE bus_records ADD COLUMN left_behind INTEGER');
+    for (const column of ['left_behind', 'fleet']) if (!busHave.has(column)) this.db.exec(`ALTER TABLE bus_records ADD COLUMN ${column} INTEGER`);
     this.inserts = {};
     for (const [kind, { table, columns }] of Object.entries(TABLES)) {
       this.inserts[kind] = this.db.prepare(
