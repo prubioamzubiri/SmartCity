@@ -191,6 +191,17 @@ export const CONFIG = {
     capacityDelaySeconds: 30 * 86400, // un cambio de anclajes tarda 30 días simulados en hacer efecto
     maxCapacity: 60,
     intervalSeconds: 900, // una muestra por estación registrada cada tantos segundos simulados
+    // Ida y vuelta al trabajo (laborables): por la mañana se cogen bicis en los barrios y se dejan en el centro; por la
+    // tarde, al revés. Así hay puestos que se vacían y otros que se llenan cada día, y se puede prever cuáles.
+    commute: {
+      centerRadius: 1000, // metros al centro: puesto del centro
+      suburbRadius: 1500, // a partir de aquí, puesto de barrio (entre medias, sin sesgo)
+      morning: [7, 10], // horas de ida
+      evening: [17, 20], // horas de vuelta
+      strength: 0.8, // coger y dejar se multiplican o dividen por 1 + strength en el sentido de la marea
+    },
+    // Furgonetas para redistribuir bicis entre puestos: van al origen, cargan, viajan y descargan.
+    vans: { count: 3, capacity: 20, speed: 4, handlingSeconds: 900 }, // speed en m/s (con tráfico); handling: cargar o descargar
   },
 
   // Transporte público: líneas de autobús circulares (ida y vuelta) que cruzan la ciudad entre paradas de OSM (solo visual).

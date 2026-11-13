@@ -1,5 +1,5 @@
 import { CONFIG } from '../config.js';
-import { bikeDemand, simDate } from '../traffic/demand.js';
+import { bikeDemand, scenarioForTime, simDate } from '../traffic/demand.js';
 import { createRng } from '../core/random.js';
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -54,6 +54,82 @@ export class BikeNetwork {
     this.nextStep = Math.ceil(getSimTime() / this.stepSeconds) * this.stepSeconds;
     this.tracked = new Set();
     this.pending = [];
+    // Puestos del centro (1), de barrio (-1) o intermedios (0), para la ida y vuelta al trabajo.
+    const M = C.commute;
+    this.zone = this.stationList.map((s) => {
+      const d = Math.hypot(s.x, s.z);
+      return d <= M.centerRadius ? 1 : d >= M.suburbRadius ? -1 : 0;
+    });
+    // Furgonetas: posición, ocupada hasta y trabajo en curso.
+    this.vans = Array.from({ length: C.vans.count }, (_, k) => ({ id: `F${k + 1}`, x: 0, z: 0, job: null }));
+    this.moved = 0; // bicis movidas en furgoneta desde el arranque
+  }
+
+  // Multiplicadores de coger y dejar bici en el puesto `i` a la hora `time` (marea de ida y vuelta al trabajo).
+  tide(i, time) {
+    const M = CONFIG.bicycles.commute;
+    const z = this.zone[i];
+    // Días de trabajo (laborables y vísperas de festivo); en fin de semana y festivos no hay marea.
+    if (!z || !['weekday', 'preholiday'].includes(scenarioForTime(time, this.getParams().scenario))) return [1, 1];
+    const h = simDate(time).getUTCHours();
+    const way = h >= M.morning[0] && h < M.morning[1] ? 1 : h >= M.evening[0] && h < M.evening[1] ? -1 : 0;
+    if (!way) return [1, 1];
+    // Mañana: los barrios (z = -1) se vacían y el centro (z = 1) se llena; tarde, al revés.
+    const f = 1 + M.strength;
+    return z * way > 0 ? [1 / f, f] : [f, 1 / f];
+  }
+
+  // Encarga a una furgoneta libre mover hasta `bikes` bicis del puesto `from` al `to`. Va al origen, carga las que haya
+  // (como mucho su capacidad), va al destino y descarga las que quepan; las que no caben las deja en circulación.
+  moveBikes(from, to, bikes, now) {
+    const V = CONFIG.bicycles.vans;
+    const a = this.index.get(from);
+    const b = this.index.get(to);
+    if (a === undefined || b === undefined) throw new Error('Estación desconocida');
+    if (a === b) throw new Error('El origen y el destino deben ser distintos');
+    if (!Number.isInteger(bikes) || bikes < 1 || bikes > V.capacity) throw new Error(`bikes debe ser un entero entre 1 y ${V.capacity}`);
+    const free = this.vans.filter((v) => !v.job);
+    if (!free.length) return null;
+    const A = this.stationList[a];
+    const B = this.stationList[b];
+    const van = free.reduce((best, v) => (Math.hypot(v.x - A.x, v.z - A.z) < Math.hypot(best.x - A.x, best.z - A.z) ? v : best));
+    const loadAt = now + Math.hypot(van.x - A.x, van.z - A.z) / V.speed + V.handlingSeconds;
+    const unloadAt = loadAt + Math.hypot(A.x - B.x, A.z - B.z) / V.speed + V.handlingSeconds;
+    van.job = { from, to, bikes, loadAt, unloadAt, loaded: null, unloaded: null };
+    return van;
+  }
+
+  // Avanza las furgonetas hasta `time`: cargan al llegar al origen y descargan al llegar al destino.
+  moveVans(time) {
+    for (const van of this.vans) {
+      const job = van.job;
+      if (!job) continue;
+      if (job.loaded === null && job.loadAt <= time) {
+        const a = this.index.get(job.from);
+        job.loaded = Math.min(job.bikes, this.docked[a]);
+        this.docked[a] -= job.loaded;
+        van.x = this.stationList[a].x;
+        van.z = this.stationList[a].z;
+      }
+      if (job.loaded !== null && job.unloadAt <= time) {
+        const b = this.index.get(job.to);
+        const fit = Math.min(job.loaded, this.stationList[b].capacity - this.docked[b]);
+        this.docked[b] += fit;
+        this.inUse += job.loaded - fit; // las que no caben se dejan en otro puesto (en circulación)
+        this.moved += job.loaded;
+        van.x = this.stationList[b].x;
+        van.z = this.stationList[b].z;
+        van.job = null;
+      }
+    }
+  }
+
+  vansState() {
+    const iso = (t) => simDate(t).toISOString().slice(0, 19);
+    return this.vans.map((v) => ({
+      id: v.id, x: Math.round(v.x), z: Math.round(v.z), busy: !!v.job,
+      job: v.job ? { from: v.job.from, to: v.job.to, bikes: v.job.bikes, loaded: v.job.loaded, loadAt: iso(v.job.loadAt), unloadAt: iso(v.job.unloadAt) } : null,
+    }));
   }
 
   get count() {
@@ -115,10 +191,11 @@ export class BikeNetwork {
     if (!this.count) return;
     const C = CONFIG.bicycles;
     this.applyChanges(time);
+    this.moveVans(time);
     const rng = createRng(hash(`${Math.round(time / this.stepSeconds)}:${CONFIG.sim.seed}`));
     const demand = bikeDemand(time, this.getParams().scenario);
     for (let i = 0; i < this.count; i++) {
-      const lambda = (C.takesPerHour * this.stationList[i].weight * (this.stationList[i].capacity / DEFAULT_CAPACITY) * demand * this.stepSeconds) / 3600;
+      const lambda = (C.takesPerHour * this.stationList[i].weight * (this.stationList[i].capacity / DEFAULT_CAPACITY) * demand * this.tide(i, time)[0] * this.stepSeconds) / 3600;
       const taken = Math.min(this.docked[i], poisson(lambda, rng));
       this.docked[i] -= taken;
       this.takes[i] += taken;
@@ -127,7 +204,7 @@ export class BikeNetwork {
     const expected = this.inUse * (1 - Math.exp(-this.stepSeconds / C.tripSeconds));
     const arrivals = Math.min(this.inUse, Math.floor(expected) + (rng() < expected % 1 ? 1 : 0));
     for (let n = 0; n < arrivals; n++) {
-      const i = this.pickReturn(rng());
+      const i = this.pickReturn(rng(), time);
       if (i < 0) break;
       this.docked[i]++;
       this.returns[i]++;
@@ -137,13 +214,14 @@ export class BikeNetwork {
   }
 
   // Estación donde deja la bicicleta: probabilidad ∝ popularidad × anclajes libres.
-  pickReturn(u) {
+  pickReturn(u, time) {
+    const w = this.stationList.map((s, i) => s.weight * (s.capacity - this.docked[i]) * (time === undefined ? 1 : this.tide(i, time)[1]));
     let total = 0;
-    for (let i = 0; i < this.count; i++) total += (this.stationList[i].capacity - this.docked[i]) * this.stationList[i].weight;
+    for (let i = 0; i < this.count; i++) total += w[i];
     if (total <= 0) return -1;
     let target = u * total;
     for (let i = 0; i < this.count; i++) {
-      target -= this.stationList[i].weight * (this.stationList[i].capacity - this.docked[i]);
+      target -= w[i];
       if (target < 0) return i;
     }
     return this.count - 1;
@@ -180,6 +258,8 @@ export class BikeNetwork {
   state() {
     return {
       inUse: this.inUse,
+      vans: this.vansState(),
+      moved: this.moved,
       stations: this.stationList.map((s, i) => ({
         id: s.id,
         name: s.name,
@@ -201,6 +281,8 @@ export class BikeNetwork {
       tracked: [...this.tracked],
       changes: [...this.changes].map(([id, c]) => [id, c.capacity, c.effectiveAt]),
       stations: this.stationList.map((s, i) => [s.id, this.docked[i], this.takes[i], this.returns[i], s.capacity]),
+      vans: this.vans.map((v) => ({ x: v.x, z: v.z, job: v.job })),
+      moved: this.moved,
     };
   }
 
@@ -209,6 +291,10 @@ export class BikeNetwork {
     this.inUse = state.inUse;
     this.tracked = new Set(state.tracked.filter((id) => this.index.has(id)));
     this.changes = new Map((state.changes ?? []).filter(([id]) => this.index.has(id)).map(([id, capacity, effectiveAt]) => [id, { capacity, effectiveAt }]));
+    (state.vans ?? []).forEach((v, k) => {
+      if (this.vans[k]) Object.assign(this.vans[k], { x: v.x, z: v.z, job: v.job && this.index.has(v.job.from) && this.index.has(v.job.to) ? v.job : null });
+    });
+    this.moved = state.moved ?? 0;
     for (const [id, docked, takes, returns, capacity] of state.stations) {
       const i = this.index.get(id);
       if (i === undefined) continue;

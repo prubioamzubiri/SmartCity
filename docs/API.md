@@ -77,6 +77,11 @@ una línea pasan más a menudo: se espera menos y sube menos gente a cada uno. Q
 
 `inUse` y, por puesto: `id`, `name`, `x`, `z`, `capacity` (anclajes), `available` (bicis libres), `pending` (cambio de
 capacidad en curso). Anclajes libres = `capacity − available`. Son estimaciones del simulador, no sensores reales.
+Además, `vans` (las furgonetas de redistribución: `id`, posición `x`/`z`, `busy` y el trabajo en curso, `job`, con
+`from`, `to`, `bikes`, `loaded` y las horas `loadAt`/`unloadAt`) y `moved` (bicis movidas en furgoneta).
+
+Los laborables hay **marea**: por la mañana (7–10 h) se cogen bicis en los barrios y se dejan en el centro, y por la tarde
+(17–20 h), al revés. Los puestos de los barrios se vacían y los del centro se llenan cada día a horas parecidas.
 
 ### Parkings
 
@@ -248,7 +253,15 @@ curl -X PATCH http://localhost:8080/api/buses/L1 -H "Authorization: Bearer $TOKE
 (todo o nada); `null` cancela un cambio pendiente. **Tarda 30 días simulados** (unas 14 h reales) en aplicarse; mientras
 tanto sale en `pending`.
 
-### 3.5 La demanda no se controla
+### 3.5 Bicicletas — `POST /api/bikes/moves`
+
+`{"from": "municipal/3", "to": "municipal/17", "bikes": 15}` encarga a una **furgoneta** (hay 3, de 20 bicis) mover bicis
+de un puesto a otro. La libre más cercana va al origen, carga las que haya (como mucho `bikes`), va al destino y descarga
+las que quepan. **Cada viaje tarda**: unos 15 min en cargar, otros 15 en descargar y el trayecto (≈15 km/h). Responde `201`
+con la furgoneta y las horas de carga y descarga (`loadAt`, `unloadAt`), o `409` si no hay ninguna libre. Para tener las
+bicis donde hagan falta en la hora punta hay que moverlas **antes**: cuando el puesto ya está vacío, se llega tarde.
+
+### 3.6 La demanda no se controla
 
 Cuántos coches y peatones hay en la ciudad **no se puede cambiar**: lo fija el servidor (`params` en `GET /api/state`:
 `maxCars` y `maxPedestrians` en hora punta) y **varía un poco al azar** cada día (±10 %) y de hora en hora (±5 %), como

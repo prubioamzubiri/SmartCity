@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { CONFIG } from '../src/config.js';
 import { SimEngine } from '../src/core/engine.js';
 import { Store, BIKE_COLUMNS } from '../server/store.js';
 import { Runtime } from '../server/runtime.js';
@@ -156,4 +157,74 @@ test('API: schedule capacities, all-or-nothing, and see them applied', async (t)
   const after = (await (await fetch(`${base}/api/bikes`)).json()).stations[0];
   assert.equal(after.capacity, 20);
   assert.equal(after.pending, null);
+});
+
+test('on weekdays bikes flow from the suburbs to the centre in the morning and back in the evening', async () => {
+  const { BikeNetwork } = await import('../src/bikes/bikeNetwork.js');
+  const stations = [
+    { id: 'centro', x: 100, z: 0, capacity: 20 },
+    { id: 'barrio', x: 3000, z: 0, capacity: 20 },
+    { id: 'medio', x: 1200, z: 0, capacity: 20 },
+  ];
+  const net = new BikeNetwork({ stations, getSimTime: () => 0, getParams: () => ({ scenario: 'auto' }) });
+  const monday = (h) => h * 3600; // la fecha base es un lunes
+  // Mañana: en el centro se coge menos y se deja más; en el barrio, al revés.
+  const [takeC, retC] = net.tide(0, monday(8));
+  const [takeB, retB] = net.tide(1, monday(8));
+  assert.ok(takeC < 1 && retC > 1 && takeB > 1 && retB < 1);
+  // Tarde, al revés; a mediodía y en los puestos intermedios, sin marea.
+  assert.deepEqual(net.tide(0, monday(18)), [takeB, retB]);
+  assert.deepEqual(net.tide(0, monday(12)), [1, 1]);
+  assert.deepEqual(net.tide(2, monday(8)), [1, 1]);
+  // Sábado: sin marea.
+  assert.deepEqual(net.tide(0, 5 * 86400 + monday(8)), [1, 1]);
+});
+
+test('vans move bikes between stations: they drive to the origin, load, drive and unload, and are busy meanwhile', () => {
+  const engine = new SimEngine({ data: city(), maxCars: 5 });
+  const net = engine.bikes;
+  const t0 = net.nextStep;
+  const before = net.state();
+  const fleet = before.stations.reduce((n, s) => n + s.available, 0) + net.inUse;
+  const [a, b] = before.stations;
+  assert.throws(() => net.moveBikes(a.id, a.id, 3, t0), /distintos/);
+  assert.throws(() => net.moveBikes(a.id, b.id, 0, t0), /entero/);
+  assert.throws(() => net.moveBikes('nope', b.id, 3, t0), /desconocida/);
+  const vans = CONFIG.bicycles.vans.count;
+  for (let k = 0; k < vans; k++) assert.ok(net.moveBikes(a.id, b.id, 3, t0));
+  assert.equal(net.moveBikes(a.id, b.id, 3, t0), null, 'todas ocupadas');
+  const job = net.vans[0].job;
+  assert.ok(job.loadAt >= t0 + CONFIG.bicycles.vans.handlingSeconds && job.unloadAt > job.loadAt);
+  // Con la red parada (sin gente), solo se mueven las de las furgonetas.
+  net.getParams = () => ({ scenario: 'auto' });
+  const copy = new SimEngine({ data: city(), maxCars: 5 });
+  copy.restore(JSON.parse(JSON.stringify(engine.snapshot())));
+  assert.equal(copy.bikes.vansState()[0].busy, true);
+  net.tick(job.unloadAt + 600);
+  assert.ok(net.vans.every((v) => !v.job), 'terminan y quedan libres');
+  assert.ok(net.moved > 0);
+  assert.equal(net.state().stations.reduce((n, s) => n + s.available, 0) + net.inUse, fleet, 'no se pierden bicis');
+});
+
+test('API: ask a van to move bikes', async (t) => {
+  const now = clock();
+  const store = new Store();
+  const engine = new SimEngine({ data: city(), maxCars: 5 });
+  const runtime = new Runtime({ engine, store, now, checkpointMs: 1e9 });
+  const server = http.createServer(createApp({ runtime, store, token: 'secreto' }));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (body, token = 'secreto') => fetch(`${base}/api/bikes/moves`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+  const ok = await post({ from: 'node/0', to: 'node/5', bikes: 4 });
+  assert.equal(ok.status, 201);
+  const body = await ok.json();
+  assert.equal(body.bikes, 4);
+  assert.match(body.unloadAt, /^\d{4}-\d\d-\d\dT/);
+  assert.equal((await post({ from: 'node/0', to: 'node/0', bikes: 4 })).status, 400);
+  assert.equal((await post({ from: 'node/0', to: 'node/5', bikes: 4 }, 'malo')).status, 401);
+  for (let k = 1; k < CONFIG.bicycles.vans.count; k++) await post({ from: 'node/1', to: 'node/6', bikes: 2 });
+  assert.equal((await post({ from: 'node/2', to: 'node/7', bikes: 2 })).status, 409);
+  const state = await (await fetch(`${base}/api/bikes`)).json();
+  assert.ok(state.vans.every((v) => v.busy));
 });

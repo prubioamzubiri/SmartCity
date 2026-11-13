@@ -564,6 +564,24 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       return send(200, runtime.engine.bikes.state());
     }
 
+    // Redistribuir bicis con una furgoneta: { from, to, bikes }. La furgoneta libre más cercana va al origen, carga,
+    // viaja y descarga (tarda); 409 si no hay ninguna libre.
+    if (method === 'POST' && pathname === '/api/bikes/moves') {
+      authorize(req);
+      const { from, to, bikes } = await readJson(req);
+      let van;
+      try {
+        runtime.mutate((e) => {
+          van = e.bikes.moveBikes(String(from), String(to), bikes, e.simTime);
+        });
+      } catch (err) {
+        throw new HttpError(400, err.message);
+      }
+      if (!van) throw new HttpError(409, 'No hay furgonetas libres: espera a que termine alguna (GET /api/bikes, vans)');
+      const iso = (t) => simDate(t).toISOString().slice(0, 19);
+      return send(201, { van: van.id, from: van.job.from, to: van.job.to, bikes: van.job.bikes, loadAt: iso(van.job.loadAt), unloadAt: iso(van.job.unloadAt) });
+    }
+
     if (method === 'PUT' && pathname === '/api/bikes/tracked') {
       authorize(req);
       const { ids } = await readJson(req);
