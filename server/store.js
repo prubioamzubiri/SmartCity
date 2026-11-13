@@ -7,7 +7,8 @@ export const TRAFFIC_COLUMNS = ['timestamp', 'weekday', 'sensor_id', 'sensor_nam
 export const PARKING_COLUMNS = ['timestamp', 'weekday', 'parking_id', 'parking_name', 'capacity', 'occupied', 'free', 'occupancy_pct'];
 
 export const PEDESTRIAN_COLUMNS = ['timestamp', 'weekday', 'sensor_id', 'sensor_name', 'x', 'z', 'count', 'count_walk', 'count_cross', 'present'];
-export const BUS_COLUMNS = ['timestamp', 'weekday', 'line_id', 'stops', 'buses', 'passengers', 'capacity', 'occupancy_pct', 'full_buses', 'waiting'];
+import { BUS_COLUMNS } from '../src/sensors/busTracker.js';
+export { BUS_COLUMNS };
 export const BIKE_COLUMNS = ['timestamp', 'weekday', 'station_id', 'station_name', 'x', 'z', 'capacity', 'bikes', 'free_docks', 'takes', 'returns', 'occupancy_pct'];
 
 const SCHEMA = `
@@ -37,7 +38,7 @@ CREATE INDEX IF NOT EXISTS pedestrian_sensor ON pedestrian_records (sensor_id, t
 CREATE TABLE IF NOT EXISTS bus_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp TEXT NOT NULL, weekday TEXT NOT NULL, line_id TEXT NOT NULL, stops INTEGER, buses INTEGER,
-  passengers INTEGER, capacity INTEGER, occupancy_pct REAL, full_buses INTEGER, waiting INTEGER
+  passengers INTEGER, capacity INTEGER, occupancy_pct REAL, full_buses INTEGER, waiting INTEGER, left_behind INTEGER, fleet INTEGER
 );
 CREATE INDEX IF NOT EXISTS bus_time ON bus_records (timestamp);
 CREATE INDEX IF NOT EXISTS bus_line ON bus_records (line_id, timestamp);
@@ -75,10 +76,12 @@ export class Store {
     this.db.exec(SCHEMA);
     // Bases de datos creadas con una versión anterior: añade las columnas nuevas del histórico global.
     const have = new Set(this.db.prepare('PRAGMA table_info(city_records)').all().map((c) => c.name));
-    const types = { trips_done: 'INTEGER', trip_min: 'REAL', delay_min: 'REAL', trips_lost: 'INTEGER' };
+    const types = { trips_done: 'INTEGER', trip_min: 'REAL', delay_min: 'REAL', trips_lost: 'INTEGER', bus_unserved: 'INTEGER', bus_demand: 'INTEGER', ped_wait_s: 'REAL', ped_waiting: 'INTEGER', ped_space: 'REAL' };
     for (const [column, type] of Object.entries(types)) {
       if (!have.has(column)) this.db.exec(`ALTER TABLE city_records ADD COLUMN ${column} ${type}`);
     }
+    const busHave = new Set(this.db.prepare('PRAGMA table_info(bus_records)').all().map((c) => c.name));
+    for (const column of ['left_behind', 'fleet']) if (!busHave.has(column)) this.db.exec(`ALTER TABLE bus_records ADD COLUMN ${column} INTEGER`);
     this.inserts = {};
     for (const [kind, { table, columns }] of Object.entries(TABLES)) {
       this.inserts[kind] = this.db.prepare(

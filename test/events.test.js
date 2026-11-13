@@ -55,6 +55,19 @@ test('football and basketball home games are at their venues and mostly on weeke
   const weekend = football.filter((e) => [0, 6].includes(new Date(CONFIG.sim.baseDate + e.start * 1000).getUTCDay()));
   assert.ok(weekend.length >= football.length / 2);
   assert.ok(events.filter((e) => e.type === 'protest').length >= 20);
+  // Siempre a una hora de partido (no de madrugada): las fechas repartidas por la temporada caen a medianoche.
+  const hourOf = (e) => (e.start % DAY) / HOUR;
+  assert.ok(football.every((e) => [14, 16, 16.25, 18.5, 21].includes(hourOf(e))), football.map(hourOf).join(','));
+  assert.ok(basketball.every((e) => [12.5, 18, 20].includes(hourOf(e))));
+});
+
+test('events bring bus riders before they start and send them home when they end', () => {
+  const football = year(2026).find((e) => e.type === 'football');
+  const before = calendar.busDemandAt(football.start - 20 * 60);
+  const after = calendar.busDemandAt(football.end + 20 * 60);
+  assert.ok(before.some((e) => e.id === football.id && e.phase === 'arrive' && e.level > 0.5));
+  assert.ok(after.some((e) => e.id === football.id && e.phase === 'leave'));
+  assert.equal(calendar.busDemandAt(football.start - 6 * HOUR).filter((e) => e.id === football.id).length, 0);
 });
 
 test('venues are projected around the city centre', () => {

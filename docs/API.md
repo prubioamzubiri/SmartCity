@@ -38,7 +38,7 @@ Los puntos se dan en **metros desde el origen del mapa** (`x` hacia el este, `z`
 Campos principales: `simTime`, `scale`, `caughtUp`, `cars` (coches circulando), `params` (`maxCars`, `maxPedestrians`,
 `scenario`), `traffic` (`stopped` coches parados, `avgKmh` velocidad media), `signalPlan`, `sensors` y
 `pedestrianSensors` (con `total` acumulado y `current`), `parkings` (`id`, `name`, `capacity`, `occupancy` de 0 a 1,
-`tracked`), `pedestrians.expected` (peatones en la calle), `buses.lines` (`id`, `fleet`, `suspended`, `tracked`),
+`tracked`), `pedestrians.expected` (peatones en la calle), `pedestrians.meanWaitSeconds` (espera media de quien llega a cruzar en un cruce con semáforo: con un ciclo más largo o un reparto muy desigual, más) y `pedestrians.waitingAtSignals` (gente esperando ahora en esos cruces), `buses.lines` (`id`, `fleet`, `suspended`, `tracked`),
 `bikes` (`inUse` y `stations` con `available`, `capacity`, `pending`), `weather`, `holiday`, `events`, `restrictions`
 (las activas, como en `GET /api/restrictions`), `seed` (semilla de esta ciudad), `startSeconds` (cuándo empezó),
 `writeProtected` (los cambios necesitan token) y `records` (filas guardadas por tipo).
@@ -55,16 +55,33 @@ curl "http://localhost:8080/api/point?lat=43.3166&lon=-1.9800&radius=200"
 
 ### Autobuses — `GET /api/buses`
 
-Por línea (`id` = `L1`…): `fleet` (autobuses asignados), `minFleet`/`maxFleet`, `capacity` (plazas por autobús),
-`active` (en servicio ahora), `passengers` (a bordo), `full` (autobuses llenos), `waiting` (gente esperando en las
-paradas), `suspended` (recorrido cortado, ver §3) y `tracked`. Además, para toda la ciudad: `fleetTotal` (autobuses
-que tiene la ciudad) y `reserve` (los que no están asignados a ninguna línea).
-Ocupación de una línea = `passengers / (active × capacity)`.
+Por línea (`id` = `L1`…): `fleet` (autobuses asignados que ya circulan), `target` (los asignados contando los que van
+de camino desde la cochera), `pending` (los que van de camino: `[{count, readyAt}]`, ver §3.3), `minFleet`/`maxFleet`,
+`capacity` (plazas por autobús), `active` (en servicio ahora), `passengers` (a bordo), `full` (autobuses llenos),
+`waiting` (gente esperando en las paradas), `leftBehind` (gente que quería subir a los autobuses que están ahora en
+una parada y no ha cabido), `suspended` (recorrido cortado, ver §3) y `tracked`. Además, para toda la ciudad:
+`fleetTotal` (autobuses que tiene la ciudad), `reserve` (los que no están asignados a ninguna línea),
+`deployMinutes` (lo que tarda en entrar en servicio un autobús que se añade) y `today` (horas de autobús en servicio del
+día simulado: `busHours`, `includedHours` —las que haría la flota inicial— y `overtimeHours`, las de más).
+Ocupación de una línea = `passengers / (active × capacity)`. `GET /api/buses/<línea>` da lo mismo de una línea y además
+su recorrido: `stops`, las paradas en orden con sus coordenadas `x`, `z` (para saber, por ejemplo, qué líneas pasan
+cerca de la sede de un evento).
+
+Cuánta gente quiere ir en autobús depende de la hora, del día, de la **lluvia** (bastante más gente), de los
+**eventos** (antes de que empiecen, las líneas que pasan cerca de la sede se llenan; al acabar, sale todo el mundo a la
+vez de las paradas cercanas) y de las **calles cortadas** (menos coches y más gente en autobús). Con más autobuses en
+una línea pasan más a menudo: se espera menos y sube menos gente a cada uno. Quien no cabe o se cansa de esperar
+**coge el coche**: un mal servicio de autobús llena las calles.
 
 ### Bicicletas — `GET /api/bikes`
 
 `inUse` y, por puesto: `id`, `name`, `x`, `z`, `capacity` (anclajes), `available` (bicis libres), `pending` (cambio de
 capacidad en curso). Anclajes libres = `capacity − available`. Son estimaciones del simulador, no sensores reales.
+Además, `vans` (las furgonetas de redistribución: `id`, posición `x`/`z`, `busy` y el trabajo en curso, `job`, con
+`from`, `to`, `bikes`, `loaded` y las horas `loadAt`/`unloadAt`) y `moved` (bicis movidas en furgoneta).
+
+Los laborables hay **marea**: por la mañana (7–10 h) se cogen bicis en los barrios y se dejan en el centro, y por la tarde
+(17–20 h), al revés. Los puestos de los barrios se vacían y los del centro se llenan cada día a horas parecidas.
 
 ### Parkings
 
@@ -74,7 +91,9 @@ capacidad en curso). Anclajes libres = `capacity − available`. Son estimacione
 
 Lista los semáforos que regulan tráfico (`?all=1` incluye también los pasos de peatones; `?x=&z=&radius=` filtra por
 zona). Cada uno: `id`, `x`, `z`, `mode`, `state` (`ew` = eje este-oeste, `ns` = norte-sur: `green`/`yellow`/`red`),
-`timing` (`greenEw`, `greenNs`, `yellow`, `cycle` en segundos) y `override` (ajustes propios, o `null`).
+`timing` (`greenEw`, `greenNs`, `yellow`, `cycle` en segundos), `override` (ajustes propios, o `null`) y, como las espiras
+de un cruce real, el **detector** de cada eje: `approaching` (coches a menos de 100 m de la línea de parada) y `queue`
+(cuántos de ellos están parados).
 `GET /api/signals/<id>` devuelve uno solo.
 
 ### Calles — `GET /api/roads?x=&z=&radius=&limit=`
@@ -101,9 +120,9 @@ hayáis activado**, y **desde que los activáis** (no hay pasado anterior): acti
 | Coches por punto | `POST /api/sensors` `{x, z, name}` → `id` (`S1`…). También `PATCH`/`DELETE /api/sensors/<id>` | `GET /api/traffic.csv?from=&to=&id=` (cada 5 min: `count`, `count_fwd`, `count_bwd`, `avg_speed_kmh`) |
 | Peatones por punto | `POST /api/pedestrian-sensors` `{x, z, name}` → `id` (`P1`…) | `GET /api/pedestrians.csv?from=&to=&id=` (`count`, `count_walk`, `count_cross`, `present`) |
 | Ocupación de parkings | `PUT /api/parking/tracked` `{"ids": ["U-125_53", …]}` | `GET /api/parking.csv?from=&to=&id=` |
-| Autobuses por línea | `PUT /api/buses/tracked` `{"ids": ["L1", …]}` | `GET /api/buses.csv?from=&to=&id=` (cada 5 min: `buses`, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`) |
+| Autobuses por línea | `PUT /api/buses/tracked` `{"ids": ["L1", …]}` | `GET /api/buses.csv?from=&to=&id=` (cada 5 min: `buses`, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`, `left_behind`, `fleet` —autobuses asignados que ya circulan—) |
 | Bicis por puesto | `PUT /api/bikes/tracked` `{"ids": ["municipal/0", …]}` | `GET /api/bikes.csv?from=&to=&id=` (cada 15 min: `bikes`, `free_docks`, `takes`, `returns`, `occupancy_pct`) |
-| Toda la ciudad | — (siempre activo, desde que arranca el servidor) | `GET /api/city.csv?from=&to=` (cada 5 min: `cars`, `stopped`, `avg_speed_kmh`, `buses`, `bus_passengers`, `full_buses`, `bus_waiting`, `suspended_lines`, `bikes_in_use`, `stations_empty`, `stations_full`, `parkings_full`, metros de calle `closed_m` / `bus_only_m` / `limited_m`, `signals_all_red` y los viajes del intervalo: `trips_done`, `trip_min` (duración media), `delay_min` (retraso medio frente a ir sin tráfico ni cortes) y `trips_lost`) |
+| Toda la ciudad | — (siempre activo, desde que arranca el servidor) | `GET /api/city.csv?from=&to=` (cada 5 min: `cars`, `stopped`, `avg_speed_kmh`, `buses`, `bus_passengers`, `full_buses`, `bus_waiting`, `suspended_lines`, `bikes_in_use`, `stations_empty`, `stations_full`, `parkings_full`, metros de calle `closed_m` / `bus_only_m` / `limited_m`, `signals_all_red` y los viajes del intervalo: `trips_done`, `trip_min` (duración media), `delay_min` (retraso medio frente a ir sin tráfico ni cortes) y `trips_lost`; `bus_unserved`, la gente que quería ir en autobús y no ha podido; `bus_demand`, la gente que quiere ir en autobús (por hora); `ped_wait_s` y `ped_waiting`, la espera media y la gente esperando en los cruces con semáforo —cruzar una calle cortada a los coches no tiene espera—; y `ped_space`, el espacio ganado por los peatones: km de calle cortada a los coches × lo concurrida que es × la gente que hay en la calle; solo bus cuenta el 70 %) |
 | Tiempo, eventos | — (siempre disponibles, también del pasado) | `GET /api/weather.csv`, `GET /api/events.csv` |
 
 Cada `PUT …/tracked` **sustituye** la lista anterior: enviad todos los ids que queráis grabar.
@@ -174,7 +193,7 @@ propio, `{"reset": true}` borra todos los ajustes del semáforo):
 | `mode` | `normal` (ciclo) · `off` (apagado) o `flashing` (ámbar intermitente): cruce sin regular (ver abajo) · `all_red`: todos se detienen |
 | `green` | Segundos de verde de ambos ejes (5–180) |
 | `greenA` / `greenB` | Verde del eje este-oeste / norte-sur por separado (5–180) |
-| `yellow` | Segundos de ámbar (1–10) |
+| `yellow` | Segundos de ámbar (3–6: por seguridad, no se puede bajar de 3) |
 | `schedule` | Lista (hasta 20) de reglas con horario: `[{"when": {"start": "07:00", "end": "09:00", "weekdays": [1,2,3,4,5]}, "greenA": 40}]`. `when` admite `start`/`end` (HH:MM, juntos), `weekdays` (0 = domingo), `months`, `daysOfMonth`, `years` y `dates` (AAAA-MM-DD) |
 
 ```sh
@@ -209,9 +228,16 @@ paso a menos de 40 m de un semáforo cruzan con el rojo de los coches.
 
 ### 3.3 Autobuses de una línea — `PATCH /api/buses/<línea>`
 
-`{"fleet": 12}` fija el número de autobuses de la línea (`L1`…) entre `minFleet` y `maxFleet` (1–30). El cambio es
-**inmediato** y se conserva tras un reinicio. Cuántos circulan a la vez depende además de la demanda de la hora
+`{"fleet": 12}` fija el número de autobuses de la línea (`L1`…) entre `minFleet` y `maxFleet` (1–30) y se conserva tras
+un reinicio. **Quitar es inmediato** (vuelven a la cochera), pero **los que se añaden tardan `deployMinutes` (40 min
+simulados) en entrar en servicio**: salen de la cochera y van en `pending` con la hora a la que llegan (`readyAt`).
+Para tenerlos a tiempo en la hora punta o en un evento hay que pedirlos **antes**. Si se piden menos mientras hay
+autobuses de camino, se cancelan primero esos. Cuántos circulan a la vez depende además de la demanda de la hora
 (`active` en `GET /api/buses`): con poca demanda solo sale una parte de la flota.
+
+Las horas de autobús en servicio cuestan: las de la flota inicial están incluidas, pero **las de más son sobrecoste**
+(`today.overtimeHours`) y salen cada vez más caras cuantas más se acumulan en el día. Conviene reforzar cuando y donde
+hace falta, no todo el día.
 
 La **flota total es fija**: la ciudad tiene los autobuses iniciales de todas las líneas más un 10 % de reserva
 (`fleetTotal`). Se pueden repartir como se quiera entre las líneas, pero no añadir más: para dar autobuses a una línea
@@ -227,11 +253,21 @@ curl -X PATCH http://localhost:8080/api/buses/L1 -H "Authorization: Bearer $TOKE
 (todo o nada); `null` cancela un cambio pendiente. **Tarda 30 días simulados** (unas 14 h reales) en aplicarse; mientras
 tanto sale en `pending`.
 
-### 3.5 La demanda no se controla
+### 3.5 Bicicletas — `POST /api/bikes/moves`
+
+`{"from": "municipal/3", "to": "municipal/17", "bikes": 15}` encarga a una **furgoneta** (hay 3, de 20 bicis) mover bicis
+de un puesto a otro. La libre más cercana va al origen, carga las que haya (como mucho `bikes`), va al destino y descarga
+las que quepan. **Cada viaje tarda**: unos 15 min en cargar, otros 15 en descargar y el trayecto (≈15 km/h). Responde `201`
+con la furgoneta y las horas de carga y descarga (`loadAt`, `unloadAt`), o `409` si no hay ninguna libre. Para tener las
+bicis donde hagan falta en la hora punta hay que moverlas **antes**: cuando el puesto ya está vacío, se llega tarde.
+
+### 3.6 La demanda no se controla
 
 Cuántos coches y peatones hay en la ciudad **no se puede cambiar**: lo fija el servidor (`params` en `GET /api/state`:
 `maxCars` y `maxPedestrians` en hora punta) y **varía un poco al azar** cada día (±10 %) y de hora en hora (±5 %), como
-en una ciudad real. `PUT /api/params` responde `403`. Hay que predecirla con los históricos, no fijarla.
+en una ciudad real. `PUT /api/params` responde `403`. Hay que predecirla con los históricos, no fijarla. Lo que hagáis
+sí la cambia **de forma indirecta**: con calles cortadas hay menos coches y más gente en autobús, y si los autobuses no
+dan abasto (gente en tierra o esperas muy largas) parte de esa gente coge el coche.
 
 ---
 

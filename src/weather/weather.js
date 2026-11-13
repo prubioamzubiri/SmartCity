@@ -133,6 +133,7 @@ export function createWeather(config = CONFIG.weather, baseDate = CONFIG.sim.bas
     const cold = E.cold * clamp((8 - w.temperature) / 8, 0, 1);
     return {
       cars: 1 + E.carsRain * level,
+      transit: 1 + E.transitRain * level,
       speed: 1 - E.speedRain * level,
       pedestrians: (1 - E.pedestriansRain * level) * (1 + sun - cold),
       bikes: (1 - E.bikesRain * level) * (1 + sun * E.bikesSun - cold),

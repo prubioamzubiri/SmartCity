@@ -112,11 +112,12 @@ export const CONFIG = {
     heavyRain: 2, // mm/h con los que el efecto de la lluvia es máximo
     // Efecto sobre la actividad (1 = el máximo de la lluvia o del buen tiempo).
     effects: {
-      carsRain: 0.2, // más coches (y más usuarios de autobús y aparcamiento) con lluvia
+      carsRain: 0.35, // más coches (y aparcamientos llenos) con lluvia
+      transitRain: 0.6, // y aún más gente en autobús
       speedRain: 0.18, // los coches circulan más despacio con lluvia
       pedestriansRain: 0.6, // menos peatones con lluvia
       bikesRain: 0.85, // y casi nadie en bici
-      sun: 0.15, // más peatones con sol y temperatura agradable (12–32 °C)
+      sun: 0.4, // más peatones con sol y temperatura agradable (12–32 °C)
       bikesSun: 1.5, // las bicis responden más al buen tiempo que los peatones
       cold: 0.2, // menos gente por debajo de 8 °C
     },
@@ -135,7 +136,8 @@ export const CONFIG = {
     laneOffset: 2.2,
     lookAhead: 60,
     stopGap: 3,
-    stuckSeconds: 300, // un coche parado tanto tiempo reaparece en otro punto (rompe bloqueos sin salida)
+    stuckSeconds: 120, // un coche parado tanto tiempo abandona y reaparece en otro punto: deshace los bloqueos (con más, un
+    // atasco que no se deshace hacía el tráfico caótico: un cambio mínimo movía el índice del día ±8 puntos)
     // m/s por clase de vía: autovía, primaria, secundaria, terciaria, residencial
     speedByClass: [22, 16, 13, 11, 8],
   },
@@ -152,6 +154,8 @@ export const CONFIG = {
   // Peatones: triángulos que caminan por las aceras y cruzan por los pasos de peatones de OSM (solo visual).
   pedestrians: {
     max: 12000, // con la demanda máxima
+    // Espacio peatonal (ped_space): cuánto cuenta cada km de calle cortada según el modo (solo bus: pasan autobuses).
+    spaceShare: { pedestrians_only: 1, buses_and_pedestrians: 0.7 },
     walkFraction: 0.75, // fracción que camina por las aceras; el resto cruza por los pasos de peatones
     minDensity: 0.15, // fracción de peatones activos aunque la demanda sea nula
     speed: 1.4, // m/s de paseo real (en pantalla: speed × clockScale m/s)
@@ -187,6 +191,17 @@ export const CONFIG = {
     capacityDelaySeconds: 30 * 86400, // un cambio de anclajes tarda 30 días simulados en hacer efecto
     maxCapacity: 60,
     intervalSeconds: 900, // una muestra por estación registrada cada tantos segundos simulados
+    // Ida y vuelta al trabajo (laborables): por la mañana se cogen bicis en los barrios y se dejan en el centro; por la
+    // tarde, al revés. Así hay puestos que se vacían y otros que se llenan cada día, y se puede prever cuáles.
+    commute: {
+      centerRadius: 1000, // metros al centro: puesto del centro
+      suburbRadius: 1500, // a partir de aquí, puesto de barrio (entre medias, sin sesgo)
+      morning: [7, 10], // horas de ida
+      evening: [17, 20], // horas de vuelta
+      strength: 0.8, // coger y dejar se multiplican o dividen por 1 + strength en el sentido de la marea
+    },
+    // Furgonetas para redistribuir bicis entre puestos: van al origen, cargan, viajan y descargan.
+    vans: { count: 3, capacity: 20, speed: 4, handlingSeconds: 900 }, // speed en m/s (con tráfico); handling: cargar o descargar
   },
 
   // Transporte público: líneas de autobús circulares (ida y vuelta) que cruzan la ciudad entre paradas de OSM (solo visual).
@@ -214,18 +229,27 @@ export const CONFIG = {
     minFleet: 1, // rango de autobuses por línea que se puede fijar desde la API
     maxFleet: 30,
     reserve: 0.1, // flota total = la inicial de todas las líneas + este tanto por uno de reserva (fija: solo se reparte)
+    deployMinutes: 40, // minutos simulados que tarda un autobús de la reserva en llegar desde la cochera y entrar en servicio
+    patienceSeconds: 900, // (reloj de autobús) quien espera más que esto se cansa y se va (y coge el coche)
+    eventRiders: 2.5, // demanda de más en las líneas que pasan cerca de un evento, por unidad de `boost` (100.000 asistentes)
+    eventArrivalPeak: 2.5, // la llegada se concentra al final: demanda × eventArrivalPeak × nivel² (mismo total)
+    eventReach: 1.5, // una parada sirve a un evento si está a menos de radio × eventReach de la sede
+    // Cambio de modo: si toda la gente que quería ir en autobús se queda sin servicio, la demanda de coches sube esto.
+    modeShift: 0.5,
+    modeShiftFrom: 0.05, // fracción sin servicio a partir de la cual hay cambio de modo
+    // Calles cortadas o solo para autobuses y peatones: menos coches y más gente en autobús, por km (con un tope).
+    closures: { carsPerKm: 0.03, transitPerKm: 0.025, maxKm: 8 },
     clockScale: 12, // ritmo del reloj de los autobuses respecto al tiempo real; nunca supera la escala del servidor
     minService: 0.35, // fracción de la flota en servicio con la demanda mínima (con la máxima, toda)
     capacity: 80, // pasajeros por autobús
     fullAt: 0.9, // ocupación a partir de la cual el autobús se considera lleno
-    boardings: 8, // pasajeros que suben de media en una parada de peso 1 con la demanda máxima
+    boardings: 6, // pasajeros que suben de media en una parada de peso 1 con la demanda máxima y un autobús cada `headway`
     alightMin: 0.1, // fracción de los pasajeros que baja en cada parada: entre alightMin y alightMin + alightSpread
     alightSpread: 0.25,
     minStopWeight: 0.4, // peso de atracción de la parada (el de la calle según los POI entre referencia)
     maxStopWeight: 3,
     referenceWeight: 1.5,
     maxWaiting: 14, // peatones que se dibujan esperando en una parada
-    waitingSeconds: 600, // segundos de espera a partir de los cuales la parada tiene su máximo de gente
     length: 12, // metros del autobús
     width: 3,
     height: 3.2,
@@ -241,6 +265,8 @@ export const CONFIG = {
   signals: {
     green: 20,
     yellow: 3,
+    yellowRange: [3, 6], // segundos de ámbar permitidos (por seguridad, no menos de 3)
+    detectorRange: 100, // metros antes de la línea de parada que cubre el detector de cada semáforo (GET /api/signals)
     lostSeconds: 2, // segundos de rojo para todos al empezar cada verde (despeje y arranque)
     clusterDistance: 45, // metros para agrupar semáforos de un mismo cruce
     // Semáforo apagado o en ámbar intermitente: cruce sin regular.
@@ -254,6 +280,13 @@ export const CONFIG = {
       // Con la calle llena de peatones, tanto por uno del tiempo con el paso ocupado. En ámbar intermitente el peatón tiene
       // prioridad (cruza al llegar y los coches paran); apagado, cruza cuando hay hueco (los coches paran menos).
       pedestrianShare: { flashing: 0.45, off: 0.15 },
+    },
+    // Espera de los peatones en los cruces con semáforo. Quien llega con su semáforo en rojo espera hasta su verde: de
+    // media rojo² / (2 × ciclo) por sentido de cruce (con un ciclo de 24 s, unos 6 s; con uno de 60 s, unos 15 s).
+    pedestrianWait: {
+      arrivalsPerSecond: 0.3, // peatones que llegan a cruzar por segundo a cada cruce con la calle llena (se escala con la gente)
+      maxSeconds: 90, // más de esto no espera nadie (cruza en rojo o da la vuelta): es lo que cuenta en rojo para todos
+      unsignalized: { flashing: 2, off: 8 }, // en ámbar cruza casi al llegar; apagado, espera un hueco entre coches
     },
   },
 

@@ -111,7 +111,13 @@ function signalJson(engine, s, index) {
     state: { ew: LIGHT[engine.signals.states[index * 2]], ns: LIGHT[engine.signals.states[index * 2 + 1]] },
     timing: { greenEw: gA, greenNs: gB, yellow: y, cycle: gA + gB + 2 * y },
     override: engine.signals.plan.signals[s.id] ?? null,
+    ...(s.active ? detectorJson(engine.sim.detectorCounts(index)) : {}),
   };
+}
+
+// Detector del semáforo por eje: coches que llegan (a menos de CONFIG.signals.detectorRange m) y cuántos esperan parados.
+function detectorJson([[ewCars, ewStopped], [nsCars, nsStopped]]) {
+  return { approaching: { ew: ewCars, ns: nsCars }, queue: { ew: ewStopped, ns: nsStopped } };
 }
 
 // Valida los campos de un semáforo (o del plan por defecto).
@@ -125,7 +131,7 @@ function checkSignalSettings(settings, where) {
   range('green', 5, 180);
   range('greenA', 5, 180);
   range('greenB', 5, 180);
-  range('yellow', 1, 10);
+  range('yellow', ...CONFIG.signals.yellowRange);
   const { schedule } = settings;
   if (schedule !== undefined && schedule !== null && (!Array.isArray(schedule) || schedule.length > 20 || !schedule.every((r) => r && typeof r === 'object' && !Array.isArray(r)))) {
     throw new HttpError(400, `${where}schedule debe ser una lista de hasta 20 reglas`);
@@ -152,6 +158,36 @@ const MAX_EVENT_RANGE = 366 * 86400;
 const iso = (seconds) => simDate(seconds).toISOString().slice(0, 19);
 
 // La asistencia y la demanda extra solo se publican cuando el evento ha terminado: antes hay que predecirlas.
+// Peatones en los cruces con semáforo: espera media de quien llega a cruzar y gente esperando ahora.
+function pedestrianWaitJson(engine) {
+  const { meanWait, waiting } = engine.signals.pedestrianWait(engine.simTime);
+  return { meanWaitSeconds: Math.round(meanWait * 10) / 10, waitingAtSignals: Math.round(waiting) };
+}
+
+// Autobuses que van de camino desde la cochera a una línea.
+function pendingJson(engine, li) {
+  return engine.buses.pendingOf(li).map((p) => ({ count: p.count, readyAt: iso(p.at) }));
+}
+
+// Una línea en GET /api/buses y PATCH /api/buses/<línea>.
+function busLineJson(engine, i) {
+  const l = engine.transit.lines[i];
+  const { active, passengers, full, waiting, leftBehind } = engine.buses.stats[i];
+  return {
+    id: l.id, stops: l.stops.length, fleet: l.buses, target: engine.buses.committed(i), pending: pendingJson(engine, i),
+    minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet, capacity: CONFIG.transit.capacity,
+    suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
+    active, passengers, full, waiting, leftBehind,
+  };
+}
+
+// Horas de autobús en servicio hoy frente a las incluidas (las que haría la flota inicial): las de más son sobrecoste.
+function busDayJson(engine) {
+  const { used, included } = engine.busDay;
+  const r = (x) => Math.round(x * 10) / 10;
+  return { busHours: r(used), includedHours: r(included), overtimeHours: r(Math.max(0, used - included)) };
+}
+
 function eventJson(event, simSeconds) {
   const venue = eventCalendar.venues[event.venue];
   const over = event.end <= simSeconds;
@@ -275,7 +311,10 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
           ...eventJson(event, engine.simTime), intensity: Math.round(intensity * 100) / 100,
         })),
       },
-      pedestrians: { expected: Math.round(engine.pedestrians.flowAt(engine.simTime, engine.params.scenario, engine.params.maxPedestrians).onStreet) },
+      pedestrians: {
+        expected: Math.round(engine.pedestrians.flowAt(engine.simTime, engine.params.scenario, engine.params.maxPedestrians).onStreet),
+        ...pedestrianWaitJson(engine),
+      },
       pedestrianSensors: engine.pedSensors.sensors.map((s) => ({
         id: s.id, name: s.name, x: Math.round(s.x * 10) / 10, z: Math.round(s.z * 10) / 10,
         total: s.total, current: Math.round(engine.pedSensors.presentNow(s, engine.simTime)),
@@ -283,9 +322,11 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       buses: {
         fleetTotal: engine.buses.fleetTotal,
         reserve: engine.buses.reserve(),
+        extraDemand: Math.round(engine.buses.extraDemand * 1000) / 1000,
+        today: busDayJson(engine),
         lines: engine.transit.lines.map((l, i) => ({
           id: l.id, color: l.color, stops: l.stops.length, fleet: l.buses, minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet,
-          suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
+          pending: pendingJson(engine, i), suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
         })),
       },
       bikes: engine.bikes.state(),
@@ -340,10 +381,23 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
         simSeconds: engine.simTime,
         fleetTotal: engine.buses.fleetTotal,
         reserve: engine.buses.reserve(),
-        lines: engine.transit.lines.map((l, i) => ({
-          id: l.id, stops: l.stops.length, fleet: l.buses, minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet, capacity: CONFIG.transit.capacity,
-          suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id), ...engine.buses.stats[i],
-        })),
+        deployMinutes: CONFIG.transit.deployMinutes,
+        today: busDayJson(engine),
+        lines: engine.transit.lines.map((l, i) => busLineJson(engine, i)),
+      });
+    }
+
+    // Recorrido de una línea: sus paradas en orden (ida y vuelta), con coordenadas.
+    const routeMatch = /^\/api\/buses\/(L\d{1,3})$/.exec(pathname);
+    if (routeMatch && method === 'GET') {
+      const { engine } = runtime;
+      const index = engine.transit.lines.findIndex((l) => l.id === routeMatch[1]);
+      if (index < 0) throw new HttpError(404, 'Línea no encontrada');
+      engine.buses.updateAt(engine.simTime, engine.params.scenario, runtime.scale);
+      const line = engine.transit.lines[index];
+      return send(200, {
+        ...busLineJson(engine, index),
+        stops: line.stops.map((s, j) => ({ index: j, x: Math.round(s.x), z: Math.round(s.z), turnaround: !!s.turnaround })),
       });
     }
 
@@ -510,6 +564,24 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       return send(200, runtime.engine.bikes.state());
     }
 
+    // Redistribuir bicis con una furgoneta: { from, to, bikes }. La furgoneta libre más cercana va al origen, carga,
+    // viaja y descarga (tarda); 409 si no hay ninguna libre.
+    if (method === 'POST' && pathname === '/api/bikes/moves') {
+      authorize(req);
+      const { from, to, bikes } = await readJson(req);
+      let van;
+      try {
+        runtime.mutate((e) => {
+          van = e.bikes.moveBikes(String(from), String(to), bikes, e.simTime);
+        });
+      } catch (err) {
+        throw new HttpError(400, err.message);
+      }
+      if (!van) throw new HttpError(409, 'No hay furgonetas libres: espera a que termine alguna (GET /api/bikes, vans)');
+      const iso = (t) => simDate(t).toISOString().slice(0, 19);
+      return send(201, { van: van.id, from: van.job.from, to: van.job.to, bikes: van.job.bikes, loadAt: iso(van.job.loadAt), unloadAt: iso(van.job.unloadAt) });
+    }
+
     if (method === 'PUT' && pathname === '/api/bikes/tracked') {
       authorize(req);
       const { ids } = await readJson(req);
@@ -674,7 +746,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       return send(200, engine.restrictions.describe(item));
     }
 
-    // Número de autobuses de una línea: { fleet: 12 }. Cambia al instante y se conserva tras un reinicio.
+    // Número de autobuses de una línea: { fleet: 12 }. Quitar es inmediato; los que se añaden salen de la cochera y
+    // entran en servicio `deployMinutes` después (en `pending`). Se conserva tras un reinicio.
     const busMatch = /^\/api\/buses\/(L\d{1,3})$/.exec(pathname);
     if (busMatch && method === 'PATCH') {
       authorize(req);
@@ -686,13 +759,12 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       if (!Number.isInteger(fleet) || fleet < CONFIG.transit.minFleet || fleet > CONFIG.transit.maxFleet) {
         throw new HttpError(400, `fleet debe ser un entero entre ${CONFIG.transit.minFleet} y ${CONFIG.transit.maxFleet}`);
       }
-      if (fleet - engine.transit.lines[index].buses > engine.buses.reserve()) {
+      if (fleet - engine.buses.committed(index) > engine.buses.reserve()) {
         throw new HttpError(409, `No hay autobuses suficientes: quedan ${engine.buses.reserve()} en reserva (flota total ${engine.buses.fleetTotal}). Quita autobuses de otra línea primero`);
       }
       runtime.mutate((e) => e.setBusFleet(id, fleet));
       engine.buses.updateAt(engine.simTime, engine.params.scenario, runtime.scale);
-      const line = engine.transit.lines[index];
-      return send(200, { id, stops: line.stops.length, fleet: line.buses, reserve: engine.buses.reserve(), fleetTotal: engine.buses.fleetTotal, suspended: engine.buses.suspended[index], ...engine.buses.stats[index] });
+      return send(200, { ...busLineJson(engine, index), reserve: engine.buses.reserve(), fleetTotal: engine.buses.fleetTotal });
     }
 
     throw new HttpError(404, 'No encontrado');

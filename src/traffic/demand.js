@@ -102,14 +102,16 @@ export function createDemandModel(config = CONFIG.traffic, baseDate = CONFIG.sim
   }
   // Coches, aparcamientos y autobuses: con lluvia sale más gente en coche o transporte.
   const demandFactor = (seconds, mode = defaultMode) => baseDemand(seconds, mode) * (weather ? weather.effectsAt(seconds).cars : 1);
+  // Autobuses: con lluvia, bastante más gente que en coche (quien iba andando o en bici).
+  const transitDemand = (seconds, mode = defaultMode) => baseDemand(seconds, mode) * (weather ? weather.effectsAt(seconds).transit : 1);
   // Peatones y bicis: la lluvia los reduce y el buen tiempo los aumenta.
   const pedestrianDemand = (seconds, mode = defaultMode) => baseDemand(seconds, mode) * (weather ? weather.effectsAt(seconds).pedestrians : 1);
   const bikeDemand = (seconds, mode = defaultMode) => baseDemand(seconds, mode) * (weather ? weather.effectsAt(seconds).bikes : 1);
   // Multiplicador de la velocidad de los coches por el tiempo.
   const speedFactor = (seconds) => (weather ? weather.effectsAt(seconds).speed : 1);
-  return { demandFactor, pedestrianDemand, bikeDemand, speedFactor, scenarioForTime };
+  return { demandFactor, transitDemand, pedestrianDemand, bikeDemand, speedFactor, scenarioForTime };
 }
 
-export const { demandFactor, pedestrianDemand, bikeDemand, speedFactor, scenarioForTime } = createDemandModel(
+export const { demandFactor, transitDemand, pedestrianDemand, bikeDemand, speedFactor, scenarioForTime } = createDemandModel(
   CONFIG.traffic, CONFIG.sim.baseDate, CONFIG.events.enabled ? eventCalendar : null, CONFIG.weather.enabled ? cityWeather : null, CONFIG.holidays.enabled ? holidayCalendar : null,
 );

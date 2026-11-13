@@ -154,21 +154,143 @@ test('the fleet of a line can be changed within limits', () => {
   assert.equal(b.fleetTotal, Math.round(b.defaultFleet.reduce((x, y) => x + y, 0) * (1 + CONFIG.transit.reserve)));
   const target = before + b.reserve();
   assert.equal(engine.setBusFleet(line.id, target), true);
+  // Los autobuses de la reserva salen de la cochera: cuentan ya en la flota, pero entran en servicio más tarde.
+  assert.equal(line.buses, before);
+  assert.equal(b.committed(0), target);
+  assert.equal(b.reserve(), 0);
+  assert.deepEqual(b.pendingOf(0), [{ count: target - before, at: engine.simTime + CONFIG.transit.deployMinutes * 60 }]);
+  b.tick(engine.simTime + CONFIG.transit.deployMinutes * 60 - 1);
+  assert.equal(line.buses, before);
+  b.tick(engine.simTime + CONFIG.transit.deployMinutes * 60);
   engine.buses.updateAt(NOON, engine.params.scenario, 1);
   assert.equal(line.buses, target);
-  assert.equal(b.reserve(), 0);
+  assert.deepEqual(b.pendingOf(0), []);
   assert.equal(line.headway, line.cycle / target);
   assert.ok(engine.buses.stats[0].active <= target && engine.buses.stats[0].active >= before * CONFIG.transit.minService - 1);
   // Sin reserva no se pueden añadir más; quitándoselos a otra línea, sí.
   assert.throws(() => engine.setBusFleet(line.id, target + 1), FleetError);
+  const otherBefore = other.buses;
   engine.setBusFleet(other.id, other.buses - 1);
+  assert.equal(other.buses, otherBefore - 1, 'quitar es inmediato');
   assert.equal(engine.setBusFleet(line.id, target + 1), true);
   assert.equal(b.reserve(), 0);
+  b.tick(engine.simTime + CONFIG.transit.deployMinutes * 60);
   assert.equal(engine.setBusFleet('L99', 5), false);
   assert.throws(() => engine.setBusFleet(line.id, 0), RangeError);
   assert.throws(() => engine.setBusFleet(line.id, CONFIG.transit.maxFleet + 1), RangeError);
   assert.throws(() => engine.setBusFleet(line.id, 3.5), RangeError);
   assert.equal(line.buses, target + 1);
+  // Pedir menos mientras hay autobuses en camino cancela primero esos.
+  engine.setBusFleet(line.id, target);
+  engine.setBusFleet(other.id, otherBefore);
+  assert.equal(other.buses, otherBefore - 1);
+  engine.setBusFleet(other.id, otherBefore - 1);
+  assert.deepEqual(b.pendingOf(1), []);
+  assert.equal(other.buses, otherBefore - 1);
+  // Los que van de camino se guardan en el snapshot.
+  engine.setBusFleet(other.id, otherBefore);
+  assert.equal(b.pendingOf(1).length, 1);
+  const copy = engineOf(50);
+  copy.restore(JSON.parse(JSON.stringify(engine.snapshot())));
+  assert.deepEqual(copy.buses.pendingOf(1), b.pendingOf(1));
+});
+
+test('more buses mean fewer passengers per bus and fewer people left behind; those left behind take the car', () => {
+  const engine = engineOf(50);
+  const b = engine.buses;
+  const li = 0;
+  const line = engine.transit.lines[li];
+  const at = (fleet) => {
+    b.setFleet(li, fleet, { limit: false });
+    b.updateAt(NOON, engine.params.scenario, 1);
+    return { ...b.stats[li] };
+  };
+  const normal = line.buses;
+  const few = at(1);
+  const many = at(normal + 4);
+  assert.ok(few.waiting > many.waiting, `espera ${few.waiting} > ${many.waiting}`);
+  assert.ok(few.passengers / Math.max(1, few.active) > many.passengers / Math.max(1, many.active));
+  // Con un solo autobús y mucha gente, se queda gente en tierra y parte de ella se va al coche.
+  b.extraDemand = 4;
+  at(1);
+  assert.ok(b.unservedOf(li) > 0.3, `sin servicio: ${b.unservedOf(li)}`);
+  b.extraDemand = 1;
+  at(normal + 4);
+  assert.ok(b.unservedOf(li) < 0.05, `sin servicio: ${b.unservedOf(li)}`);
+});
+
+test('an event fills the lines that stop near its venue; closed streets mean fewer cars and more bus riders', async () => {
+  const { eventCalendar } = await import('../src/events/calendar.js');
+  const engine = engineOf(50);
+  const b = engine.buses;
+  const football = eventCalendar.eventsBetween(0, 365 * 86400).find((e) => e.type === 'football');
+  const t = football.start - 15 * 60;
+  b.updateStopFactors(t);
+  const near = b.lines.map((line, li) => line.stops.some((st) => Math.hypot(st.x - football.x, st.z - football.z) <= football.radius * CONFIG.transit.eventReach) ? li : -1).filter((li) => li >= 0);
+  assert.ok(near.length > 0, 'alguna línea pasa cerca de Anoeta');
+  const factorOf = (li) => b.stopFactor[b.stopOffset[li] + 1];
+  for (const li of near) assert.ok(factorOf(li) > 1.5, `línea ${li}: ${factorOf(li)}`);
+  b.lines.forEach((_, li) => { if (!near.includes(li)) assert.equal(factorOf(li), 1); });
+
+  // La demanda que traen los cortes no saca autobuses por sí sola (si no, sería sobrecoste sin haber pedido nada),
+  // pero sí hay más gente que quiere subir.
+  b.extraDemand = 1;
+  b.updateAt(NOON, engine.params.scenario, 1);
+  const active1 = b.stats.reduce((a, x) => a + x.active, 0);
+  const riders1 = b.riders();
+  b.extraDemand = 1.4;
+  b.updateAt(NOON, engine.params.scenario, 1);
+  assert.equal(b.stats.reduce((a, x) => a + x.active, 0), active1);
+  assert.ok(b.riders() > riders1 * 1.2, `${riders1} -> ${b.riders()}`);
+  b.extraDemand = 1;
+
+  // Horas de autobús del día: con la flota inicial, todas incluidas.
+  engine.updateTransit(NOON);
+  assert.ok(engine.busDay.used > 0 && Math.abs(engine.busDay.used - engine.busDay.included) < 1e-9);
+
+  // Calles cortadas: el motor baja la demanda de coches y sube la de autobús.
+  const g = engine.graph;
+  engine.restrictions.add({ mode: 'pedestrians_only', ways: [g.way[g.nearestSegment(0, 0, 50).e]] });
+  engine.updateTransit(NOON);
+  assert.ok(engine.carFactor < 1, `coches × ${engine.carFactor}`);
+  assert.ok(b.extraDemand > 1, `autobús × ${b.extraDemand}`);
+});
+
+test('pedestrians wait longer at signals with long cycles or unequal splits, and most with all-red', () => {
+  const engine = engineOf(50);
+  const s = engine.signals;
+  s.setPedestrianLoad(1);
+  const wait = () => s.pedestrianWait(NOON);
+  s.setGlobalGreen(10, 3);
+  const short = wait();
+  s.setGlobalGreen(30, 3);
+  const long = wait();
+  assert.ok(long.meanWait > 1.9 * short.meanWait, `${short.meanWait} -> ${long.meanWait}`);
+  assert.ok(long.waiting > short.waiting);
+  // Ciclo 26 s (10 + 10 + 2 × 3): cada sentido espera 16² / 52 ≈ 4,9 s de media.
+  assert.ok(Math.abs(short.meanWait - 16 ** 2 / 52) < 1e-9);
+  s.setPlan({ default: { green: 10, yellow: 3, mode: 'all_red' } });
+  assert.equal(wait().meanWait, CONFIG.signals.pedestrianWait.maxSeconds);
+  s.setPlan({ default: { green: 10, yellow: 3, mode: 'flashing' } });
+  assert.equal(wait().meanWait, CONFIG.signals.pedestrianWait.unsignalized.flashing);
+  // En una calle cerrada a los coches se cruza sin esperar.
+  s.setPlan({ default: { green: 30, yellow: 3 } });
+  const signal = s.signals.find((x) => x.active && x.approaches?.length);
+  const before = wait().meanWait;
+  engine.restrictions.add({ mode: 'pedestrians_only', ways: [...new Set(signal.approaches.map((e) => engine.graph.way[e]))] });
+  assert.ok(s.axisClosed(signal, 0) || s.axisClosed(signal, 1));
+  assert.ok(wait().meanWait < before, `${before} -> ${wait().meanWait}`);
+  // La calle cortada es espacio ganado por los peatones, más cuanta más gente hay en la calle.
+  assert.ok(engine.pedestrianSpace() > 0);
+  const full = engine.pedestrianSpace();
+  s.setPedestrianLoad(0.5);
+  assert.ok(Math.abs(engine.pedestrianSpace() - full / 2) < 1e-9);
+  s.setPedestrianLoad(1);
+  // Sin gente en la calle, nadie espera.
+  s.setPedestrianLoad(0);
+  assert.equal(wait().waiting, 0);
+  const row = engine.cityRow(NOON);
+  assert.ok('ped_wait_s' in row && 'ped_waiting' in row);
 });
 
 test('signals can be switched off, set to all-red and timed individually', () => {
@@ -302,6 +424,9 @@ test('API: point query, signals and bus fleet', async (t) => {
 
   const list = await call('/api/signals');
   assert.deepEqual(list.body.signals.map((s) => s.id).sort(), [5001, 5002]);
+  for (const s of list.body.signals) {
+    assert.ok(Number.isInteger(s.queue.ew) && Number.isInteger(s.queue.ns) && s.queue.ew <= s.approaching.ew && s.queue.ns <= s.approaching.ns);
+  }
   assert.equal((await call('/api/signals?x=0&z=0&radius=1')).body.signals.length, 1);
   const off = await call('/api/signals/5001', { method: 'PATCH', body: { mode: 'off' } });
   assert.equal(off.status, 200);
@@ -313,6 +438,9 @@ test('API: point query, signals and bus fleet', async (t) => {
   assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { reset: true } })).body.override, null);
   assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { mode: 'roto' } })).status, 400);
   assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { greenA: 1 } })).status, 400);
+  // El ámbar no puede bajar de 3 s (seguridad) ni subir de 6.
+  assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { yellow: 1 } })).status, 400);
+  assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { yellow: 7 } })).status, 400);
   assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { color: 'rojo' } })).status, 400);
   assert.equal((await call('/api/signals/5001', { method: 'PATCH', body: { mode: 'off' }, auth: 'mal' })).status, 401);
   assert.equal((await call('/api/signals/1234', { method: 'PATCH', body: { mode: 'off' } })).status, 404);
@@ -328,9 +456,20 @@ test('API: point query, signals and bus fleet', async (t) => {
   const wanted = line.fleet + reserve;
   const fleet = await call(`/api/buses/${line.id}`, { method: 'PATCH', body: { fleet: wanted } });
   assert.equal(fleet.status, 200);
-  assert.equal(fleet.body.fleet, wanted);
+  assert.equal(fleet.body.fleet, line.fleet, 'los nuevos salen de la cochera');
+  assert.equal(fleet.body.target, wanted);
+  assert.equal(fleet.body.pending.length, 1);
+  assert.equal(fleet.body.pending[0].count, reserve);
+  assert.match(fleet.body.pending[0].readyAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/);
   assert.equal(fleet.body.reserve, 0);
-  assert.equal((await call('/api/state')).body.buses.lines[0].fleet, wanted);
+  assert.equal((await call('/api/state')).body.buses.lines[0].pending[0].count, reserve);
+  const route = await call(`/api/buses/${line.id}`);
+  assert.equal(route.status, 200);
+  assert.equal(route.body.stops.length, line.stops);
+  assert.ok(route.body.stops.every((st) => Number.isFinite(st.x) && Number.isFinite(st.z)));
+  assert.equal((await call('/api/buses/L99')).status, 404);
+  const today = (await call('/api/buses')).body.today;
+  assert.deepEqual(Object.keys(today), ['busHours', 'includedHours', 'overtimeHours']);
   assert.equal((await call('/api/state')).body.buses.reserve, 0);
   // La flota total es fija: sin reserva, 409.
   const tooMany = await call(`/api/buses/${line.id}`, { method: 'PATCH', body: { fleet: wanted + 1 } });
@@ -508,4 +647,25 @@ test('at a zebra crossing without signal cars stop while people cross, more ofte
     }
   }
   assert.ok(onRoad > 0, 'alguien cruza');
+});
+
+test('each signal has a detector per axis: cars approaching within range and how many are stopped', async (t) => {
+  const engine = engineOf(0);
+  const g = engine.graph;
+  const sim = engine.sim;
+  const index = engine.signals.signals.findIndex((x) => x.id === 5001);
+  const approaches = engine.signals.signals[index].approaches;
+  const ew = approaches.find((e) => g.grp[e] === 0);
+  const ns = approaches.find((e) => g.grp[e] === 1);
+  sim.activeCount = 3;
+  sim.place(0, ew);
+  sim.pos[0] = g.len[ew] - 20; // parado cerca de la línea
+  sim.speed[0] = 0;
+  sim.place(1, ew);
+  sim.pos[1] = g.len[ew] - 60; // llegando
+  sim.speed[1] = 8;
+  sim.place(2, ns);
+  sim.pos[2] = g.len[ns] - CONFIG.signals.detectorRange - 30; // fuera del alcance del detector
+  sim.speed[2] = 0;
+  assert.deepEqual(sim.detectorCounts(index), [[2, 1], [0, 0]]);
 });
