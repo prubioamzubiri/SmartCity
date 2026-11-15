@@ -214,7 +214,7 @@ export function createEventCalendar(config = CONFIG.events, baseDate = CONFIG.si
   // Sedes que atraen coches ahora: posición, radio y fuerza (demanda extra que aportan).
   function attractorsAt(seconds) {
     return activeAt(seconds).map(({ event, intensity: level }) => ({
-      id: event.id, x: event.x, z: event.z, radius: event.radius, weight: event.boost * level,
+      id: event.id, venue: event.venue, x: event.x, z: event.z, radius: event.radius, weight: event.boost * level,
     }));
   }
 

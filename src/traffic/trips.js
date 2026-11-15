@@ -86,6 +86,36 @@ export class TripPlanner {
       this.cumulative[i] = total;
     });
     this.totalWeight = total;
+    this.gridZones = this.zones.length;
+    this.points = new Map(); // destinos con nombre (sedes de eventos) -> índice de zona
+  }
+
+  // Destino propio en un punto (la sede de un evento): el cruce del núcleo más cercano. No entra en el sorteo normal.
+  addPoint(key, x, z) {
+    if (this.points.has(key)) return this.points.get(key);
+    const g = this.g;
+    let best = -1;
+    let bestD = Infinity;
+    for (let n = 0; n < g.nodeCount; n++) {
+      if (!this.inMain[n]) continue;
+      const d = (g.nx[n] - x) ** 2 + (g.nz[n] - z) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = n;
+      }
+    }
+    if (best < 0) return -1;
+    const index = this.zones.length;
+    this.zones.push({ cell: -1, node: best, x: g.nx[best], z: g.nz[best], weight: 0, point: key });
+    const free = this.field(best, null);
+    this.free = [...this.free, free];
+    this.live = this.closed ? [...this.live, this.field(best, this.closed)] : this.free;
+    this.points.set(key, index);
+    return index;
+  }
+
+  isPoint(zone) {
+    return zone >= this.gridZones;
   }
 
   // Núcleo de la red: cruces desde los que se puede ir a cualquier otro del núcleo y volver (la mayor componente
@@ -222,11 +252,11 @@ export class TripPlanner {
     this.live = this.zones.map((z) => this.field(z.node, this.closed));
   }
 
-  // Zona de destino al azar, proporcional a su peso (r en [0, 1)).
+  // Zona de destino al azar, proporcional a su peso (r en [0, 1)); nunca una sede.
   pick(r) {
     const x = r * this.totalWeight;
     let lo = 0;
-    let hi = this.cumulative.length - 1;
+    let hi = this.gridZones - 1;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
       if (this.cumulative[mid] > x) hi = mid;

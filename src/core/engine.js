@@ -47,6 +47,9 @@ export class SimEngine {
       rng: createRng(seed),
       crosswalks: this.crosswalks,
     });
+    // Cada sede de evento es un destino propio (siempre en el mismo orden: los snapshots guardan el índice del destino).
+    if (this.sim.trips && CONFIG.events.enabled) for (const v of Object.values(eventCalendar.venues)) this.sim.trips.addPoint(v.id, v.x, v.z);
+    this.eventCarCut = 0; // demanda de coches de los eventos que no llegan en coche porque sus calles están cortadas
     this.sensors = new SensorManager({ graph: this.graph, sim: this.sim, getSimTime: () => this.simTime, storage: null });
     this.parking = new ParkingTracker({
       lots: trackableUndergroundLots(data.parking?.underground),
@@ -164,7 +167,7 @@ export class SimEngine {
       this.signals.update(this.simTime);
       this.buses.tick(this.simTime);
       this.updateEnvironment();
-      this.sim.setTarget(this.params.maxCars * demandFactor(this.simTime, this.params.scenario) * this.carFactor);
+      this.sim.setTarget(this.params.maxCars * Math.max(0, demandFactor(this.simTime, this.params.scenario) - this.eventCarCut) * this.carFactor);
       this.sim.step(STEP);
       this.sensors.tick(this.simTime);
       this.parking.tick(this.simTime);
@@ -185,6 +188,13 @@ export class SimEngine {
     this.environmentMinute = minute;
     this.sim.speedScale = speedFactor(minute * 60);
     this.sim.setAttractors(CONFIG.events.enabled ? eventCalendar.attractorsAt(minute * 60) : []);
+    // Con las calles de la sede cortadas, parte de la gente del evento no viene en coche: va andando o en autobús.
+    this.eventCarCut = 0;
+    this.buses.eventAccess = new Map();
+    for (const a of this.sim.attractors) {
+      this.eventCarCut += a.base * (1 - a.access);
+      this.buses.eventAccess.set(a.id, a.access);
+    }
     this.signals.setPedestrianLoad(pedestrianLoad(minute * 60, this.params.scenario, this.params.maxPedestrians));
     this.updateTransit(minute * 60);
   }
@@ -290,6 +300,11 @@ export class SimEngine {
     const g = this.graph;
     const share = CONFIG.pedestrians.spaceShare;
     const seen = new Uint8Array(g.edgeCount);
+    // Junto a un evento en marcha, la calle sin coches vale mucho más: es donde está la gente.
+    const crowd = new Map();
+    for (const a of this.sim.attractors) {
+      for (const e of a.edges) crowd.set(e, (crowd.get(e) ?? 0) + CONFIG.pedestrians.eventSpace * a.base);
+    }
     let sum = 0;
     for (const item of this.restrictions.items) {
       const f = share[item.mode] ?? 0;
@@ -298,7 +313,7 @@ export class SimEngine {
         if (seen[e]) continue;
         seen[e] = 1;
         if (g.rev[e] >= 0) seen[g.rev[e]] = 1; // las calles de doble sentido cuentan una vez
-        sum += g.len[e] * this.pedEdgeWeight[e] * f;
+        sum += g.len[e] * this.pedEdgeWeight[e] * f * (1 + (crowd.get(e) ?? 0));
       }
     }
     return (sum / 1000) * this.signals.pedestrianLoad;

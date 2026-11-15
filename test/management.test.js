@@ -293,6 +293,28 @@ test('pedestrians wait longer at signals with long cycles or unequal splits, and
   assert.ok('ped_wait_s' in row && 'ped_waiting' in row);
 });
 
+test('event venues are destinations of their own; closing their streets sends fewer cars and no lost trips', async () => {
+  const { eventCalendar } = await import('../src/events/calendar.js');
+  const engine = engineOf(50);
+  const sim = engine.sim;
+  const venue = eventCalendar.venues.anoeta;
+  const zone = sim.trips.points.get('anoeta');
+  assert.ok(sim.trips.isPoint(zone));
+  const z = sim.trips.zones[zone];
+  assert.ok(Math.hypot(z.x - venue.x, z.z - venue.z) < 300, 'el destino está en la sede');
+  const attractor = { id: 'x', venue: 'anoeta', x: venue.x, z: venue.z, radius: venue.radius, weight: 0.3 };
+  sim.setAttractors([attractor]);
+  assert.equal(sim.attractors[0].access, 1);
+  engine.restrictions.add({ mode: 'pedestrians_only', area: { x: venue.x, z: venue.z, radius: venue.radius } });
+  sim.setAttractors([attractor]);
+  assert.ok(sim.attractors[0].access < 0.5, `acceso ${sim.attractors[0].access}`);
+  assert.ok(sim.attractors[0].weight < 0.15 && sim.attractors[0].base === 0.3);
+  // Quien quería ir a la sede cortada no cuenta como viaje perdido.
+  const lost = sim.tripTotals.lost;
+  for (let k = 0; k < 50; k++) sim.startTrip(0, sim.edge[0], sim.pos[0]);
+  assert.ok(sim.tripTotals.lost - lost < 50);
+});
+
 test('signals can be switched off, set to all-red and timed individually', () => {
   const engine = engineOf(50);
   const s = engine.signals;

@@ -186,7 +186,9 @@ export class Buses {
           if (Math.hypot(st.x - ev.x, st.z - ev.z) <= reach) near.push(j);
         });
         if (!near.length) return;
-        const extra = T.eventRiders * ev.weight;
+        // Si las calles de la sede están cortadas, quien venía en coche viene en autobús.
+        const access = this.eventAccess?.get(ev.id) ?? 1;
+        const extra = T.eventRiders * ev.weight * (1 + (1 - access));
         if (ev.phase === 'leave') {
           // La misma gente que llegó por toda la línea sale ahora desde unas pocas paradas.
           const k = (extra * line.stops.length) / near.length;

@@ -149,6 +149,7 @@ export const CONFIG = {
     arriveSeconds: 25, // el viaje termina a menos de tantos segundos (sin tráfico) del centro de la zona
     choiceSeconds: 1, // azar al elegir ruta: una opción peor en tantos segundos pierde ~63 % de probabilidad (más, y dan vueltas)
     maxTripSeconds: 3600, // un viaje que dura más se da por perdido (coche dando vueltas)
+    parkSearchSeconds: 420, // quien llega a un evento da vueltas por la zona buscando aparcamiento tanto tiempo
   },
 
   // Peatones: triángulos que caminan por las aceras y cruzan por los pasos de peatones de OSM (solo visual).
@@ -156,6 +157,7 @@ export const CONFIG = {
     max: 12000, // con la demanda máxima
     // Espacio peatonal (ped_space): cuánto cuenta cada km de calle cortada según el modo (solo bus: pasan autobuses).
     spaceShare: { pedestrians_only: 1, buses_and_pedestrians: 0.7 },
+    eventSpace: 10, // junto a un evento en marcha, cada km cuenta 1 + eventSpace × (asistentes / 100.000)
     walkFraction: 0.75, // fracción que camina por las aceras; el resto cruza por los pasos de peatones
     minDensity: 0.15, // fracción de peatones activos aunque la demanda sea nula
     speed: 1.4, // m/s de paseo real (en pantalla: speed × clockScale m/s)
