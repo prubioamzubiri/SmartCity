@@ -90,6 +90,25 @@ export class TripPlanner {
     this.points = new Map(); // destinos con nombre (sedes de eventos) -> índice de zona
   }
 
+  // Peso de cada zona como destino según la actividad de sus calles (comercios, servicios...: `edgeWeights`, los
+  // mismos pesos que usan los peatones) y no solo por los metros de calle. El centro, con más actividad, atrae más.
+  setZoneWeights(edgeWeights) {
+    const g = this.g;
+    const byCell = new Map();
+    for (let e = 0; e < g.edgeCount; e++) {
+      const c = this.cellOf(g.nx[g.A[e]], g.nz[g.A[e]]);
+      byCell.set(c, (byCell.get(c) ?? 0) + g.len[e] * (T.activityBase + (edgeWeights[e] ?? 0)));
+    }
+    let total = 0;
+    for (let i = 0; i < this.gridZones; i++) {
+      const z = this.zones[i];
+      z.weight = byCell.get(z.cell) ?? z.weight;
+      total += z.weight;
+      this.cumulative[i] = total;
+    }
+    this.totalWeight = total;
+  }
+
   // Destino propio en un punto (la sede de un evento): el cruce del núcleo más cercano. No entra en el sorteo normal.
   addPoint(key, x, z) {
     if (this.points.has(key)) return this.points.get(key);
@@ -179,6 +198,7 @@ export class TripPlanner {
     const sx = (maxX - minX) / cells || 1;
     const sz = (maxZ - minZ) / cells || 1;
     const cellOf = (x, z) => Math.min(cells - 1, Math.floor((x - minX) / sx)) * cells + Math.min(cells - 1, Math.floor((z - minZ) / sz));
+    this.cellOf = cellOf;
     const acc = new Map();
     for (let e = 0; e < g.edgeCount; e++) {
       const a = g.A[e];

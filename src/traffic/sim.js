@@ -295,33 +295,40 @@ export class TrafficSim {
     return fallback >= 0 && this.allows(e, fallback) ? fallback : -1;
   }
 
-  // Tramo hacia el destino según su campo de tiempos (-2 si ningún tramo permitido tiene camino).
+  // Tramo hacia el destino según su campo de tiempos (-2 si ningún tramo permitido tiene camino). Solo valen los tramos
+  // que acercan al destino (así no hay vueltas en círculo) y, entre ellos, se reparte con un margen de `choiceSeconds`:
+  // una alternativa algo más lenta también se usa. Con un margen de 1 s todos los coches iban por el mismo camino y
+  // había giros y calles que no usaba nadie.
   towards(e, field, i = -1) {
     const g = this.g;
     const node = g.B[e];
     const rev = g.rev[e];
     const start = g.outStart[node];
     const end = g.outStart[node + 1];
+    const here = field[node];
     let best = Infinity;
+    let closer = false;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
       if (c === rev && end - start > 1) continue;
       if (!this.allows(e, c)) continue;
       const cost = this.trips.time[c] + field[g.B[c]];
       if (cost < best) best = cost;
+      if (field[g.B[c]] < here) closer = true;
     }
     if (best === Infinity) {
       // Cambio de sentido solo si no queda otra (callejón o calle cortada más adelante).
       if (rev >= 0 && this.allows(e, rev) && field[g.B[rev]] < Infinity) return rev;
       return -2;
     }
+    const usable = (c, cost) => cost < Infinity && (!closer || field[g.B[c]] < here);
     let total = 0;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
       if (c === rev && end - start > 1) continue;
       if (!this.allows(e, c)) continue;
       const cost = this.trips.time[c] + field[g.B[c]];
-      if (cost < Infinity) total += Math.exp((best - cost) / T.choiceSeconds);
+      if (usable(c, cost)) total += Math.exp((best - cost) / T.choiceSeconds);
     }
     let r = this.rand(i) * total;
     let last = -2;
@@ -330,7 +337,7 @@ export class TrafficSim {
       if (c === rev && end - start > 1) continue;
       if (!this.allows(e, c)) continue;
       const cost = this.trips.time[c] + field[g.B[c]];
-      if (cost === Infinity) continue;
+      if (!usable(c, cost)) continue;
       last = c;
       r -= Math.exp((best - cost) / T.choiceSeconds);
       if (r <= 0) return c;
