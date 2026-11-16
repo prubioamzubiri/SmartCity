@@ -5,6 +5,7 @@ import { Crosswalks } from '../traffic/crosswalks.js';
 import { TrafficSim } from '../traffic/sim.js';
 import { demandFactor, speedFactor } from '../traffic/demand.js';
 import { eventCalendar } from '../events/calendar.js';
+import { poiStrength, projectPois } from '../city/pois.js';
 import { SensorManager } from '../sensors/sensorManager.js';
 import { ParkingTracker } from '../sensors/parkingTracker.js';
 import { trackableUndergroundLots, undergroundOccupancy } from '../city/undergroundLots.js';
@@ -72,6 +73,12 @@ export class SimEngine {
     this.signals.isClosed = (e) => this.sim.closed[e] === 1;
     this.signals.setPedestrianWeights(weights.edge);
     this.sim.trips?.setZoneWeights(weights.edge);
+    // Lugares de interés: zonas de destino y calles de cada uno (para los coches que salen de ellos).
+    this.pois = projectPois().map((p) => ({
+      ...p,
+      zones: this.sim.trips ? this.sim.trips.zones.slice(0, this.sim.trips.gridZones).map((z, i) => (Math.hypot(z.x - p.x, z.z - p.z) <= p.radius + CONFIG.pois.zoneReach ? i : -1)).filter((i) => i >= 0) : [],
+      edges: this.sim.edgesNear(p),
+    }));
     this.pedEdgeWeight = weights.edge;
     this.restrictions = new Restrictions({
       graph: this.graph,
@@ -198,6 +205,24 @@ export class SimEngine {
     }
     this.signals.setPedestrianLoad(pedestrianLoad(minute * 60, this.params.scenario, this.params.maxPedestrians));
     this.updateTransit(minute * 60);
+    this.updatePois(minute * 60);
+  }
+
+  // Cada minuto: cuánto atrae cada lugar de interés como destino y cuánta gente sale de él (hora, tipo de día, tiempo).
+  updatePois(seconds) {
+    const trips = this.sim.trips;
+    if (!trips || !this.pois.length) return;
+    const factors = new Float64Array(trips.gridZones).fill(1);
+    const origins = [];
+    const byKind = new Map();
+    for (const p of this.pois) {
+      if (!byKind.has(p.kind)) byKind.set(p.kind, poiStrength(p.kind, seconds, this.params.scenario));
+      const { to, from } = byKind.get(p.kind);
+      for (const z of p.zones) factors[z] += to;
+      if (from > 0) origins.push({ edges: p.edges, weight: from * CONFIG.pois.spawnShare });
+    }
+    trips.setZoneFactors(factors);
+    this.sim.origins = origins;
   }
 
   // Autobuses, cada minuto: las calles cortadas pasan gente del coche al autobús; quien no cabe en el autobús o se

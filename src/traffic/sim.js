@@ -30,6 +30,7 @@ export class TrafficSim {
     this.targetCount = 0;
     this.speedScale = 1; // multiplicador de la velocidad de todos los coches (el tiempo: lluvia)
     this.attractors = []; // sedes de eventos en curso que atraen coches
+    this.origins = []; // lugares de los que sale gente ahora (zonas de empresas por la tarde...): { edges, weight }
     this.venueEdges = new Map(); // id de la sede -> tramos cercanos (solo se calculan una vez)
     this.closed = new Uint8Array(graph.edgeCount); // 1 = tramo cortado a los coches
     this.zone = new Int32Array(graph.edgeCount); // zona con límite de entrada a la que pertenece el tramo (0 = ninguna)
@@ -174,6 +175,22 @@ export class TrafficSim {
   }
 
   spawnEdge(i = -1) {
+    // Parte de los coches nuevos sale de los lugares de interés que ahora generan viajes.
+    if (this.origins.length) {
+      let total = 0;
+      for (const o of this.origins) total += o.weight;
+      if (total > 0 && this.rand(i) < Math.min(0.5, total)) {
+        let r = this.rand(i) * total;
+        for (const o of this.origins) {
+          r -= o.weight;
+          if (r <= 0 && o.edges.length) {
+            const e = o.edges[(this.rand(i) * o.edges.length) | 0];
+            if (!this.restricted(e) && !this.outside(e)) return e;
+            break;
+          }
+        }
+      }
+    }
     const list = this.attractors;
     if (list.length) {
       let total = 0;

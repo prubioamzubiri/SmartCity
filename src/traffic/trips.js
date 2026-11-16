@@ -99,10 +99,20 @@ export class TripPlanner {
       const c = this.cellOf(g.nx[g.A[e]], g.nz[g.A[e]]);
       byCell.set(c, (byCell.get(c) ?? 0) + g.len[e] * (T.activityBase + (edgeWeights[e] ?? 0)));
     }
+    for (let i = 0; i < this.gridZones; i++) {
+      const z = this.zones[i];
+      z.base = byCell.get(z.cell) ?? z.base;
+    }
+    this.setZoneFactors(this.zoneFactors);
+  }
+
+  // Multiplica el peso de cada zona como destino (lugares de interés según la hora): `factors[i]` para la zona i.
+  setZoneFactors(factors = null) {
+    this.zoneFactors = factors;
     let total = 0;
     for (let i = 0; i < this.gridZones; i++) {
       const z = this.zones[i];
-      z.weight = byCell.get(z.cell) ?? z.weight;
+      z.weight = z.base * (factors?.[i] ?? 1);
       total += z.weight;
       this.cumulative[i] = total;
     }
@@ -227,7 +237,7 @@ export class TripPlanner {
           best = n;
         }
       }
-      if (best >= 0) zones.push({ cell, node: best, x: g.nx[best], z: g.nz[best], weight: s.length });
+      if (best >= 0) zones.push({ cell, node: best, x: g.nx[best], z: g.nz[best], weight: s.length, base: s.length });
     }
     return zones;
   }

@@ -155,6 +155,36 @@ export const CONFIG = {
     parkSearchSeconds: 420, // quien llega a un evento da vueltas por la zona buscando aparcamiento tanto tiempo
   },
 
+  // Lugares de interés: atraen viajes (y de ellos sale gente) según la hora y el tipo de día. Ocio y playas, sobre todo
+  // en días libres (fines de semana y festivos); las playas, en verano y con buen tiempo; zonas de empresas, por la
+  // mañana de los días de trabajo (y de ellas sale la gente por la tarde). Coordenadas aproximadas.
+  pois: {
+    places: [
+      { id: 'parte-vieja', name: 'Parte Vieja', kind: 'ocio', lat: 43.3236, lon: -1.9852, radius: 350 },
+      { id: 'centro', name: 'Centro (comercio)', kind: 'ocio', lat: 43.3195, lon: -1.9815, radius: 450 },
+      { id: 'kursaal', name: 'Kursaal y Gros', kind: 'ocio', lat: 43.3243, lon: -1.9752, radius: 400 },
+      { id: 'concha', name: 'Playa de La Concha', kind: 'playa', lat: 43.3175, lon: -1.9880, radius: 600 },
+      { id: 'zurriola', name: 'Playa de la Zurriola', kind: 'playa', lat: 43.3262, lon: -1.9730, radius: 350 },
+      { id: 'ondarreta', name: 'Playa de Ondarreta', kind: 'playa', lat: 43.3168, lon: -2.0010, radius: 400 },
+      { id: 'miramon', name: 'Miramón (parque tecnológico y hospitales)', kind: 'trabajo', lat: 43.2925, lon: -1.9745, radius: 700 },
+      { id: 'zuatzu', name: 'Zuatzu', kind: 'trabajo', lat: 43.2985, lon: -2.0195, radius: 500 },
+      { id: 'igara', name: 'Igara', kind: 'trabajo', lat: 43.3045, lon: -2.0110, radius: 400 },
+      { id: 'martutene', name: 'Martutene', kind: 'trabajo', lat: 43.2995, lon: -1.9520, radius: 500 },
+      { id: 'amara', name: 'Oficinas de Amara', kind: 'trabajo', lat: 43.3110, lon: -1.9790, radius: 400 },
+    ],
+    // [desde, hasta, intensidad] por hora: `to` = cuánto atraen como destino; `from` = cuánta gente sale de ellos.
+    profiles: {
+      trabajo: { workday: { to: [[7, 10, 3], [10, 15, 1]], from: [[13, 15, 1], [16, 19, 3]] } },
+      ocio: {
+        workday: { to: [[11, 14, 0.5], [17, 21, 1.5]], from: [[20, 23, 1.5]] },
+        free: { to: [[11, 14, 2], [17, 21, 2.5]], from: [[14, 16, 1], [20, 24, 2.5]] },
+      },
+      playa: { summer: [0.3, 1], workday: { to: [[11, 19, 1]], from: [[17, 21, 1]] }, free: { to: [[10, 18, 3]], from: [[17, 21, 3]] } },
+    },
+    zoneReach: 250, // una zona de destino recibe la atracción del lugar si su centro está a menos de radio + esto
+    spawnShare: 0.03, // fracción de los coches nuevos que salen de un lugar por unidad de intensidad `from` (tope 0,5 en total)
+  },
+
   // Peatones: triángulos que caminan por las aceras y cruzan por los pasos de peatones de OSM (solo visual).
   pedestrians: {
     max: 12000, // con la demanda máxima
