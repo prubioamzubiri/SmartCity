@@ -79,6 +79,9 @@ export class TrafficSim {
       tripFree: toBase64(this.tripFree.subarray(0, n)),
       routed: toBase64(this.routed.subarray(0, n)),
       parking: toBase64(this.parking.subarray(0, n)),
+      edgeSpeed: this.edgeSpeed ? toBase64(this.edgeSpeed) : null,
+      congestionMinute: this.congestionMinute ?? null,
+      routeSpeed: this.routeSpeed ? toBase64(this.routeSpeed) : null,
       clock: this.clock,
       tripTotals: { ...this.tripTotals },
     };
@@ -120,6 +123,15 @@ export class TrafficSim {
       if (state.routed) this.routed.set(fromBase64(state.routed, Uint8Array));
       this.parking.fill(0);
       if (state.parking) this.parking.set(fromBase64(state.parking, Float64Array));
+      if (state.edgeSpeed && this.trips) {
+        this.edgeSpeed = fromBase64(state.edgeSpeed, Float32Array);
+        this.congestionMinute = state.congestionMinute ?? null;
+        this.trips.setLiveSpeeds(this.edgeSpeed, T.congestionMinSpeed);
+      }
+      if (state.routeSpeed && this.trips) {
+        this.routeSpeed = fromBase64(state.routeSpeed, Float32Array);
+        this.trips.setRouteSpeeds(this.routeSpeed, T.congestionMinSpeed);
+      }
     } else if (this.trips) {
       // Snapshot de antes de los viajes: cada coche recibe un destino desde donde está.
       for (let i = 0; i < n; i++) this.startTrip(i, this.edge[i], this.pos[i]);
@@ -161,6 +173,36 @@ export class TrafficSim {
       this.venueEdges.set(id, edges);
     }
     return edges;
+  }
+
+  // Velocidad que llevan ahora los coches en cada tramo, suavizada (media móvil): la usan para elegir ruta evitando los
+  // atascos. Un tramo sin coches vuelve poco a poco a su velocidad libre.
+  updateCongestion(minute = null) {
+    if (!this.trips) return;
+    // Una vez por minuto simulado (tras restaurar un snapshot, el motor repite el minuto en curso).
+    if (minute !== null && minute === this.congestionMinute) return;
+    this.congestionMinute = minute;
+    const g = this.g;
+    if (!this.edgeSpeed) this.edgeSpeed = Float32Array.from(g.speed);
+    const sum = new Float32Array(g.edgeCount);
+    const count = new Uint16Array(g.edgeCount);
+    for (let i = 0; i < this.activeCount; i++) {
+      sum[this.edge[i]] += this.speed[i];
+      count[this.edge[i]]++;
+    }
+    const a = T.congestionSmoothing;
+    for (let e = 0; e < g.edgeCount; e++) {
+      const now = count[e] ? sum[e] / count[e] : g.speed[e] * this.speedScale;
+      this.edgeSpeed[e] += a * (now - this.edgeSpeed[e]);
+    }
+    this.trips.setLiveSpeeds(this.edgeSpeed, T.congestionMinSpeed);
+  }
+
+  // Recalcula los caminos a todos los destinos con el tráfico de ahora (lo llama el motor cada pocos minutos).
+  refreshRoutes() {
+    if (!this.trips || !this.edgeSpeed) return;
+    this.routeSpeed = Float32Array.from(this.edgeSpeed);
+    this.trips.setRouteSpeeds(this.routeSpeed, T.congestionMinSpeed);
   }
 
   // Número aleatorio de la secuencia del coche `i` (mulberry32); sin coche (i < 0), la secuencia general.
@@ -329,7 +371,7 @@ export class TrafficSim {
       const c = g.outList[k];
       if (c === rev && end - start > 1) continue;
       if (!this.allows(e, c)) continue;
-      const cost = this.trips.time[c] + field[g.B[c]];
+      const cost = this.trips.liveTime[c] + field[g.B[c]];
       if (cost < best) best = cost;
       if (field[g.B[c]] < here) closer = true;
     }
@@ -344,7 +386,7 @@ export class TrafficSim {
       const c = g.outList[k];
       if (c === rev && end - start > 1) continue;
       if (!this.allows(e, c)) continue;
-      const cost = this.trips.time[c] + field[g.B[c]];
+      const cost = this.trips.liveTime[c] + field[g.B[c]];
       if (usable(c, cost)) total += Math.exp((best - cost) / T.choiceSeconds);
     }
     let r = this.rand(i) * total;
@@ -353,7 +395,7 @@ export class TrafficSim {
       const c = g.outList[k];
       if (c === rev && end - start > 1) continue;
       if (!this.allows(e, c)) continue;
-      const cost = this.trips.time[c] + field[g.B[c]];
+      const cost = this.trips.liveTime[c] + field[g.B[c]];
       if (!usable(c, cost)) continue;
       last = c;
       r -= Math.exp((best - cost) / T.choiceSeconds);

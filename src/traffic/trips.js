@@ -65,6 +65,9 @@ export class TripPlanner {
     const { nodeCount, edgeCount, B, len, speed } = graph;
     this.time = new Float32Array(edgeCount);
     for (let e = 0; e < edgeCount; e++) this.time[e] = len[e] / speed[e];
+    // Tiempos con el tráfico de ahora (los que usan los coches para elegir ruta); al principio, los de sin tráfico.
+    this.liveTime = Float32Array.from(this.time);
+    this.routeTime = null; // tiempos con los que se calcularon los caminos (null = sin tráfico)
     // Aristas entrantes por nodo (para Dijkstra hacia atrás desde el destino).
     this.inStart = new Int32Array(nodeCount + 1);
     for (let e = 0; e < edgeCount; e++) this.inStart[B[e] + 1]++;
@@ -154,7 +157,7 @@ export class TripPlanner {
     this.zones.push({ cell: -1, node: best, x: g.nx[best], z: g.nz[best], weight: 0, point: key });
     const free = this.field(best, null);
     this.free = [...this.free, free];
-    this.live = this.closed ? [...this.live, this.field(best, this.closed)] : this.free;
+    this.live = this.live === this.free ? this.free : [...this.live, this.field(best, this.closed, this.routeTime ?? this.time)];
     this.points.set(key, index);
     return index;
   }
@@ -258,8 +261,9 @@ export class TripPlanner {
     return zones;
   }
 
-  // Segundos sin tráfico desde cada nodo hasta `target` (Infinity si no se puede llegar). `closed`: tramos prohibidos.
-  field(target, closed) {
+  // Segundos desde cada nodo hasta `target` (Infinity si no se puede llegar) con los tiempos `time` (por defecto, sin
+  // tráfico). `closed`: tramos prohibidos.
+  field(target, closed, time = this.time) {
     const g = this.g;
     const dist = new Float32Array(g.nodeCount).fill(Infinity);
     const heap = new Heap(1024);
@@ -273,7 +277,7 @@ export class TripPlanner {
       for (let k = this.inStart[n]; k < this.inStart[n + 1]; k++) {
         const e = this.inList[k];
         if (closed && closed[e] === 1) continue;
-        const nd = d + this.time[e];
+        const nd = d + time[e];
         const a = g.A[e];
         if (nd < dist[a]) {
           dist[a] = nd;
@@ -289,13 +293,33 @@ export class TripPlanner {
     let any = false;
     for (let e = 0; e < closed.length && !any; e++) any = closed[e] === 1;
     if (!any) {
-      this.live = this.free;
+      if (!this.closed) return;
       this.closed = null;
+      this.live = this.routeTime ? this.zones.map((z) => this.field(z.node, null, this.routeTime)) : this.free;
       return;
     }
     if (this.closed && this.closed.length === closed.length && this.closed.every((v, e) => v === closed[e])) return;
     this.closed = Uint8Array.from(closed);
-    this.live = this.zones.map((z) => this.field(z.node, this.closed));
+    this.live = this.zones.map((z) => this.field(z.node, this.closed, this.routeTime ?? this.time));
+  }
+
+  // Tiempos de cada tramo con una velocidad dada por tramo (m/s), sin bajar de `minSpeed`.
+  timesFor(speeds, minSpeed) {
+    const { len } = this.g;
+    const time = new Float32Array(len.length);
+    for (let e = 0; e < len.length; e++) time[e] = len[e] / Math.max(minSpeed, speeds[e]);
+    return time;
+  }
+
+  // Tiempos con el tráfico de ahora (con ellos eligen los coches el tramo siguiente en cada cruce).
+  setLiveSpeeds(speeds, minSpeed) {
+    this.liveTime = this.timesFor(speeds, minSpeed);
+  }
+
+  // Recalcula los caminos a todos los destinos con estas velocidades (cada pocos minutos simulados).
+  setRouteSpeeds(speeds, minSpeed) {
+    this.routeTime = this.timesFor(speeds, minSpeed);
+    this.live = this.zones.map((z) => this.field(z.node, this.closed, this.routeTime));
   }
 
   // Zona de destino al azar, proporcional a su peso (r en [0, 1)); los destinos propios solo si tienen peso.

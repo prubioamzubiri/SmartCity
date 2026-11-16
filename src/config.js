@@ -150,6 +150,11 @@ export const CONFIG = {
     activityBase: 0.5, // peso de una calle sin comercios ni servicios frente a la actividad que le dan (pesos de los peatones)
     minZoneLength: 400, // metros de calle mínimos para que una celda sea zona de destino
     arriveSeconds: 25, // el viaje termina a menos de tantos segundos (sin tráfico) del centro de la zona
+    // Rutas con el tráfico de ahora: cada minuto se mide la velocidad de cada tramo (media móvil) y los caminos a cada
+    // destino se recalculan cada `refreshMinutes` minutos simulados. Así los coches evitan los atascos.
+    congestionSmoothing: 0.3,
+    congestionMinSpeed: 1, // m/s: un tramo parado cuenta como si se fuera a esta velocidad
+    refreshMinutes: 15,
     choiceSeconds: 30, // azar al elegir ruta entre los tramos que acercan al destino: una opción peor en tantos segundos pierde ~63 % de probabilidad
     maxTripSeconds: 3600, // un viaje que dura más se da por perdido (coche dando vueltas)
     parkSearchSeconds: 420, // quien llega a un evento da vueltas por la zona buscando aparcamiento tanto tiempo

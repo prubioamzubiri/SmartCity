@@ -218,6 +218,11 @@ export class SimEngine {
     this.signals.setPedestrianLoad(pedestrianLoad(minute * 60, this.params.scenario, this.params.maxPedestrians));
     this.updateTransit(minute * 60);
     this.updatePois(minute * 60);
+    // Rutas con el tráfico de ahora: cada minuto, los tiempos de cada tramo; cada `refreshMinutes`, los caminos.
+    if (this.sim.trips) {
+      this.sim.updateCongestion(minute);
+      if (minute % CONFIG.trips.refreshMinutes === 0) this.sim.refreshRoutes();
+    }
   }
 
   // Cada minuto: cuánto atrae cada lugar de interés como destino y cuánta gente sale de él (hora, tipo de día, tiempo).
