@@ -12,6 +12,7 @@ export function projectPois(config = CONFIG.pois, origin = CONFIG.events.origin)
     name: p.name,
     kind: p.kind,
     radius: p.radius,
+    size: p.size ?? 1, // cuánta gente atrae frente a uno normal (Miramón, con los hospitales y el parque tecnológico: 2)
     x: (p.lon - origin.lon) * kLon,
     z: -(p.lat - origin.lat) * K_LAT,
   }));

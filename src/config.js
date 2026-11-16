@@ -166,7 +166,7 @@ export const CONFIG = {
       { id: 'concha', name: 'Playa de La Concha', kind: 'playa', lat: 43.3175, lon: -1.9880, radius: 600 },
       { id: 'zurriola', name: 'Playa de la Zurriola', kind: 'playa', lat: 43.3262, lon: -1.9730, radius: 350 },
       { id: 'ondarreta', name: 'Playa de Ondarreta', kind: 'playa', lat: 43.3168, lon: -2.0010, radius: 400 },
-      { id: 'miramon', name: 'Miramón (parque tecnológico y hospitales)', kind: 'trabajo', lat: 43.2925, lon: -1.9745, radius: 700 },
+      { id: 'miramon', name: 'Miramón (parque tecnológico y hospitales)', kind: 'trabajo', lat: 43.2925, lon: -1.9745, radius: 700, size: 2 },
       { id: 'zuatzu', name: 'Zuatzu', kind: 'trabajo', lat: 43.2985, lon: -2.0195, radius: 500 },
       { id: 'igara', name: 'Igara', kind: 'trabajo', lat: 43.3045, lon: -2.0110, radius: 400 },
       { id: 'martutene', name: 'Martutene', kind: 'trabajo', lat: 43.2995, lon: -1.9520, radius: 500 },

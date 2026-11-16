@@ -231,7 +231,7 @@ export class SimEngine {
     for (const p of this.pois) {
       if (!byKind.has(p.kind)) byKind.set(p.kind, poiStrength(p.kind, seconds, this.params.scenario));
       const { to, from } = byKind.get(p.kind);
-      for (const key of p.points) weights.set(key, (to * unit) / p.points.length);
+      for (const key of p.points) weights.set(key, (to * unit * p.size) / p.points.length);
       if (from > 0) origins.push({ edges: p.edges, weight: from * CONFIG.pois.spawnShare });
     }
     trips.setZoneFactors(null, weights);

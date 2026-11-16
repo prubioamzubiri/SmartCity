@@ -137,6 +137,12 @@ export class TripPlanner {
     let bestD = Infinity;
     for (let n = 0; n < g.nodeCount; n++) {
       if (!this.inMain[n]) continue;
+      // Un cruce de calles normales: nadie va a una autovía (en ciudades de prueba sin clases, vale cualquiera).
+      if (g.cls) {
+        let street = false;
+        for (let k = g.outStart[n]; k < g.outStart[n + 1] && !street; k++) street = g.cls[g.outList[k]] > 0;
+        if (!street) continue;
+      }
       const d = (g.nx[n] - x) ** 2 + (g.nz[n] - z) ** 2;
       if (d < bestD) {
         bestD = d;
