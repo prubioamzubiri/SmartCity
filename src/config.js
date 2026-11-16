@@ -174,14 +174,17 @@ export const CONFIG = {
     ],
     // [desde, hasta, intensidad] por hora: `to` = cuánto atraen como destino; `from` = cuánta gente sale de ellos.
     profiles: {
-      trabajo: { workday: { to: [[7, 10, 3], [10, 15, 1]], from: [[13, 15, 1], [16, 19, 3]] } },
+      trabajo: { workday: { to: [[7, 10, 1.5], [10, 15, 0.5]], from: [[13, 15, 0.5], [16, 19, 1.5]] } },
       ocio: {
-        workday: { to: [[11, 14, 0.5], [17, 21, 1.5]], from: [[20, 23, 1.5]] },
-        free: { to: [[11, 14, 2], [17, 21, 2.5]], from: [[14, 16, 1], [20, 24, 2.5]] },
+        workday: { to: [[11, 14, 0.25], [17, 21, 0.75]], from: [[20, 23, 0.75]] },
+        free: { to: [[11, 14, 1], [17, 21, 1.25]], from: [[14, 16, 0.5], [20, 24, 1.25]] },
       },
-      playa: { summer: [0.3, 1], workday: { to: [[11, 19, 1]], from: [[17, 21, 1]] }, free: { to: [[10, 18, 3]], from: [[17, 21, 3]] } },
+      playa: { summer: [0.3, 1], workday: { to: [[11, 19, 0.5]], from: [[17, 21, 0.5]] }, free: { to: [[10, 18, 1.5]], from: [[17, 21, 1.5]] } },
     },
-    zoneReach: 250, // una zona de destino recibe la atracción del lugar si su centro está a menos de radio + esto
+    minEdges: 20, // un lugar sin tantos tramos de calle alrededor no está en el mapa (ciudades de prueba)
+    maxPoints: 6, // destinos por lugar, repartidos por su área
+    pointSpacing: 200, // metros entre destinos de un mismo lugar
+    pointWeight: 6, // un lugar con intensidad 1 atrae como 6 zonas medias de la cuadrícula
     spawnShare: 0.03, // fracción de los coches nuevos que salen de un lugar por unidad de intensidad `from` (tope 0,5 en total)
   },
 

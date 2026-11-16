@@ -74,11 +74,23 @@ export class SimEngine {
     this.signals.setPedestrianWeights(weights.edge);
     this.sim.trips?.setZoneWeights(weights.edge);
     // Lugares de interés: zonas de destino y calles de cada uno (para los coches que salen de ellos).
-    this.pois = projectPois().map((p) => ({
-      ...p,
-      zones: this.sim.trips ? this.sim.trips.zones.slice(0, this.sim.trips.gridZones).map((z, i) => (Math.hypot(z.x - p.x, z.z - p.z) <= p.radius + CONFIG.pois.zoneReach ? i : -1)).filter((i) => i >= 0) : [],
-      edges: this.sim.edgesNear(p),
-    }));
+    // Solo los lugares que están en el mapa (con calles alrededor): en ciudades de prueba pequeñas, ninguno.
+    this.pois = projectPois().map((p) => ({ ...p, edges: this.sim.edgesNear(p) })).filter((p) => p.edges.length >= CONFIG.pois.minEdges);
+    // Cada lugar es un destino propio (como las sedes de los eventos): los coches van al lugar, no a la zona de la
+    // cuadrícula más cercana, que podía estar a 500 m.
+    // Varios destinos por lugar, repartidos por su área (con uno solo, todos iban al mismo cruce y lo bloqueaban).
+    for (const p of this.pois) {
+      p.points = [];
+      const n = Math.min(CONFIG.pois.maxPoints, Math.max(1, Math.round((Math.PI * p.radius ** 2) / CONFIG.pois.pointSpacing ** 2)));
+      for (let k = 0; k < n; k++) {
+        // Puntos en espiral dentro del radio (deterministas).
+        const r = p.radius * Math.sqrt((k + 0.5) / n) * 0.8;
+        const a = k * 2.399963;
+        const key = `${p.id}#${k}`;
+        if (this.sim.trips?.addPoint(key, p.x + r * Math.cos(a), p.z + r * Math.sin(a)) >= 0) p.points.push(key);
+      }
+    }
+    this.sim.trips?.setZoneFactors();
     this.pedEdgeWeight = weights.edge;
     this.restrictions = new Restrictions({
       graph: this.graph,
@@ -212,16 +224,17 @@ export class SimEngine {
   updatePois(seconds) {
     const trips = this.sim.trips;
     if (!trips || !this.pois.length) return;
-    const factors = new Float64Array(trips.gridZones).fill(1);
+    const unit = trips.meanZoneWeight() * CONFIG.pois.pointWeight;
+    const weights = new Map();
     const origins = [];
     const byKind = new Map();
     for (const p of this.pois) {
       if (!byKind.has(p.kind)) byKind.set(p.kind, poiStrength(p.kind, seconds, this.params.scenario));
       const { to, from } = byKind.get(p.kind);
-      for (const z of p.zones) factors[z] += to;
+      for (const key of p.points) weights.set(key, (to * unit) / p.points.length);
       if (from > 0) origins.push({ edges: p.edges, weight: from * CONFIG.pois.spawnShare });
     }
-    trips.setZoneFactors(factors);
+    trips.setZoneFactors(null, weights);
     this.sim.origins = origins;
   }
 

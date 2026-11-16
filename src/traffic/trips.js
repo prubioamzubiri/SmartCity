@@ -106,17 +106,27 @@ export class TripPlanner {
     this.setZoneFactors(this.zoneFactors);
   }
 
-  // Multiplica el peso de cada zona como destino (lugares de interés según la hora): `factors[i]` para la zona i.
-  setZoneFactors(factors = null) {
+  // Pesos de los destinos: las zonas de la cuadrícula, multiplicadas por `factors[i]`, y los destinos propios (lugares
+  // de interés según la hora) con el peso que se les dé en `pointWeights` (clave -> peso; sin peso, nunca se sortean).
+  setZoneFactors(factors = null, pointWeights = null) {
     this.zoneFactors = factors;
+    this.pointWeights = pointWeights;
+    if (this.cumulative.length !== this.zones.length) this.cumulative = new Float64Array(this.zones.length);
     let total = 0;
-    for (let i = 0; i < this.gridZones; i++) {
+    for (let i = 0; i < this.zones.length; i++) {
       const z = this.zones[i];
-      z.weight = z.base * (factors?.[i] ?? 1);
+      z.weight = i < this.gridZones ? z.base * (factors?.[i] ?? 1) : (pointWeights?.get(z.point) ?? 0);
       total += z.weight;
       this.cumulative[i] = total;
     }
     this.totalWeight = total;
+  }
+
+  // Peso medio de una zona de la cuadrícula (la unidad para los pesos de los destinos propios).
+  meanZoneWeight() {
+    let sum = 0;
+    for (let i = 0; i < this.gridZones; i++) sum += this.zones[i].base;
+    return sum / Math.max(1, this.gridZones);
   }
 
   // Destino propio en un punto (la sede de un evento): el cruce del núcleo más cercano. No entra en el sorteo normal.
@@ -282,11 +292,11 @@ export class TripPlanner {
     this.live = this.zones.map((z) => this.field(z.node, this.closed));
   }
 
-  // Zona de destino al azar, proporcional a su peso (r en [0, 1)); nunca una sede.
+  // Zona de destino al azar, proporcional a su peso (r en [0, 1)); los destinos propios solo si tienen peso.
   pick(r) {
     const x = r * this.totalWeight;
     let lo = 0;
-    let hi = this.gridZones - 1;
+    let hi = this.cumulative.length - 1;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
       if (this.cumulative[mid] > x) hi = mid;

@@ -464,11 +464,13 @@ export class TrafficSim {
     }
     // Quien llega a la sede de un evento da vueltas por la zona buscando aparcamiento (`parkSearchSeconds`) y luego
     // aparca y deja la calle. Es lo que colapsa los alrededores de un evento.
-    if (arrived && this.trips && this.trips.isPoint(this.dest[i]) && !respawn) {
+    // (Los lugares de interés, no: allí se aparca al llegar.)
+    if (arrived && this.trips && this.trips.isPoint(this.dest[i]) && !respawn && !this.trips.zones[this.dest[i]].point?.startsWith('poi:')) {
       this.parking[i] = this.clock + T.parkSearchSeconds;
       this.routed[i] = 0;
       return;
     }
+    if (arrived && this.trips && this.trips.isPoint(this.dest[i])) respawn = true;
     if (respawn || !this.trips) {
       this.detach(i);
       this.spawn(i);
