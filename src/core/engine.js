@@ -8,7 +8,8 @@ import { eventCalendar } from '../events/calendar.js';
 import { poiStrength, projectPois } from '../city/pois.js';
 import { SensorManager } from '../sensors/sensorManager.js';
 import { ParkingTracker } from '../sensors/parkingTracker.js';
-import { trackableUndergroundLots, undergroundOccupancy } from '../city/undergroundLots.js';
+import { trackableUndergroundLots } from '../city/undergroundLots.js';
+import { ParkingLots } from '../city/parkingLots.js';
 import { PedestrianSensors } from '../sensors/pedestrianSensors.js';
 import { createWaterMask } from '../city/waterMask.js';
 import { Pedestrians, pedestrianLoad } from '../pedestrians/pedestrians.js';
@@ -52,9 +53,14 @@ export class SimEngine {
     if (this.sim.trips && CONFIG.events.enabled) for (const v of Object.values(eventCalendar.venues)) this.sim.trips.addPoint(v.id, v.x, v.z);
     this.eventCarCut = 0; // demanda de coches de los eventos que no llegan en coche porque sus calles están cortadas
     this.sensors = new SensorManager({ graph: this.graph, sim: this.sim, getSimTime: () => this.simTime, storage: null });
+    // Parkings con estado y precio (los coches de los eventos con sus calles cortadas no vienen: los quita `access`).
+    this.lots = new ParkingLots(trackableUndergroundLots(data.parking?.underground), {
+      getParams: () => this.params,
+      attractorsAt: (t) => (CONFIG.events.enabled ? eventCalendar.busDemandAt(t) : []).map((a) => ({ ...a, weight: a.weight * (this.buses?.eventAccess?.get(a.id) ?? 1) })),
+    });
     this.parking = new ParkingTracker({
       lots: trackableUndergroundLots(data.parking?.underground),
-      occupancyOf: undergroundOccupancy,
+      occupancyOf: (lot) => this.lots.occupancy(lot.id),
       getSimTime: () => this.simTime,
       storage: null,
     });
@@ -187,9 +193,11 @@ export class SimEngine {
       this.signals.update(this.simTime);
       this.buses.tick(this.simTime);
       this.updateEnvironment();
-      this.sim.setTarget(this.params.maxCars * Math.max(0, demandFactor(this.simTime, this.params.scenario) - this.eventCarCut) * this.carFactor);
+      // Más los que dan vueltas buscando aparcamiento porque los parkings de su zona están llenos.
+      this.sim.setTarget(this.params.maxCars * Math.max(0, demandFactor(this.simTime, this.params.scenario) - this.eventCarCut) * this.carFactor + this.lots.searching * CONFIG.parking.searchCars);
       this.sim.step(STEP);
       this.sensors.tick(this.simTime);
+      this.lots.tick(this.simTime);
       this.parking.tick(this.simTime);
       this.pedSensors.tick(this.simTime);
       this.busTracker.tick(this.simTime);
@@ -305,8 +313,7 @@ export class SimEngine {
       else if (item.mode === 'entry_limit' && item.limit > 0) metres.limited += length;
       else metres.closed += length;
     }
-    let fullLots = 0;
-    for (const lot of this.parking.lots.values()) if (this.parking.occupancyOf(lot, time) >= 0.95) fullLots++;
+    const fullLots = this.lots.fullCount();
     return {
       cars: traffic.active,
       stopped: traffic.stopped,
@@ -323,6 +330,7 @@ export class SimEngine {
       stations_empty: bikes.stations.filter((s) => s.available <= 0).length,
       stations_full: bikes.stations.filter((s) => s.available >= s.capacity).length,
       parkings_full: fullLots,
+      parking_search: Math.round(this.lots.searching), // coches dando vueltas porque no encuentran sitio
       closed_m: Math.round(metres.closed),
       bus_only_m: Math.round(metres.busOnly),
       limited_m: Math.round(metres.limited),
@@ -387,6 +395,7 @@ export class SimEngine {
       sim: this.sim.serialize(),
       sensors: this.sensors.serialize(),
       parking: this.parking.serialize(),
+      lots: this.lots.serialize(),
       pedSensors: this.pedSensors.serialize(),
       buses: this.busTracker.serialize(),
       bikes: this.bikes.serialize(),
@@ -407,6 +416,7 @@ export class SimEngine {
     this.signals.setPlan(state.plan);
     this.sensors.restore(state.sensors);
     this.parking.restore(state.parking);
+    this.lots.restore(state.lots);
     this.pedSensors.restore(state.pedSensors, this.simTime);
     if (state.buses) this.busTracker.restore(state.buses); // los snapshots anteriores a los autobuses no lo traen
     if (state.bikes) this.bikes.restore(state.bikes);

@@ -193,6 +193,25 @@ export const CONFIG = {
     spawnShare: 0.03, // fracción de los coches nuevos que salen de un lugar por unidad de intensidad `from` (tope 0,5 en total)
   },
 
+  // Parkings subterráneos: llegan coches según la demanda de la ciudad y los eventos cercanos, se quedan un rato y se van.
+  // El gestor fija el precio de cada uno: los conductores eligen entre los de su zona según el precio.
+  parking: {
+    basePrice: 2, // €/h por defecto
+    minPrice: 0.5,
+    maxPrice: 6,
+    priceSensitivity: 1, // con el doble de precio que el de base, un parking atrae e^-1 ≈ 37 % de los coches que atraería
+    nearMeters: 1000, // entre los parkings a menos de esto se reparte quien quiere aparcar en la zona
+    stepSeconds: 60,
+    staySeconds: 7200, // estancia media
+    arrivalsPerHour: 0.45, // coches que llegan por hora y plaza con la demanda al máximo (ocupación de equilibrio ≈ 90 %)
+    eventMeters: 800, // parkings a los que van los coches de un evento
+    eventCarsPerBoost: 600, // coches por hora que buscan parking por unidad de `boost` de un evento mientras llega la gente
+    eventLeaveSeconds: 2700, // los del evento se van en unos 45 min al terminar
+    searchSeconds: 600, // quien no encuentra sitio da vueltas unos 10 min (y acaba en la calle o se va)
+    spillShare: 0.5, // de los que encuentran lleno su parking, los que prueban en otro de la zona (el resto da vueltas)
+    searchCars: 1, // cada coche buscando sitio es un coche más en la calle
+  },
+
   // Peatones: triángulos que caminan por las aceras y cruzan por los pasos de peatones de OSM (solo visual).
   pedestrians: {
     max: 12000, // con la demanda máxima

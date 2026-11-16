@@ -172,12 +172,12 @@ function pendingJson(engine, li) {
 // Una línea en GET /api/buses y PATCH /api/buses/<línea>.
 function busLineJson(engine, i) {
   const l = engine.transit.lines[i];
-  const { active, passengers, full, waiting, leftBehind } = engine.buses.stats[i];
+  const { active, passengers, full, waiting, leftBehind, unserved } = engine.buses.stats[i];
   return {
     id: l.id, stops: l.stops.length, fleet: l.buses, target: engine.buses.committed(i), pending: pendingJson(engine, i),
     minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet, capacity: CONFIG.transit.capacity,
     suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
-    active, passengers, full, waiting, leftBehind,
+    active, passengers, full, waiting, leftBehind, unserved: unserved ?? 0,
   };
 }
 
@@ -302,6 +302,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       parkings: [...engine.parking.lots.values()].map((l) => ({
         id: l.id, name: l.name, capacity: l.capacity, tracked: engine.parking.isTracked(l.id),
         occupancy: Math.round(engine.parking.occupancyOf(l, engine.simTime) * 1000) / 1000,
+        price: engine.lots.price[engine.lots.index.get(l.id)],
       })),
       weather: CONFIG.weather.enabled ? observation(engine.simTime) : null,
       holiday: CONFIG.holidays.enabled ? holidayCalendar.holidayAt(engine.simTime) : null,
@@ -519,6 +520,24 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       if (typeof body.name !== 'string') throw new HttpError(400, 'name debe ser texto');
       runtime.mutate((e) => e.sensors.rename(id, body.name));
       return send(200, { ok: true });
+    }
+
+    // Precio de un parking: { price: 3.5 } (€/h, entre minPrice y maxPrice; null = el de por defecto). Al instante.
+    const lotMatch = /^\/api\/parking\/([^/]+)$/.exec(pathname);
+    if (lotMatch && lotMatch[1] !== 'tracked' && method === 'PATCH') {
+      authorize(req);
+      const id = decodeURIComponent(lotMatch[1]);
+      if (!runtime.engine.lots.index.has(id)) throw new HttpError(404, 'Parking no encontrado');
+      const { price } = await readJson(req);
+      let applied;
+      try {
+        runtime.mutate((e) => {
+          applied = e.lots.setPrice(id, price === null ? null : Number(price));
+        });
+      } catch (err) {
+        throw new HttpError(400, err.message);
+      }
+      return send(200, { id, price: applied, occupancy: runtime.engine.lots.occupancy(id) });
     }
 
     if (method === 'PUT' && pathname === '/api/parking/tracked') {

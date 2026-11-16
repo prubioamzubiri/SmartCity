@@ -258,6 +258,9 @@ export class Buses {
         stats.demanded = stats.leftBehind = (rate / line.stops.length) * line.cycle;
       }
       this.updateWaiting(line, li, us);
+      // Gente que quería subir y no ha podido (no cabía o se ha cansado de esperar): más estable que `leftBehind`, que
+      // solo mira los autobuses que están ahora en una parada.
+      stats.unserved = Math.round(stats.demanded * this.unservedOf(li));
     });
     this.activeCount = n;
   }
