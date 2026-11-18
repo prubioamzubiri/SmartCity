@@ -15,7 +15,7 @@ ejemplo funcional está en [`examples/gestor.py`](https://github.com/prubioamzub
 | Lecturas (`GET`) | Públicas |
 | Escrituras (`POST`, `PUT`, `PATCH`, `DELETE`) | Cabecera `Authorization: Bearer <SMARTCITY_TOKEN>` si el servidor tiene token (en `.env`). Sin token configurado, cualquiera puede escribir |
 | Formato | JSON (`Content-Type: application/json`). Errores: `{"error": "mensaje"}` con 400 (datos no válidos), 401 (token), 403 (acción bloqueada), 404, 413 o 422 |
-| Esta guía | En el visor: panel **Servidor → Documentación de la API**. En el servidor: `GET /api/docs` (página web) y `GET /api/docs.md` (Markdown) |
+| Esta guía | En el visor: pestaña **Conexión** o **Datos → Abrir la guía de la API**. En el servidor: `GET /api/docs` (página web) y `GET /api/docs.md` (Markdown) |
 
 ### Tiempo simulado
 
@@ -274,8 +274,7 @@ dan abasto (gente en tierra o esperas muy largas) parte de esa gente coge el coc
 ## Lo que NO se puede hacer (todavía)
 
 El simulador no modela: precios de parking, tarificación por congestión, calidad del aire ni emisiones, ni se pueden
-cambiar plazas de parking, trazado o frecuencias de las líneas (solo su número de autobuses), ni mover bicicletas entre
-puestos. Tampoco hay histórico de las acciones ya aplicadas: guardadlas vosotros si queréis evaluarlas.
+cambiar plazas de parking, ni el trazado o las frecuencias de las líneas (solo su número de autobuses). Tampoco hay histórico de las acciones ya aplicadas: guardadlas vosotros si queréis evaluarlas.
 
 ## Hacer un gestor autónomo
 
