@@ -15,7 +15,7 @@ ejemplo funcional está en [`examples/gestor.py`](https://github.com/prubioamzub
 | Lecturas (`GET`) | Públicas |
 | Escrituras (`POST`, `PUT`, `PATCH`, `DELETE`) | Cabecera `Authorization: Bearer <SMARTCITY_TOKEN>` si el servidor tiene token (en `.env`). Sin token configurado, cualquiera puede escribir |
 | Formato | JSON (`Content-Type: application/json`). Errores: `{"error": "mensaje"}` con 400 (datos no válidos), 401 (token), 403 (acción bloqueada), 404, 413 o 422 |
-| Esta guía | En el visor: panel **Servidor → Documentación de la API**. En el servidor: `GET /api/docs` (página web) y `GET /api/docs.md` (Markdown) |
+| Esta guía | En el visor: pestaña **Conexión** o **Datos → Abrir la guía de la API**. En el servidor: `GET /api/docs` (página web) y `GET /api/docs.md` (Markdown) |
 
 ### Tiempo simulado
 
@@ -272,7 +272,8 @@ por defecto). Puede llevar **franjas horarias** con otro precio (como mucho 4):
 `{"price": 2, "schedule": [{"from": "17:00", "to": "22:00", "price": 4}]}`. Como en una ciudad real, **la tarifa solo
 cambia a las 0:00** y sigue igual los días siguientes hasta que se cambie: hay que decidir hoy la de mañana, sabiendo qué
 día será (laborable o festivo, eventos, previsión del tiempo). En `parkings` de `GET /api/state` salen el precio de ahora
-(`price`), la tarifa de hoy (`today`) y la programada para mañana (`tomorrow`).
+(`price`), la tarifa de hoy (`today`) y la programada para mañana (`tomorrow`). En el visor, pestaña **Parkings →
+Cambiar la tarifa de mañana** (y sobre cada P del mapa, el precio de ahora).
 
 Quien va a aparcar elige entre los parkings de su zona según el precio: uno más caro que sus vecinos les manda coches y uno
 más barato se los quita. Subir todos a la vez no cambia a qué parking va la gente, pero **sí cuántos van en coche**: con
@@ -300,9 +301,14 @@ dan abasto (gente en tierra o esperas muy largas) parte de esa gente coge el coc
 
 ## Lo que NO se puede hacer (todavía)
 
+<<<<<<< HEAD
 El simulador no modela: tarificación por congestión, calidad del aire ni emisiones, ni se pueden
 cambiar plazas de parking, trazado o frecuencias de las líneas (solo su número de autobuses), ni mover bicicletas entre
 puestos. Tampoco hay histórico de las acciones ya aplicadas: guardadlas vosotros si queréis evaluarlas.
+=======
+El simulador no modela: precios de parking, tarificación por congestión, calidad del aire ni emisiones, ni se pueden
+cambiar plazas de parking, ni el trazado o las frecuencias de las líneas (solo su número de autobuses). Tampoco hay histórico de las acciones ya aplicadas: guardadlas vosotros si queréis evaluarlas.
+>>>>>>> calibracion
 
 ## Hacer un gestor autónomo
 
