@@ -172,12 +172,12 @@ function pendingJson(engine, li) {
 // Una línea en GET /api/buses y PATCH /api/buses/<línea>.
 function busLineJson(engine, i) {
   const l = engine.transit.lines[i];
-  const { active, passengers, full, waiting, leftBehind } = engine.buses.stats[i];
+  const { active, passengers, full, waiting, leftBehind, unserved } = engine.buses.stats[i];
   return {
     id: l.id, stops: l.stops.length, fleet: l.buses, target: engine.buses.committed(i), pending: pendingJson(engine, i),
     minFleet: CONFIG.transit.minFleet, maxFleet: CONFIG.transit.maxFleet, capacity: CONFIG.transit.capacity,
     suspended: engine.buses.suspended[i], tracked: engine.busTracker.isTracked(l.id),
-    active, passengers, full, waiting, leftBehind,
+    active, passengers, full, waiting, leftBehind, unserved: unserved ?? 0,
   };
 }
 
@@ -302,6 +302,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       parkings: [...engine.parking.lots.values()].map((l) => ({
         id: l.id, name: l.name, capacity: l.capacity, tracked: engine.parking.isTracked(l.id),
         occupancy: Math.round(engine.parking.occupancyOf(l, engine.simTime) * 1000) / 1000,
+        price: engine.lots.price[engine.lots.index.get(l.id)],
+        ...engine.lots.tariffOf(l.id),
       })),
       weather: CONFIG.weather.enabled ? observation(engine.simTime) : null,
       holiday: CONFIG.holidays.enabled ? holidayCalendar.holidayAt(engine.simTime) : null,
@@ -519,6 +521,25 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       if (typeof body.name !== 'string') throw new HttpError(400, 'name debe ser texto');
       runtime.mutate((e) => e.sensors.rename(id, body.name));
       return send(200, { ok: true });
+    }
+
+    // Tarifa de mañana de un parking (se aplica a las 0:00): { price: 3, schedule: [{ from: '17:00', to: '22:00', price: 5 }] }
+    // (€/h, entre minPrice y maxPrice; price null = el de por defecto; schedule opcional).
+    const lotMatch = /^\/api\/parking\/([^/]+)$/.exec(pathname);
+    if (lotMatch && lotMatch[1] !== 'tracked' && method === 'PATCH') {
+      authorize(req);
+      const id = decodeURIComponent(lotMatch[1]);
+      if (!runtime.engine.lots.index.has(id)) throw new HttpError(404, 'Parking no encontrado');
+      const { price, schedule } = await readJson(req);
+      try {
+        runtime.mutate((e) => {
+          e.lots.setPrice(id, price === null || price === undefined ? null : Number(price), schedule ?? []);
+        });
+      } catch (err) {
+        throw new HttpError(400, err.message);
+      }
+      const day = Math.floor(runtime.engine.simTime / 86400) + 1;
+      return send(200, { id, ...runtime.engine.lots.tariffOf(id), effectiveAt: iso(day * 86400), occupancy: runtime.engine.lots.occupancy(id) });
     }
 
     if (method === 'PUT' && pathname === '/api/parking/tracked') {

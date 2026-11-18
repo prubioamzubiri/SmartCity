@@ -85,7 +85,11 @@ Los laborables hay **marea**: por la mañana (7–10 h) se cogen bicis en los ba
 
 ### Parkings
 
-`parkings` dentro de `GET /api/state` (ocupación actual de cada parking subterráneo).
+`parkings` dentro de `GET /api/state`: ocupación actual (`occupancy`) y precio (`price`, €/h) de cada parking
+subterráneo. Llegan coches según la demanda de la ciudad y los **eventos cercanos**, se quedan unas 2 h y se van. Quien va
+a aparcar elige entre los parkings a menos de 1 km **según el precio**: uno más caro que sus vecinos les manda coches y
+uno más barato se los quita. Si el elegido está lleno, prueba en los de alrededor, y si no encuentra sitio **da vueltas
+buscando** (`parking_search` en `city.csv`): más coches en la calle.
 
 ### Semáforos — `GET /api/signals`
 
@@ -120,9 +124,9 @@ hayáis activado**, y **desde que los activáis** (no hay pasado anterior): acti
 | Coches por punto | `POST /api/sensors` `{x, z, name}` → `id` (`S1`…). También `PATCH`/`DELETE /api/sensors/<id>` | `GET /api/traffic.csv?from=&to=&id=` (cada 5 min: `count`, `count_fwd`, `count_bwd`, `avg_speed_kmh`) |
 | Peatones por punto | `POST /api/pedestrian-sensors` `{x, z, name}` → `id` (`P1`…) | `GET /api/pedestrians.csv?from=&to=&id=` (`count`, `count_walk`, `count_cross`, `present`) |
 | Ocupación de parkings | `PUT /api/parking/tracked` `{"ids": ["U-125_53", …]}` | `GET /api/parking.csv?from=&to=&id=` |
-| Autobuses por línea | `PUT /api/buses/tracked` `{"ids": ["L1", …]}` | `GET /api/buses.csv?from=&to=&id=` (cada 5 min: `buses`, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`, `left_behind`, `fleet` —autobuses asignados que ya circulan—) |
+| Autobuses por línea | `PUT /api/buses/tracked` `{"ids": ["L1", …]}` | `GET /api/buses.csv?from=&to=&id=` (cada 5 min: `buses`, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`, `left_behind`, `fleet` —autobuses asignados que ya circulan— y `unserved` —gente que se ha quedado sin autobús porque no cabía o se ha cansado de esperar; más estable que `left_behind`, que solo mira los autobuses que están en una parada—) |
 | Bicis por puesto | `PUT /api/bikes/tracked` `{"ids": ["municipal/0", …]}` | `GET /api/bikes.csv?from=&to=&id=` (cada 15 min: `bikes`, `free_docks`, `takes`, `returns`, `occupancy_pct`) |
-| Toda la ciudad | — (siempre activo, desde que arranca el servidor) | `GET /api/city.csv?from=&to=` (cada 5 min: `cars`, `stopped`, `avg_speed_kmh`, `buses`, `bus_passengers`, `full_buses`, `bus_waiting`, `suspended_lines`, `bikes_in_use`, `stations_empty`, `stations_full`, `parkings_full`, metros de calle `closed_m` / `bus_only_m` / `limited_m`, `signals_all_red` y los viajes del intervalo: `trips_done`, `trip_min` (duración media), `delay_min` (retraso medio frente a ir sin tráfico ni cortes) y `trips_lost`; `bus_unserved`, la gente que quería ir en autobús y no ha podido; `bus_demand`, la gente que quiere ir en autobús (por hora); `ped_wait_s` y `ped_waiting`, la espera media y la gente esperando en los cruces con semáforo —cruzar una calle cortada a los coches no tiene espera—; y `ped_space`, el espacio ganado por los peatones: km de calle cortada a los coches × lo concurrida que es × la gente que hay en la calle; solo bus cuenta el 70 %) |
+| Toda la ciudad | — (siempre activo, desde que arranca el servidor) | `GET /api/city.csv?from=&to=` (cada 5 min: `cars`, `stopped`, `avg_speed_kmh`, `buses`, `bus_passengers`, `full_buses`, `bus_waiting`, `suspended_lines`, `bikes_in_use`, `stations_empty`, `stations_full`, `parkings_full` (parkings llenos), metros de calle `closed_m` / `bus_only_m` / `limited_m`, `signals_all_red` y los viajes del intervalo: `trips_done`, `trip_min` (duración media), `delay_min` (retraso medio frente a ir sin tráfico ni cortes) y `trips_lost`; `bus_unserved`, la gente que quería ir en autobús y no ha podido; `bus_demand`, la gente que quiere ir en autobús (por hora); `ped_wait_s` y `ped_waiting`, la espera media y la gente esperando en los cruces con semáforo —cruzar una calle cortada a los coches no tiene espera—; y `ped_space`, el espacio ganado por los peatones: km de calle cortada a los coches × lo concurrida que es × la gente que hay en la calle; solo bus cuenta el 70 %; `parking_search`, coches dando vueltas porque no encuentran sitio en un parking; y `parking_premium`, cuánto más caros que el precio base están los parkings, de media) |
 | Tiempo, eventos | — (siempre disponibles, también del pasado) | `GET /api/weather.csv`, `GET /api/events.csv` |
 
 Cada `PUT …/tracked` **sustituye** la lista anterior: enviad todos los ids que queráis grabar.
@@ -261,7 +265,31 @@ las que quepan. **Cada viaje tarda**: unos 15 min en cargar, otros 15 en descarg
 con la furgoneta y las horas de carga y descarga (`loadAt`, `unloadAt`), o `409` si no hay ninguna libre. Para tener las
 bicis donde hagan falta en la hora punta hay que moverlas **antes**: cuando el puesto ya está vacío, se llega tarde.
 
-### 3.6 La demanda no se controla
+### 3.6 Tarifa de un parking — `PATCH /api/parking/<id>`
+
+`{"price": 3}` programa la **tarifa de mañana** de un parking (€/h, entre 0,5 y 6; por defecto 2; `null` vuelve a la de
+por defecto). Puede llevar **franjas horarias** con otro precio (como mucho 4):
+`{"price": 2, "schedule": [{"from": "17:00", "to": "22:00", "price": 4}]}`. Como en una ciudad real, **la tarifa solo
+cambia a las 0:00** y sigue igual los días siguientes hasta que se cambie: hay que decidir hoy la de mañana, sabiendo qué
+día será (laborable o festivo, eventos, previsión del tiempo). En `parkings` de `GET /api/state` salen el precio de ahora
+(`price`), la tarifa de hoy (`today`) y la programada para mañana (`tomorrow`). En el visor, pestaña **Parkings →
+Cambiar la tarifa de mañana** (y sobre cada P del mapa, el precio de ahora).
+
+Quien va a aparcar elige entre los parkings de su zona según el precio: uno más caro que sus vecinos les manda coches y uno
+más barato se los quita. Subir todos a la vez no cambia a qué parking va la gente, pero **sí cuántos van en coche**: con
+los parkings caros (de media), parte de la gente deja el coche y va en autobús, en bici o andando (con todos al doble, un
+7,5 % menos de coches; como mucho, un 15 %). Los autobuses se llenan más y hay más gente en las calles y en los
+semáforos; y unos precios altos cuentan como **coste de la intervención** para los ciudadanos. Los que van a un
+**evento** miran los parkings de alrededor de la sede (a menos de 800 m): con el doble de precio, un 30 % de ellos deja el
+coche (como mucho la mitad) y va en las líneas de autobús del evento. `parking_premium` en
+`city.csv`: cuánto más caros que el precio base están, de media (0 = al precio base; 1 = el doble).
+
+```sh
+curl -X PATCH http://localhost:8080/api/parking/U-125_53 -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"price": 2, "schedule": [{"from": "17:00", "to": "22:00", "price": 4}]}'
+```
+
+### 3.7 La demanda no se controla
 
 Cuántos coches y peatones hay en la ciudad **no se puede cambiar**: lo fija el servidor (`params` en `GET /api/state`:
 `maxCars` y `maxPedestrians` en hora punta) y **varía un poco al azar** cada día (±10 %) y de hora en hora (±5 %), como
@@ -273,8 +301,9 @@ dan abasto (gente en tierra o esperas muy largas) parte de esa gente coge el coc
 
 ## Lo que NO se puede hacer (todavía)
 
-El simulador no modela: precios de parking, tarificación por congestión, calidad del aire ni emisiones, ni se pueden
-cambiar plazas de parking, ni el trazado o las frecuencias de las líneas (solo su número de autobuses). Tampoco hay histórico de las acciones ya aplicadas: guardadlas vosotros si queréis evaluarlas.
+El simulador no modela: tarificación por congestión, calidad del aire ni emisiones, ni se pueden
+cambiar plazas de parking, ni el trazado o las frecuencias de las líneas (solo su número de autobuses). Tampoco hay
+histórico de las acciones ya aplicadas: guardadlas vosotros si queréis evaluarlas.
 
 ## Hacer un gestor autónomo
 

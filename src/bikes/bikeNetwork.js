@@ -195,7 +195,7 @@ export class BikeNetwork {
     const rng = createRng(hash(`${Math.round(time / this.stepSeconds)}:${CONFIG.sim.seed}`));
     const demand = bikeDemand(time, this.getParams().scenario);
     for (let i = 0; i < this.count; i++) {
-      const lambda = (C.takesPerHour * this.stationList[i].weight * (this.stationList[i].capacity / DEFAULT_CAPACITY) * demand * this.tide(i, time)[0] * this.stepSeconds) / 3600;
+      const lambda = (C.takesPerHour * this.stationList[i].weight * (this.stationList[i].capacity / DEFAULT_CAPACITY) * demand * (this.extraDemand ?? 1) * this.tide(i, time)[0] * this.stepSeconds) / 3600;
       const taken = Math.min(this.docked[i], poisson(lambda, rng));
       this.docked[i] -= taken;
       this.takes[i] += taken;

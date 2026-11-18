@@ -38,7 +38,7 @@ CREATE INDEX IF NOT EXISTS pedestrian_sensor ON pedestrian_records (sensor_id, t
 CREATE TABLE IF NOT EXISTS bus_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp TEXT NOT NULL, weekday TEXT NOT NULL, line_id TEXT NOT NULL, stops INTEGER, buses INTEGER,
-  passengers INTEGER, capacity INTEGER, occupancy_pct REAL, full_buses INTEGER, waiting INTEGER, left_behind INTEGER, fleet INTEGER
+  passengers INTEGER, capacity INTEGER, occupancy_pct REAL, full_buses INTEGER, waiting INTEGER, left_behind INTEGER, fleet INTEGER, unserved INTEGER
 );
 CREATE INDEX IF NOT EXISTS bus_time ON bus_records (timestamp);
 CREATE INDEX IF NOT EXISTS bus_line ON bus_records (line_id, timestamp);
@@ -76,12 +76,12 @@ export class Store {
     this.db.exec(SCHEMA);
     // Bases de datos creadas con una versión anterior: añade las columnas nuevas del histórico global.
     const have = new Set(this.db.prepare('PRAGMA table_info(city_records)').all().map((c) => c.name));
-    const types = { trips_done: 'INTEGER', trip_min: 'REAL', delay_min: 'REAL', trips_lost: 'INTEGER', bus_unserved: 'INTEGER', bus_demand: 'INTEGER', ped_wait_s: 'REAL', ped_waiting: 'INTEGER', ped_space: 'REAL' };
+    const types = { trips_done: 'INTEGER', trip_min: 'REAL', delay_min: 'REAL', trips_lost: 'INTEGER', bus_unserved: 'INTEGER', bus_demand: 'INTEGER', ped_wait_s: 'REAL', ped_waiting: 'INTEGER', ped_space: 'REAL', parking_search: 'INTEGER', parking_premium: 'REAL' };
     for (const [column, type] of Object.entries(types)) {
       if (!have.has(column)) this.db.exec(`ALTER TABLE city_records ADD COLUMN ${column} ${type}`);
     }
     const busHave = new Set(this.db.prepare('PRAGMA table_info(bus_records)').all().map((c) => c.name));
-    for (const column of ['left_behind', 'fleet']) if (!busHave.has(column)) this.db.exec(`ALTER TABLE bus_records ADD COLUMN ${column} INTEGER`);
+    for (const column of ['left_behind', 'fleet', 'unserved']) if (!busHave.has(column)) this.db.exec(`ALTER TABLE bus_records ADD COLUMN ${column} INTEGER`);
     this.inserts = {};
     for (const [kind, { table, columns }] of Object.entries(TABLES)) {
       this.inserts[kind] = this.db.prepare(

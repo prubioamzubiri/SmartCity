@@ -30,6 +30,8 @@ export function trackableUndergroundLots(list) {
     seen.add(lot.id);
     lots.push({
       id: lot.id,
+      x: lot.x,
+      z: lot.z,
       name: lot.name || `Parking subterráneo (${lot.id.slice(1).replace('_', ', ')})`,
       capacity: lot.capacity,
       estimatedCapacity: lot.estimatedCapacity,

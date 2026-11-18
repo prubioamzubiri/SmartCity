@@ -327,6 +327,16 @@ occupancy_pct`. Download them from **Servidor (datos continuos) → CSV de
 parkings**. Occupancy is simulated from the demand curve, and capacity is
 a default estimate when OSM does not provide it; these are not real measurements.
 
+### Parking tariffs
+
+Each parking in the **Parkings** tab shows its current price and today's tariff.
+**Cambiar la tarifa de mañana** sets tomorrow's base price (€/h) and up to
+`CONFIG.parking.maxBands` time bands with another price. **Guardar para mañana**
+sends it to the server (`PATCH /api/parking/<id>`), and **Por defecto** returns
+the parking to the default price. Tariffs only change at 0:00 and stay until
+changed again. On the map, the current price is drawn above each "P": red if it
+is above the default price, green if below.
+
 ## Checks
 
 ```sh

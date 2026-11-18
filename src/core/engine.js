@@ -8,7 +8,8 @@ import { eventCalendar } from '../events/calendar.js';
 import { poiStrength, projectPois } from '../city/pois.js';
 import { SensorManager } from '../sensors/sensorManager.js';
 import { ParkingTracker } from '../sensors/parkingTracker.js';
-import { trackableUndergroundLots, undergroundOccupancy } from '../city/undergroundLots.js';
+import { trackableUndergroundLots } from '../city/undergroundLots.js';
+import { ParkingLots } from '../city/parkingLots.js';
 import { PedestrianSensors } from '../sensors/pedestrianSensors.js';
 import { createWaterMask } from '../city/waterMask.js';
 import { Pedestrians, pedestrianLoad } from '../pedestrians/pedestrians.js';
@@ -52,9 +53,14 @@ export class SimEngine {
     if (this.sim.trips && CONFIG.events.enabled) for (const v of Object.values(eventCalendar.venues)) this.sim.trips.addPoint(v.id, v.x, v.z);
     this.eventCarCut = 0; // demanda de coches de los eventos que no llegan en coche porque sus calles están cortadas
     this.sensors = new SensorManager({ graph: this.graph, sim: this.sim, getSimTime: () => this.simTime, storage: null });
+    // Parkings con estado y precio (los coches de los eventos con sus calles cortadas no vienen: los quita `access`).
+    this.lots = new ParkingLots(trackableUndergroundLots(data.parking?.underground), {
+      getParams: () => this.params,
+      attractorsAt: (t) => (CONFIG.events.enabled ? eventCalendar.busDemandAt(t) : []).map((a) => ({ ...a, weight: a.weight * (this.buses?.eventAccess?.get(a.id) ?? 1) })),
+    });
     this.parking = new ParkingTracker({
       lots: trackableUndergroundLots(data.parking?.underground),
-      occupancyOf: undergroundOccupancy,
+      occupancyOf: (lot) => this.lots.occupancy(lot.id),
       getSimTime: () => this.simTime,
       storage: null,
     });
@@ -187,9 +193,11 @@ export class SimEngine {
       this.signals.update(this.simTime);
       this.buses.tick(this.simTime);
       this.updateEnvironment();
-      this.sim.setTarget(this.params.maxCars * Math.max(0, demandFactor(this.simTime, this.params.scenario) - this.eventCarCut) * this.carFactor);
+      // Más los que dan vueltas buscando aparcamiento porque los parkings de su zona están llenos.
+      this.sim.setTarget(this.params.maxCars * Math.max(0, demandFactor(this.simTime, this.params.scenario) - this.eventCarCut) * this.carFactor + this.lots.searching * CONFIG.parking.searchCars);
       this.sim.step(STEP);
       this.sensors.tick(this.simTime);
+      this.lots.tick(this.simTime);
       this.parking.tick(this.simTime);
       this.pedSensors.tick(this.simTime);
       this.busTracker.tick(this.simTime);
@@ -208,14 +216,23 @@ export class SimEngine {
     this.environmentMinute = minute;
     this.sim.speedScale = speedFactor(minute * 60);
     this.sim.setAttractors(CONFIG.events.enabled ? eventCalendar.attractorsAt(minute * 60) : []);
-    // Con las calles de la sede cortadas, parte de la gente del evento no viene en coche: va andando o en autobús.
+    // Con las calles de la sede cortadas o los parkings de alrededor caros, parte de la gente del evento no viene en
+    // coche: va andando o en autobús.
     this.eventCarCut = 0;
     this.buses.eventAccess = new Map();
     for (const a of this.sim.attractors) {
-      this.eventCarCut += a.base * (1 - a.access);
-      this.buses.eventAccess.set(a.id, a.access);
+      const keep = 1 - this.lots.eventShift(a.x, a.z);
+      a.weight *= keep;
+      a.pull *= keep;
+      const access = a.access * keep;
+      this.eventCarCut += a.base * (1 - access);
+      this.buses.eventAccess.set(a.id, access);
     }
-    this.signals.setPedestrianLoad(pedestrianLoad(minute * 60, this.params.scenario, this.params.maxPedestrians));
+    // Parkings caros: parte de la gente deja el coche y va en autobús, en bici o andando.
+    const P = CONFIG.parking;
+    this.priceShift = Math.min(P.maxShift, P.shiftPerPremium * this.lots.pricePremium());
+    this.bikes.extraDemand = 1 + this.priceShift * P.toBikes;
+    this.signals.setPedestrianLoad(pedestrianLoad(minute * 60, this.params.scenario, this.params.maxPedestrians) * (1 + this.priceShift * P.toWalk));
     this.updateTransit(minute * 60);
     this.updatePois(minute * 60);
     // Rutas con el tráfico de ahora: cada minuto, los tiempos de cada tramo; cada `refreshMinutes`, los caminos.
@@ -250,13 +267,13 @@ export class SimEngine {
     const T = CONFIG.transit;
     const c = T.closures;
     const closedKm = Math.min(c.maxKm, this.restrictedKm());
-    this.buses.extraDemand = 1 + c.transitPerKm * closedKm;
+    this.buses.extraDemand = (1 + c.transitPerKm * closedKm) * (1 + (this.priceShift ?? 0) * CONFIG.parking.toTransit);
     this.buses.updateAt(seconds, this.params.scenario, this.scale);
     this.unserved = this.buses.unservedShare();
     // Por debajo de `modeShiftFrom` (gente que se queda en tierra de vez en cuando en hora punta) no cambia nada: así un
     // servicio normal no perturba el tráfico.
     const shifted = Math.max(0, this.unserved - T.modeShiftFrom) / (1 - T.modeShiftFrom);
-    this.carFactor = (1 - c.carsPerKm * closedKm) * (1 + T.modeShift * shifted);
+    this.carFactor = (1 - c.carsPerKm * closedKm) * (1 - (this.priceShift ?? 0)) * (1 + T.modeShift * shifted);
 
     const day = Math.floor(seconds / 86400);
     if (day !== this.busDay.day) this.busDay = { day, used: 0, included: 0 };
@@ -305,8 +322,7 @@ export class SimEngine {
       else if (item.mode === 'entry_limit' && item.limit > 0) metres.limited += length;
       else metres.closed += length;
     }
-    let fullLots = 0;
-    for (const lot of this.parking.lots.values()) if (this.parking.occupancyOf(lot, time) >= 0.95) fullLots++;
+    const fullLots = this.lots.fullCount();
     return {
       cars: traffic.active,
       stopped: traffic.stopped,
@@ -323,6 +339,8 @@ export class SimEngine {
       stations_empty: bikes.stations.filter((s) => s.available <= 0).length,
       stations_full: bikes.stations.filter((s) => s.available >= s.capacity).length,
       parkings_full: fullLots,
+      parking_search: Math.round(this.lots.searching), // coches dando vueltas porque no encuentran sitio
+      parking_premium: Math.round(this.lots.pricePremium() * 100) / 100, // cuánto más caros que el precio base, de media
       closed_m: Math.round(metres.closed),
       bus_only_m: Math.round(metres.busOnly),
       limited_m: Math.round(metres.limited),
@@ -387,6 +405,7 @@ export class SimEngine {
       sim: this.sim.serialize(),
       sensors: this.sensors.serialize(),
       parking: this.parking.serialize(),
+      lots: this.lots.serialize(),
       pedSensors: this.pedSensors.serialize(),
       buses: this.busTracker.serialize(),
       bikes: this.bikes.serialize(),
@@ -407,6 +426,7 @@ export class SimEngine {
     this.signals.setPlan(state.plan);
     this.sensors.restore(state.sensors);
     this.parking.restore(state.parking);
+    this.lots.restore(state.lots);
     this.pedSensors.restore(state.pedSensors, this.simTime);
     if (state.buses) this.busTracker.restore(state.buses); // los snapshots anteriores a los autobuses no lo traen
     if (state.bikes) this.bikes.restore(state.bikes);
