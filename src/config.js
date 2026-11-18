@@ -275,7 +275,7 @@ export const CONFIG = {
       strength: 0.8, // coger y dejar se multiplican o dividen por 1 + strength en el sentido de la marea
     },
     // Furgonetas para redistribuir bicis entre puestos: van al origen, cargan, viajan y descargan.
-    vans: { count: 3, capacity: 20, speed: 4, handlingSeconds: 900 }, // speed en m/s (con tráfico); handling: cargar o descargar
+    vans: { count: 3, capacity: 20, speed: 4, handlingSeconds: 900 }, // speed en m/s, en línea recta (sin calles ni tráfico); handling: cargar o descargar
   },
 
   // Transporte público: líneas de autobús circulares (ida y vuelta) que cruzan la ciudad entre paradas de OSM (solo visual).

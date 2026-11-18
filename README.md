@@ -52,7 +52,8 @@ station sensors. `GET /api/bikes` returns the live counts, and the stations tick
 
 Three **vans** of 20 bikes (`CONFIG.bicycles.vans`) redistribute bikes between stations
 (`POST /api/bikes/moves`, only from the API): the nearest free van goes to the origin, loads,
-drives with the traffic and unloads. Loading and unloading take 15 simulated minutes each, so a
+drives to the destination (straight line at 4 m/s, about 14 km/h; it ignores the streets and the traffic)
+and unloads. Loading and unloading take 15 simulated minutes each, so a
 move takes half an hour or more: to have bikes where the tide will need them, they have to be
 moved before.
 
