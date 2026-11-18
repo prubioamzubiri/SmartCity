@@ -216,12 +216,17 @@ export class SimEngine {
     this.environmentMinute = minute;
     this.sim.speedScale = speedFactor(minute * 60);
     this.sim.setAttractors(CONFIG.events.enabled ? eventCalendar.attractorsAt(minute * 60) : []);
-    // Con las calles de la sede cortadas, parte de la gente del evento no viene en coche: va andando o en autobús.
+    // Con las calles de la sede cortadas o los parkings de alrededor caros, parte de la gente del evento no viene en
+    // coche: va andando o en autobús.
     this.eventCarCut = 0;
     this.buses.eventAccess = new Map();
     for (const a of this.sim.attractors) {
-      this.eventCarCut += a.base * (1 - a.access);
-      this.buses.eventAccess.set(a.id, a.access);
+      const keep = 1 - this.lots.eventShift(a.x, a.z);
+      a.weight *= keep;
+      a.pull *= keep;
+      const access = a.access * keep;
+      this.eventCarCut += a.base * (1 - access);
+      this.buses.eventAccess.set(a.id, access);
     }
     // Parkings caros: parte de la gente deja el coche y va en autobús, en bici o andando.
     const P = CONFIG.parking;

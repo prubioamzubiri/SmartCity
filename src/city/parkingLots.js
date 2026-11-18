@@ -96,6 +96,20 @@ export class ParkingLots {
     return cap ? sum / cap : 0;
   }
 
+  // Fracción de la gente de un evento en (x, z) que deja el coche por el precio de los parkings de alrededor (los que
+  // están a menos de `eventMeters`): con el doble del precio base, `eventShiftPerPremium`; como mucho `eventMaxShift`.
+  eventShift(x, z) {
+    const P = CONFIG.parking;
+    let sum = 0;
+    let cap = 0;
+    this.lots.forEach((l, i) => {
+      if (Math.hypot(l.x - x, l.z - z) > P.eventMeters) return;
+      sum += l.capacity * Math.max(0, this.price[i] / P.basePrice - 1);
+      cap += l.capacity;
+    });
+    return cap ? Math.min(P.eventMaxShift, (P.eventShiftPerPremium * sum) / cap) : 0;
+  }
+
   occupied(i) {
     return this.regular[i] + this.event[i];
   }

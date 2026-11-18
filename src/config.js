@@ -215,6 +215,9 @@ export const CONFIG = {
     // un `shiftPerPremium` menos de coches, como mucho `maxShift`. Esa gente va en autobús, en bici o andando
     // (demanda × 1 + fracción × toTransit, toBikes, toWalk).
     shiftPerPremium: 0.075,
+    // Los de un evento miran los parkings de alrededor de la sede: con el doble de precio, un 30 % deja el coche.
+    eventShiftPerPremium: 0.3,
+    eventMaxShift: 0.5,
     maxShift: 0.15,
     toTransit: 1.5,
     toBikes: 2,

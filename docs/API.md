@@ -278,7 +278,9 @@ Quien va a aparcar elige entre los parkings de su zona según el precio: uno má
 más barato se los quita. Subir todos a la vez no cambia a qué parking va la gente, pero **sí cuántos van en coche**: con
 los parkings caros (de media), parte de la gente deja el coche y va en autobús, en bici o andando (con todos al doble, un
 7,5 % menos de coches; como mucho, un 15 %). Los autobuses se llenan más y hay más gente en las calles y en los
-semáforos; y unos precios altos cuentan como **coste de la intervención** para los ciudadanos. `parking_premium` en
+semáforos; y unos precios altos cuentan como **coste de la intervención** para los ciudadanos. Los que van a un
+**evento** miran los parkings de alrededor de la sede (a menos de 800 m): con el doble de precio, un 30 % de ellos deja el
+coche (como mucho la mitad) y va en las líneas de autobús del evento. `parking_premium` en
 `city.csv`: cuánto más caros que el precio base están, de media (0 = al precio base; 1 = el doble).
 
 ```sh
