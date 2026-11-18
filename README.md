@@ -51,11 +51,13 @@ station sensors. `GET /api/bikes` returns the live counts, and the stations tick
 **Registrar** in the **Bicis** tab are recorded every 15 simulated minutes (`GET /api/bikes.csv`).
 
 Three **vans** of 20 bikes (`CONFIG.bicycles.vans`) redistribute bikes between stations
-(`POST /api/bikes/moves`, only from the API): the nearest free van goes to the origin, loads,
+(**Furgonetas** in the **Bicis** tab, or `POST /api/bikes/moves`): the nearest free van goes to the origin, loads,
 drives to the destination (straight line at 4 m/s, about 14 km/h; it ignores the streets and the traffic)
 and unloads. Loading and unloading take 15 simulated minutes each, so a
 move takes half an hour or more: to have bikes where the tide will need them, they have to be
-moved before.
+moved before. In the tab, pick the origin and the destination (or **Desde aquí** / **Hasta aquí** on a
+station) and the number of bikes; the list shows what each van is doing and when it loads and unloads,
+and the vans (orange, F1–F3) move on the map.
 
 You can change the docks (`capacity`) of each station, either per station in the **Bicis** tab
 (**Anclajes** and **Programar**) or by pasting a JSON such as `{ "municipal/0": 20, "municipal/5": 8 }`

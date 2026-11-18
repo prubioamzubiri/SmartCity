@@ -1,8 +1,10 @@
 import { CONFIG } from '../../config.js';
 import { el } from '../dom.js';
-import { badge, button, card, cardTitle, empty, hint, meter, stat, stepper } from '../widgets.js';
+import { badge, button, card, cardTitle, empty, field, hint, meter, stat, stepper } from '../widgets.js';
 
 const DAYS = CONFIG.bicycles.capacityDelaySeconds / 86400;
+const VANS = CONFIG.bicycles.vans;
+const clock = (iso) => (iso ? iso.slice(11, 16) : '');
 
 // Bicicletas compartidas: disponibilidad por puesto, cambio de anclajes y registro del histórico.
 export function createBikesTab(ctx) {
@@ -11,6 +13,35 @@ export function createBikesTab(ctx) {
   const tracked = () => (ctx.state()?.bikes?.stations ?? []).filter((s) => s.tracked).map((s) => s.id);
   const setTracked = (ids, ok) => ctx.run((c) => c.setTrackedBikes(ids), ok);
   const schedule = (changes, ok) => ctx.run((c) => c.setBikeCapacities(changes), ok);
+
+  // Furgonetas: mover bicis de un puesto a otro.
+  const byName = [...stations].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  const nameOf = (id) => stations.find((s) => s.id === id)?.name ?? id;
+  const stationSelect = (label) => {
+    const select = el('select', { 'aria-label': label }, el('option', { value: '', textContent: '— Elige un puesto —' }),
+      ...byName.map((st) => el('option', { value: st.id, textContent: st.name })));
+    return select;
+  };
+  const from = stationSelect('Puesto de origen');
+  const to = stationSelect('Puesto de destino');
+  const howMany = el('input', { type: 'number', min: 1, max: VANS.capacity, step: 1, value: 10, 'aria-label': 'Bicis' });
+  const send = button('Enviar furgoneta', () => {
+    const bikes = Math.round(Number(howMany.value));
+    if (!from.value || !to.value) return ctx.toast('Elige el puesto de origen y el de destino', 'error');
+    if (from.value === to.value) return ctx.toast('El origen y el destino deben ser distintos', 'error');
+    if (!(bikes >= 1 && bikes <= VANS.capacity)) return ctx.toast(`Entre 1 y ${VANS.capacity} bicis`, 'error');
+    ctx.run((c) => c.moveBikes(from.value, to.value, bikes), `Furgoneta enviada: ${bikes} bicis de ${nameOf(from.value)} a ${nameOf(to.value)}`);
+  });
+  const vanList = el('div', { class: 'ui-stack' });
+  const vansCard = card(cardTitle('Furgonetas'),
+    hint(`Hay ${VANS.count} furgonetas de ${VANS.capacity} bicis. La libre más cercana va al origen, carga las que haya (como mucho las pedidas), va al destino y descarga las que quepan. Circulan en línea recta a unos ${Math.round(VANS.speed * 3.6)} km/h y tardan ${VANS.handlingSeconds / 60} min en cargar y otros ${VANS.handlingSeconds / 60} en descargar: cada viaje lleva media hora o más. Para que haya bicis en la hora punta, movedlas antes de que el puesto se vacíe.`),
+    field('Desde', from), field('Hasta', to),
+    el('div', { class: 'ui-row' }, field('Bicis', howMany), send),
+    vanList);
+  const pick = (select, id) => {
+    select.value = id;
+    vansCard.scrollIntoView({ block: 'nearest' });
+  };
 
   const search = el('input', { type: 'search', placeholder: 'Buscar puesto…', oninput: () => filter() });
   const rows = new Map();
@@ -36,6 +67,8 @@ export function createBikesTab(ctx) {
         el('label', { class: 'ui-check' }, record, ' Registrar')),
       el('div', { class: 'ui-row nowrap' }, load.node, count),
       el('div', { class: 'ui-row between' }, el('span', { class: 'ui-field-label', textContent: 'Anclajes' }), el('span', { class: 'ui-row nowrap' }, capacity.node, apply)),
+      el('div', { class: 'ui-row between' }, el('span', { class: 'ui-field-label', textContent: 'Furgoneta' }),
+        el('span', { class: 'ui-row nowrap' }, button('Desde aquí', () => pick(from, station.id), 'ghost'), button('Hasta aquí', () => pick(to, station.id), 'ghost'))),
       pending);
     rows.set(station.id, { station, node, load, count, pending, capacity, apply, record, search: station.name.toLowerCase() });
     list.append(node);
@@ -68,6 +101,7 @@ export function createBikesTab(ctx) {
 
   const node = el('div', {},
     card(el('div', { class: 'ui-stats three' }, ...Object.values(stats).map((s) => s.node))),
+    stations.length ? vansCard : '',
     stations.length
       ? card(cardTitle('Puestos'), hint(`Un cambio de anclajes tarda ${DAYS} días simulados en hacerse efectivo. «Registrar» guarda una muestra cada 15 min simulados (CSV de bicicletas).`),
         search, list, allNone)
@@ -110,6 +144,19 @@ export function createBikesTab(ctx) {
       stats.inUse.set((s.bikes?.inUse ?? 0).toLocaleString('es-ES'));
       stats.empty.set(bad.toLocaleString('es-ES'));
       for (const btn of allNone.querySelectorAll('button')) btn.disabled = !writable;
+      send.disabled = !writable;
+      const vans = s.bikes?.vans ?? [];
+      const free = vans.filter((v) => !v.busy).length;
+      vanList.replaceChildren(
+        ...vans.map((v) => {
+          const j = v.job;
+          const text = !j ? 'libre'
+            : j.loaded === null ? `va a ${nameOf(j.from)} a por ${j.bikes} bicis (termina de cargar a las ${clock(j.loadAt)}) y las lleva a ${nameOf(j.to)} (descarga a las ${clock(j.unloadAt)})`
+              : `lleva ${j.loaded} bicis de ${nameOf(j.from)} a ${nameOf(j.to)} (descarga a las ${clock(j.unloadAt)})`;
+          return el('div', { class: 'ui-row' }, badge(v.id, j ? 'warn' : 'ok'), el('span', { class: 'ui-muted', textContent: text }));
+        }),
+        el('div', { class: 'ui-muted', textContent: `${free} de ${vans.length} libres · ${(s.bikes?.moved ?? 0).toLocaleString('es-ES')} bicis movidas en total` }));
+      if (!free) send.disabled = true;
     },
   };
 }

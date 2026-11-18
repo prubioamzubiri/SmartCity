@@ -265,6 +265,8 @@ de un puesto a otro. La libre más cercana va al origen, carga las que haya (com
 las que quepan. **Cada viaje tarda**: unos 15 min en cargar, otros 15 en descargar y el trayecto (≈15 km/h). Responde `201`
 con la furgoneta y las horas de carga y descarga (`loadAt`, `unloadAt`), o `409` si no hay ninguna libre. Para tener las
 bicis donde hagan falta en la hora punta hay que moverlas **antes**: cuando el puesto ya está vacío, se llega tarde.
+Las furgonetas circulan en línea recta (sin seguir las calles ni el tráfico). En el visor: pestaña **Bicis → Furgonetas** (y en el mapa,
+las furgonetas F1–F3 en naranja).
 
 ### 3.6 Tarifa de un parking — `PATCH /api/parking/<id>`
 

@@ -110,6 +110,11 @@ export class ApiClient {
     return this.request('/api/bikes/capacity', { method: 'PUT', body: { changes } });
   }
 
+  // Furgoneta: mueve hasta `bikes` bicis del puesto `from` al `to` (201 con las horas de carga y descarga; 409 si no hay libre).
+  moveBikes(from, to, bikes) {
+    return this.request('/api/bikes/moves', { method: 'POST', body: { from, to, bikes } });
+  }
+
   setTrackedBikes(ids) {
     return this.request('/api/bikes/tracked', { method: 'PUT', body: { ids } });
   }
