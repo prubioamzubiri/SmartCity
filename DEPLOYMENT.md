@@ -72,8 +72,8 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 
 | Endpoint | Description |
 | --- | --- |
-| `GET /api/docs` / `GET /api/docs.md` | The API guide ([docs/API.md](docs/API.md)) as a web page / as Markdown. The viewer opens it from **Servidor → Documentación de la API** |
-| `GET /api/state` | Simulated time, scale, graph key, traffic stats, sensors (with current count), pedestrian sensors (with expected present and total), expected pedestrians on the street, parkings (with occupancy), params, signal plan, record counts |
+| `GET /api/docs` / `GET /api/docs.md` | The API guide ([docs/API.md](docs/API.md)) as a web page / as Markdown. The viewer opens it from **Conexión** or **Datos → Abrir la guía de la API** |
+| `GET /api/state` | Simulated time, scale, graph key, traffic stats, sensors (with current count), pedestrian sensors (with expected present and total), expected pedestrians on the street, parkings (with occupancy, current `price`, `today`'s and `tomorrow`'s tariff), params, signal plan, record counts |
 | `GET /api/events?from=&to=` | City events overlapping the range (default: next 30 simulated days, max 366): `id`, `type`, `name`, `series`, `venue`, `venueName`, `x`, `z`, `start`, `end`, and `attendance` / `extraDemand`, which are `null` until the event has ended. `GET /api/state` adds `events.active` (events with effect now, with `intensity`) and `events.boost` (extra demand now) |
 | `GET /api/events.csv?from=&to=&type=` | The same events as a CSV (`eventos.csv`), one row per event: `id`, `type`, `name`, `series`, `venue`, `venue_name`, `x`, `z`, `start`, `end`, `duration_h`, `status` (`upcoming`, `in_progress`, `finished`), `attendance`, `extra_demand`. The last two are empty until the event is `finished`, so a file never reveals the attendance of future events. `type` (optional) is one of `football`, `basketball`, `concert`, `film`, `fiesta`, `jazz`, `protest`; `GET /api/events` accepts it too |
 | `GET /api/weather?hours=` | Weather now (`current`: `time`, `temperature_c`, `rain_mm_h`, `cloud_pct`, `condition`) and the hourly forecast for the next 1–48 simulated hours (`forecast`: `time`, `lead_h`, `temperature_c`, `rain_probability`, `rain_mm_h`, `cloud_pct`, `condition`). The error of the forecast grows with `lead_h`; the real future weather is never published |
@@ -81,20 +81,24 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 | `GET /api/holidays?from=&to=` | Holidays of the range (`holidays`: `date`, `name`; default: the next 365 days, max 3 years). `GET /api/state` has `holiday` (name of today's holiday or `null`). Days before and after a holiday change the demand, so use them as features |
 | `GET /api/cars` | Car positions (base64 typed arrays: `edge`, `pos`, `speed`) for the viewer |
 | `GET /api/pedestrians` | Pedestrians (walking along sidewalks or crossing at crossings) at the current simulated time, on their real-time clock (base64 `Float32Array`s `x`, `z`, `heading`, in scene metres). The viewer does not poll it: it computes the same pedestrians every frame from the server clock |
+| `GET /api/city.csv?from=&to=` | The whole city every 5 simulated minutes, always recorded: cars, speed, buses, bikes, parkings, closures, trips (`trips_done`, `delay_min`, `trips_lost`), people without a bus, pedestrians waiting and pedestrian space, cars searching for a parking space, parking price premium (columns in [docs/API.md](docs/API.md)) |
 | `GET /api/traffic.csv?from=&to=&id=` | Sensor records (`id` = sensor id, optional) |
 | `GET /api/parking.csv?from=&to=&id=` | Parking occupancy records |
 | `GET /api/pedestrians.csv?from=&to=&id=` | Pedestrian sensor records every 5 simulated minutes: `count` (= `count_walk` on the sidewalks + `count_cross` at crossings), `present` (people in the sensor area) |
-| `GET /api/buses` | Current state of each bus line at the simulated time: `fleet`, `active` buses, `passengers`, `full` buses, `waiting` people at the stops, `tracked` |
-| `GET /api/buses.csv?from=&to=&id=` | Bus line records every 5 simulated minutes for the tracked lines (`id` = line id, e.g. `L1`): `buses` in service, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting` |
-| `GET /api/bikes` | Bike stations at the simulated time: `available` bikes, `capacity`, `tracked`, and `inUse` bikes ridden by pedestrians (simulated estimates) |
+| `GET /api/buses` | Current state of each bus line at the simulated time: `fleet` (assigned buses already running), `target` (counting the ones on the way), `pending` (`[{count, readyAt}]`), `active` buses, `passengers`, `full` buses, `waiting` people at the stops, `leftBehind`, `suspended`, `tracked`; and for the city `fleetTotal`, `reserve`, `deployMinutes` and `today` (`busHours`, `includedHours`, `overtimeHours`) |
+| `GET /api/buses/:line` | The same for one line plus its `stops` in order (`x`, `z`) |
+| `GET /api/buses.csv?from=&to=&id=` | Bus line records every 5 simulated minutes for the tracked lines (`id` = line id, e.g. `L1`): `buses` in service, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`, `left_behind`, `fleet`, `unserved` (people left without a bus) |
+| `GET /api/bikes` | Bike stations at the simulated time: `available` bikes, `capacity`, `tracked`, and `inUse` bikes ridden by pedestrians (simulated estimates); `vans` (redistribution vans with their current `job`) and `moved` |
 | `GET /api/bikes.csv?from=&to=&id=` | Records every 15 simulated minutes for the tracked stations (`id` = station id): `bikes`, `free_docks`, `takes`, `returns`, `occupancy_pct` |
 | `POST /api/pedestrian-sensors` `{x, z, name}` | Create a pedestrian sensor (ids `P1`, `P2`…) |
 | `PATCH /api/pedestrian-sensors/:id` `{name}` / `DELETE /api/pedestrian-sensors/:id` | Rename / remove (history is kept) |
 | `POST /api/sensors` `{x, z, name}` | Create a sensor |
 | `PATCH /api/sensors/:id` `{name}` / `DELETE /api/sensors/:id` | Rename / remove (history is kept) |
 | `PUT /api/parking/tracked` `{ids: [...]}` | Parkings to record |
+| `PATCH /api/parking/:id` `{price, schedule}` | Tomorrow's tariff of a parking (€/h, 0.5–6, default 2; up to 4 time bands `{from, to, price}`; `price: null` = default). It applies at 0:00 and stays until changed |
 | `PUT /api/buses/tracked` `{ids: [...]}` | Bus lines to record (none by default) |
 | `PUT /api/bikes/capacity` `{changes: {"<station id>": docks, "<id>": null}}` | Change the docks (1-60) of stations; it takes effect after 30 simulated days (`pending` in `GET /api/bikes`), `null` cancels a pending change. Requires the token; all-or-nothing |
+| `POST /api/bikes/moves` `{from, to, bikes}` | Send a van to move bikes between two stations (3 vans of 20 bikes; about 15 min to load, 15 to unload, plus the trip). `201` with `loadAt`/`unloadAt`, `409` if no van is free |
 | `PUT /api/bikes/tracked` `{ids: [...]}` | Bike stations to record (none by default) |
 | `PUT /api/params` | Always `403`: the demand is set by the server (`MAX_CARS`, `MAX_PEDESTRIANS`) and varies a little at random each day and hour |
 | `PUT /api/signals/plan` `{plan}` | Signal timing plan (replaces the whole plan) |
@@ -105,7 +109,7 @@ metres (`x`, `z`), as in the viewer. Dates are simulated ISO timestamps
 | `GET /api/restrictions` / `GET /api/restrictions/:id` | Street closures and restricted-access zones |
 | `POST /api/restrictions` `{mode, x, z, radius \| ways, limit, name}` | Close streets (`pedestrians_only`, `buses_and_pedestrians`) or limit the entry of new cars into a zone (`entry_limit`) |
 | `PATCH /api/restrictions/:id` `{mode, limit, name}` / `DELETE /api/restrictions/:id` | Change / lift a restriction |
-| `PATCH /api/buses/:line` `{fleet}` | Number of buses of a line (`minFleet`–`maxFleet`, immediate) |
+| `PATCH /api/buses/:line` `{fleet}` | Number of buses of a line (`minFleet`–`maxFleet`). Removing is immediate; added buses come from the reserve and enter service after `deployMinutes` (40 simulated min). `409` if the reserve is not enough |
 
 How to manage the city from an external program (reading, history and every change) is described in
 [docs/API.md](docs/API.md), with a working example in [examples/gestor.py](examples/gestor.py).

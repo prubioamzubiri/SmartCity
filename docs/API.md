@@ -111,6 +111,7 @@ ahora mismo) y `distance` al punto. `GET /api/roads/<way>` devuelve una.
 
 `GET /api/weather` (tiempo y previsión 48 h), `GET /api/events` (eventos), `GET /api/holidays` (festivos),
 `GET /api/cars` y `GET /api/pedestrians` (posiciones, para dibujar). Son útiles como variables de entrada de un modelo.
+`GET /api/health` responde `{"ok": true}` si el servidor está en marcha (para comprobar la conexión).
 
 ---
 
@@ -122,7 +123,7 @@ hayáis activado**, y **desde que los activáis** (no hay pasado anterior): acti
 | Qué | Cómo activarlo | Descargar |
 | --- | --- | --- |
 | Coches por punto | `POST /api/sensors` `{x, z, name}` → `id` (`S1`…). También `PATCH`/`DELETE /api/sensors/<id>` | `GET /api/traffic.csv?from=&to=&id=` (cada 5 min: `count`, `count_fwd`, `count_bwd`, `avg_speed_kmh`) |
-| Peatones por punto | `POST /api/pedestrian-sensors` `{x, z, name}` → `id` (`P1`…) | `GET /api/pedestrians.csv?from=&to=&id=` (`count`, `count_walk`, `count_cross`, `present`) |
+| Peatones por punto | `POST /api/pedestrian-sensors` `{x, z, name}` → `id` (`P1`…). También `PATCH`/`DELETE /api/pedestrian-sensors/<id>` | `GET /api/pedestrians.csv?from=&to=&id=` (`count`, `count_walk`, `count_cross`, `present`) |
 | Ocupación de parkings | `PUT /api/parking/tracked` `{"ids": ["U-125_53", …]}` | `GET /api/parking.csv?from=&to=&id=` |
 | Autobuses por línea | `PUT /api/buses/tracked` `{"ids": ["L1", …]}` | `GET /api/buses.csv?from=&to=&id=` (cada 5 min: `buses`, `passengers`, `capacity`, `occupancy_pct`, `full_buses`, `waiting`, `left_behind`, `fleet` —autobuses asignados que ya circulan— y `unserved` —gente que se ha quedado sin autobús porque no cabía o se ha cansado de esperar; más estable que `left_behind`, que solo mira los autobuses que están en una parada—) |
 | Bicis por puesto | `PUT /api/bikes/tracked` `{"ids": ["municipal/0", …]}` | `GET /api/bikes.csv?from=&to=&id=` (cada 15 min: `bikes`, `free_docks`, `takes`, `returns`, `occupancy_pct`) |

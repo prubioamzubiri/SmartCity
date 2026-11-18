@@ -39,16 +39,22 @@ def call(method, path, body=None):
 
 def manage_buses(log):
     """Más autobuses donde van llenos; menos donde van casi vacíos (ocupación = pasajeros / plazas en servicio)."""
-    for line in call("GET", "/api/buses")["lines"]:
+    buses = call("GET", "/api/buses")
+    reserve = buses["reserve"]  # la flota total es fija: solo se añaden autobuses que estén en reserva
+    for line in buses["lines"]:
         if line["suspended"] or not line["active"]:
             continue  # recorrido cortado o sin servicio: cambiar la flota no ayuda
-        fleet = line["fleet"]
+        # `target` cuenta los que ya van de camino (tardan `deployMinutes` en entrar en servicio): comparar con
+        # `fleet` haría pedir otra vez los mismos autobuses en cada pasada.
+        fleet = line["target"]
         occupancy = line["passengers"] / (line["active"] * line["capacity"])
-        if occupancy > 0.75 and fleet < line["maxFleet"]:
+        if occupancy > 0.75 and fleet < line["maxFleet"] and reserve > 0:
+            reserve -= 1
             call("PATCH", f"/api/buses/{line['id']}", {"fleet": fleet + 1})
             log.append(f"{line['id']}: {fleet} -> {fleet + 1} autobuses (ocupación {occupancy:.0%})")
         elif occupancy < 0.3 and fleet > MIN_FLEET:
             call("PATCH", f"/api/buses/{line['id']}", {"fleet": fleet - 1})
+            reserve += 1
             log.append(f"{line['id']}: {fleet} -> {fleet - 1} autobuses (ocupación {occupancy:.0%})")
 
 
