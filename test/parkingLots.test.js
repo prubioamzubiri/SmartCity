@@ -51,3 +51,29 @@ test('when the parkings of an event area are full, drivers circle around looking
   assert.ok(p.fullCount() >= 1);
   assert.ok(p.searching > 0, `buscando: ${p.searching}`);
 });
+
+test('expensive parkings make people leave the car for the bus, the bike or walking', async () => {
+  const fs = await import('node:fs');
+  const { SimEngine } = await import('../src/core/engine.js');
+  const { withBikeStations } = await import('../src/bikes/sharing.js');
+  const data = JSON.parse(fs.readFileSync(new URL('../public/data/city.json', import.meta.url), 'utf8'));
+  withBikeStations(data, JSON.parse(fs.readFileSync(new URL('../public/data/municipal.json', import.meta.url), 'utf8')));
+  const engine = new SimEngine({ data });
+  const minute = () => {
+    engine.environmentMinute = null;
+    engine.updateEnvironment();
+    return { cars: engine.carFactor, bus: engine.buses.extraDemand, bikes: engine.bikes.extraDemand, premium: engine.lots.pricePremium() };
+  };
+  const base = minute();
+  assert.equal(base.premium, 0);
+  for (const l of engine.lots.lots) engine.lots.setPrice(l.id, P.basePrice * 2);
+  const dear = minute();
+  assert.ok(Math.abs(dear.premium - 1) < 1e-9);
+  assert.ok(Math.abs(dear.cars / base.cars - (1 - P.shiftPerPremium)) < 1e-6, `${base.cars} -> ${dear.cars}`);
+  assert.ok(dear.bus > base.bus && dear.bikes > base.bikes);
+  for (const l of engine.lots.lots) engine.lots.setPrice(l.id, P.maxPrice);
+  assert.ok(Math.abs(minute().cars / base.cars - (1 - P.maxShift)) < 1e-6, 'con un tope');
+  // Más baratos que el precio base: no hay más coches.
+  for (const l of engine.lots.lots) engine.lots.setPrice(l.id, P.minPrice);
+  assert.equal(minute().cars, base.cars);
+});

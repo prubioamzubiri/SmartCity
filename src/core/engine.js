@@ -223,7 +223,11 @@ export class SimEngine {
       this.eventCarCut += a.base * (1 - a.access);
       this.buses.eventAccess.set(a.id, a.access);
     }
-    this.signals.setPedestrianLoad(pedestrianLoad(minute * 60, this.params.scenario, this.params.maxPedestrians));
+    // Parkings caros: parte de la gente deja el coche y va en autobús, en bici o andando.
+    const P = CONFIG.parking;
+    this.priceShift = Math.min(P.maxShift, P.shiftPerPremium * this.lots.pricePremium());
+    this.bikes.extraDemand = 1 + this.priceShift * P.toBikes;
+    this.signals.setPedestrianLoad(pedestrianLoad(minute * 60, this.params.scenario, this.params.maxPedestrians) * (1 + this.priceShift * P.toWalk));
     this.updateTransit(minute * 60);
     this.updatePois(minute * 60);
     // Rutas con el tráfico de ahora: cada minuto, los tiempos de cada tramo; cada `refreshMinutes`, los caminos.
@@ -258,13 +262,13 @@ export class SimEngine {
     const T = CONFIG.transit;
     const c = T.closures;
     const closedKm = Math.min(c.maxKm, this.restrictedKm());
-    this.buses.extraDemand = 1 + c.transitPerKm * closedKm;
+    this.buses.extraDemand = (1 + c.transitPerKm * closedKm) * (1 + (this.priceShift ?? 0) * CONFIG.parking.toTransit);
     this.buses.updateAt(seconds, this.params.scenario, this.scale);
     this.unserved = this.buses.unservedShare();
     // Por debajo de `modeShiftFrom` (gente que se queda en tierra de vez en cuando en hora punta) no cambia nada: así un
     // servicio normal no perturba el tráfico.
     const shifted = Math.max(0, this.unserved - T.modeShiftFrom) / (1 - T.modeShiftFrom);
-    this.carFactor = (1 - c.carsPerKm * closedKm) * (1 + T.modeShift * shifted);
+    this.carFactor = (1 - c.carsPerKm * closedKm) * (1 - (this.priceShift ?? 0)) * (1 + T.modeShift * shifted);
 
     const day = Math.floor(seconds / 86400);
     if (day !== this.busDay.day) this.busDay = { day, used: 0, included: 0 };
@@ -331,6 +335,7 @@ export class SimEngine {
       stations_full: bikes.stations.filter((s) => s.available >= s.capacity).length,
       parkings_full: fullLots,
       parking_search: Math.round(this.lots.searching), // coches dando vueltas porque no encuentran sitio
+      parking_premium: Math.round(this.lots.pricePremium() * 100) / 100, // cuánto más caros que el precio base, de media
       closed_m: Math.round(metres.closed),
       bus_only_m: Math.round(metres.busOnly),
       limited_m: Math.round(metres.limited),

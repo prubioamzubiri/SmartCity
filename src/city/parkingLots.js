@@ -35,6 +35,19 @@ export class ParkingLots {
     return this.price[i];
   }
 
+  // Cuánto más caros están los parkings que el precio base, de media por plaza (0 = todos al precio base o más baratos;
+  // 1 = el doble).
+  pricePremium() {
+    const P = CONFIG.parking;
+    let sum = 0;
+    let cap = 0;
+    this.lots.forEach((l, i) => {
+      sum += l.capacity * Math.max(0, this.price[i] / P.basePrice - 1);
+      cap += l.capacity;
+    });
+    return cap ? sum / cap : 0;
+  }
+
   occupied(i) {
     return this.regular[i] + this.event[i];
   }

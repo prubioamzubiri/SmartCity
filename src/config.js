@@ -210,6 +210,14 @@ export const CONFIG = {
     searchSeconds: 600, // quien no encuentra sitio da vueltas unos 10 min (y acaba en la calle o se va)
     spillShare: 0.5, // de los que encuentran lleno su parking, los que prueban en otro de la zona (el resto da vueltas)
     searchCars: 1, // cada coche buscando sitio es un coche más en la calle
+    // Con los parkings caros, parte de la gente deja el coche: por cada vez el precio base de más (media por plaza),
+    // un `shiftPerPremium` menos de coches, como mucho `maxShift`. Esa gente va en autobús, en bici o andando
+    // (demanda × 1 + fracción × toTransit, toBikes, toWalk).
+    shiftPerPremium: 0.075,
+    maxShift: 0.15,
+    toTransit: 1.5,
+    toBikes: 2,
+    toWalk: 1,
   },
 
   // Peatones: triángulos que caminan por las aceras y cruzan por los pasos de peatones de OSM (solo visual).
