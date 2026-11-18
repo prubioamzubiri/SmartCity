@@ -199,6 +199,7 @@ export const CONFIG = {
     basePrice: 2, // €/h por defecto
     minPrice: 0.5,
     maxPrice: 6,
+    maxBands: 4, // franjas horarias por tarifa diaria
     priceSensitivity: 1, // con el doble de precio que el de base, un parking atrae e^-1 ≈ 37 % de los coches que atraería
     nearMeters: 1000, // entre los parkings a menos de esto se reparte quien quiere aparcar en la zona
     stepSeconds: 60,

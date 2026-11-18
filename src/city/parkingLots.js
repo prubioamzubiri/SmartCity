@@ -5,7 +5,11 @@ import { demandFactor } from '../traffic/demand.js';
 // que fija el gestor. Quien va a aparcar elige entre los parkings de su zona (a menos de `nearMeters`) según el
 // precio: uno más caro que sus vecinos desvía coches hacia ellos y uno más barato los atrae. Si el elegido está
 // lleno, prueba en los de alrededor; si no encuentra sitio, se queda dando vueltas buscando (más tráfico).
+// La tarifa de cada parking (un precio y, si se quiere, franjas horarias con otro precio) solo cambia a las 0:00: el
+// gestor programa la de mañana, así que hay que preverla (día de la semana, eventos, tiempo).
 // Es un modelo determinista por minutos (como las bicis): se reproduce igual tras reiniciar.
+const hhmm = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+
 export class ParkingLots {
   constructor(lots, { getParams, attractorsAt = () => [] } = {}) {
     const P = CONFIG.parking;
@@ -14,7 +18,10 @@ export class ParkingLots {
     this.lots = lots.map((l) => ({ id: l.id, name: l.name, x: l.x, z: l.z, capacity: l.capacity, bias: l.bias }));
     this.index = new Map(this.lots.map((l, i) => [l.id, i]));
     const n = this.lots.length;
-    this.price = new Float64Array(n).fill(P.basePrice);
+    this.price = new Float64Array(n).fill(P.basePrice); // precio de ahora (según la tarifa del día y la hora)
+    this.tariff = this.lots.map(() => ({ price: P.basePrice, schedule: [] })); // tarifa de hoy
+    this.next = new Map(); // id -> tarifa programada para mañana
+    this.day = null;
     this.regular = new Float64Array(n); // coches de siempre (se van al cabo de `staySeconds` de media)
     this.event = new Float64Array(n); // coches de un evento (se van cuando termina)
     this.searching = 0; // coches dando vueltas porque no encuentran sitio
@@ -24,15 +31,56 @@ export class ParkingLots {
     this.nextStep = null;
   }
 
-  // Precio entre los límites; devuelve el aplicado. `null` vuelve al precio por defecto.
-  setPrice(id, price) {
+  // Programa la tarifa de mañana (se aplica a las 0:00 y sigue hasta que se cambie): `price` (null = la de por defecto)
+  // y, opcionalmente, franjas `schedule` [{ from: '17:00', to: '22:00', price }] con otro precio. Devuelve la tarifa.
+  setPrice(id, price, schedule = []) {
     const P = CONFIG.parking;
     const i = this.index.get(id);
     if (i === undefined) throw new Error(`Parking desconocido: ${id}`);
-    if (price === null) price = P.basePrice;
-    if (!Number.isFinite(price) || price < P.minPrice || price > P.maxPrice) throw new Error(`El precio debe estar entre ${P.minPrice} y ${P.maxPrice} €/h`);
-    this.price[i] = Math.round(price * 100) / 100;
-    return this.price[i];
+    const check = (p) => {
+      if (!Number.isFinite(p) || p < P.minPrice || p > P.maxPrice) throw new Error(`El precio debe estar entre ${P.minPrice} y ${P.maxPrice} €/h`);
+      return Math.round(p * 100) / 100;
+    };
+    const hour = (text) => {
+      const m = /^(\d{1,2}):(\d{2})$/.exec(String(text ?? ''));
+      const h = m ? Number(m[1]) + Number(m[2]) / 60 : NaN;
+      if (!(h >= 0 && h <= 24)) throw new Error(`Hora no válida: ${text} (formato HH:MM)`);
+      return h;
+    };
+    if (!Array.isArray(schedule) || schedule.length > P.maxBands) throw new Error(`schedule debe ser una lista de como mucho ${P.maxBands} franjas`);
+    const tariff = {
+      price: check(price === null || price === undefined ? P.basePrice : price),
+      schedule: schedule.map((b) => {
+        const from = hour(b.from);
+        const to = hour(b.to);
+        if (!(to > from)) throw new Error('Cada franja debe acabar después de empezar (el mismo día)');
+        return { from, to, price: check(b.price) };
+      }),
+    };
+    this.next.set(id, tariff);
+    return tariff;
+  }
+
+  // Tarifa programada para mañana (o null) y la de hoy, para el API.
+  tariffOf(id) {
+    const i = this.index.get(id);
+    const show = (t) => t && { price: t.price, schedule: t.schedule.map((b) => ({ from: hhmm(b.from), to: hhmm(b.to), price: b.price })) };
+    return { today: show(this.tariff[i]), tomorrow: show(this.next.get(id) ?? null) };
+  }
+
+  // Precio de cada parking a la hora `time` según su tarifa (y, al cambiar de día, aplica las programadas).
+  applyTariffs(time) {
+    const day = Math.floor(time / 86400);
+    if (this.day !== null && day !== this.day) {
+      for (const [id, t] of this.next) this.tariff[this.index.get(id)] = t;
+      this.next.clear();
+    }
+    this.day = day;
+    const h = (time - day * 86400) / 3600;
+    this.tariff.forEach((t, i) => {
+      const band = t.schedule.find((b) => h >= b.from && h < b.to);
+      this.price[i] = band ? band.price : t.price;
+    });
   }
 
   // Cuánto más caros están los parkings que el precio base, de media por plaza (0 = todos al precio base o más baratos;
@@ -67,6 +115,7 @@ export class ParkingLots {
   tick(time) {
     const P = CONFIG.parking;
     if (this.nextStep === null) {
+      this.applyTariffs(time);
       this.warm(time);
       this.nextStep = Math.ceil(time / P.stepSeconds) * P.stepSeconds;
     }
@@ -78,6 +127,7 @@ export class ParkingLots {
 
   step(time) {
     const P = CONFIG.parking;
+    this.applyTariffs(time);
     const dt = P.stepSeconds;
     const n = this.lots.length;
     const demand = demandFactor(time, this.getParams().scenario);
@@ -166,14 +216,15 @@ export class ParkingLots {
   }
 
   state() {
-    return this.lots.map((l, i) => ({ id: l.id, price: this.price[i], occupied: Math.round(this.occupied(i)), occupancy: Math.round(Math.min(1, this.occupied(i) / l.capacity) * 1000) / 1000 }));
+    return this.lots.map((l, i) => ({ id: l.id, price: this.price[i], ...this.tariffOf(l.id), occupied: Math.round(this.occupied(i)), occupancy: Math.round(Math.min(1, this.occupied(i) / l.capacity) * 1000) / 1000 }));
   }
 
   serialize() {
     return {
       nextStep: this.nextStep,
       searching: this.searching,
-      lots: this.lots.map((l, i) => [l.id, this.regular[i], this.event[i], this.price[i]]),
+      day: this.day,
+      lots: this.lots.map((l, i) => [l.id, this.regular[i], this.event[i], this.price[i], this.tariff[i], this.next.get(l.id) ?? null]),
     };
   }
 
@@ -181,12 +232,16 @@ export class ParkingLots {
     if (!state) return;
     this.nextStep = state.nextStep ?? null;
     this.searching = state.searching ?? 0;
-    for (const [id, regular, event, price] of state.lots ?? []) {
+    this.day = state.day ?? null;
+    this.next.clear();
+    for (const [id, regular, event, price, tariff, next] of state.lots ?? []) {
       const i = this.index.get(id);
       if (i === undefined) continue;
       this.regular[i] = regular;
       this.event[i] = event;
       this.price[i] = price;
+      if (tariff) this.tariff[i] = tariff;
+      if (next) this.next.set(id, next);
     }
   }
 }

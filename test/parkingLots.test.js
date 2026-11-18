@@ -27,9 +27,10 @@ test('parkings fill and empty with the city demand and keep their state in a sna
 test('a pricier parking sends drivers to its neighbours; raising every price changes nothing', () => {
   const run = (prices) => {
     const p = new ParkingLots(lots(), { getParams: () => ({ scenario: 'weekday' }) });
+    p.tick(23 * 3600);
     for (const [id, price] of Object.entries(prices)) p.setPrice(id, price);
-    p.tick(6 * 3600);
-    p.tick(10 * 3600);
+    p.tick(86400 + 6 * 3600);
+    p.tick(86400 + 10 * 3600);
     return Object.fromEntries(p.state().map((l) => [l.id, l.occupied]));
   };
   const base = run({});
@@ -64,16 +65,45 @@ test('expensive parkings make people leave the car for the bus, the bike or walk
     engine.updateEnvironment();
     return { cars: engine.carFactor, bus: engine.buses.extraDemand, bikes: engine.bikes.extraDemand, premium: engine.lots.pricePremium() };
   };
+  // Las tarifas se aplican a las 0:00 del día siguiente.
+  const tomorrow = () => engine.lots.applyTariffs((engine.lots.day + 1) * 86400 + 12 * 3600);
+  engine.lots.applyTariffs(engine.simTime);
   const base = minute();
   assert.equal(base.premium, 0);
   for (const l of engine.lots.lots) engine.lots.setPrice(l.id, P.basePrice * 2);
+  assert.equal(minute().premium, 0, 'hoy sigue la tarifa de hoy');
+  tomorrow();
   const dear = minute();
   assert.ok(Math.abs(dear.premium - 1) < 1e-9);
   assert.ok(Math.abs(dear.cars / base.cars - (1 - P.shiftPerPremium)) < 1e-6, `${base.cars} -> ${dear.cars}`);
   assert.ok(dear.bus > base.bus && dear.bikes > base.bikes);
   for (const l of engine.lots.lots) engine.lots.setPrice(l.id, P.maxPrice);
+  tomorrow();
   assert.ok(Math.abs(minute().cars / base.cars - (1 - P.maxShift)) < 1e-6, 'con un tope');
   // Más baratos que el precio base: no hay más coches.
   for (const l of engine.lots.lots) engine.lots.setPrice(l.id, P.minPrice);
+  tomorrow();
   assert.equal(minute().cars, base.cars);
+});
+
+test('a tariff only changes at midnight, can have time bands and is kept in a snapshot', () => {
+  const p = new ParkingLots(lots(), { getParams: () => ({ scenario: 'weekday' }) });
+  p.tick(10 * 3600);
+  p.setPrice('A', 3, [{ from: '17:00', to: '22:00', price: 5 }]);
+  p.tick(18 * 3600);
+  assert.equal(p.price[p.index.get('A')], P.basePrice, 'hoy, la de hoy');
+  assert.deepEqual(p.tariffOf('A').tomorrow, { price: 3, schedule: [{ from: '17:00', to: '22:00', price: 5 }] });
+  p.tick(86400 + 9 * 3600);
+  assert.equal(p.price[p.index.get('A')], 3);
+  const copy = new ParkingLots(lots(), { getParams: () => ({ scenario: 'weekday' }) });
+  copy.restore(JSON.parse(JSON.stringify(p.serialize())));
+  p.tick(86400 + 18 * 3600);
+  copy.tick(86400 + 18 * 3600);
+  assert.equal(p.price[p.index.get('A')], 5, 'en la franja');
+  assert.deepEqual(copy.state(), p.state());
+  // Sigue igual los días siguientes hasta que se cambie.
+  p.tick(2 * 86400 + 9 * 3600);
+  assert.equal(p.price[p.index.get('A')], 3);
+  assert.throws(() => p.setPrice('A', 2, [{ from: '22:00', to: '17:00', price: 4 }]), /franja/);
+  assert.throws(() => p.setPrice('A', 2, [{ from: '25:00', to: '26:00', price: 4 }]), /Hora/);
 });

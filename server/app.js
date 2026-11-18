@@ -303,6 +303,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
         id: l.id, name: l.name, capacity: l.capacity, tracked: engine.parking.isTracked(l.id),
         occupancy: Math.round(engine.parking.occupancyOf(l, engine.simTime) * 1000) / 1000,
         price: engine.lots.price[engine.lots.index.get(l.id)],
+        ...engine.lots.tariffOf(l.id),
       })),
       weather: CONFIG.weather.enabled ? observation(engine.simTime) : null,
       holiday: CONFIG.holidays.enabled ? holidayCalendar.holidayAt(engine.simTime) : null,
@@ -522,22 +523,23 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       return send(200, { ok: true });
     }
 
-    // Precio de un parking: { price: 3.5 } (€/h, entre minPrice y maxPrice; null = el de por defecto). Al instante.
+    // Tarifa de mañana de un parking (se aplica a las 0:00): { price: 3, schedule: [{ from: '17:00', to: '22:00', price: 5 }] }
+    // (€/h, entre minPrice y maxPrice; price null = el de por defecto; schedule opcional).
     const lotMatch = /^\/api\/parking\/([^/]+)$/.exec(pathname);
     if (lotMatch && lotMatch[1] !== 'tracked' && method === 'PATCH') {
       authorize(req);
       const id = decodeURIComponent(lotMatch[1]);
       if (!runtime.engine.lots.index.has(id)) throw new HttpError(404, 'Parking no encontrado');
-      const { price } = await readJson(req);
-      let applied;
+      const { price, schedule } = await readJson(req);
       try {
         runtime.mutate((e) => {
-          applied = e.lots.setPrice(id, price === null ? null : Number(price));
+          e.lots.setPrice(id, price === null || price === undefined ? null : Number(price), schedule ?? []);
         });
       } catch (err) {
         throw new HttpError(400, err.message);
       }
-      return send(200, { id, price: applied, occupancy: runtime.engine.lots.occupancy(id) });
+      const day = Math.floor(runtime.engine.simTime / 86400) + 1;
+      return send(200, { id, ...runtime.engine.lots.tariffOf(id), effectiveAt: iso(day * 86400), occupancy: runtime.engine.lots.occupancy(id) });
     }
 
     if (method === 'PUT' && pathname === '/api/parking/tracked') {

@@ -265,19 +265,25 @@ las que quepan. **Cada viaje tarda**: unos 15 min en cargar, otros 15 en descarg
 con la furgoneta y las horas de carga y descarga (`loadAt`, `unloadAt`), o `409` si no hay ninguna libre. Para tener las
 bicis donde hagan falta en la hora punta hay que moverlas **antes**: cuando el puesto ya está vacío, se llega tarde.
 
-### 3.6 Precio de un parking — `PATCH /api/parking/<id>`
+### 3.6 Tarifa de un parking — `PATCH /api/parking/<id>`
 
-`{"price": 3.5}` fija el precio de un parking (€/h, entre 0,5 y 6; por defecto 2; `null` vuelve al de por defecto). Es
-**inmediato**, pero solo cambia a qué parking van los que **llegan** desde ese momento: los que ya están dentro se quedan
-unas 2 h. Para que un parking no se llene en un evento o un sábado de lluvia hay que subir su precio (o bajar el de sus
-vecinos) **antes**. Subir todos a la vez no cambia a qué parking va la gente (compara entre los de su zona), pero **sí
-cuántos van en coche**: con los parkings caros (de media), parte de la gente deja el coche y va en autobús, en bici o
-andando (con todos al doble, un 7,5 % menos de coches; como mucho, un 15 %). Los autobuses se llenan más y hay más gente
-en las calles y en los semáforos; y unos precios altos cuentan como **coste de la intervención** para los ciudadanos.
-`parking_premium` en `city.csv`: cuánto más caros que el precio base están, de media (0 = al precio base; 1 = el doble).
+`{"price": 3}` programa la **tarifa de mañana** de un parking (€/h, entre 0,5 y 6; por defecto 2; `null` vuelve a la de
+por defecto). Puede llevar **franjas horarias** con otro precio (como mucho 4):
+`{"price": 2, "schedule": [{"from": "17:00", "to": "22:00", "price": 4}]}`. Como en una ciudad real, **la tarifa solo
+cambia a las 0:00** y sigue igual los días siguientes hasta que se cambie: hay que decidir hoy la de mañana, sabiendo qué
+día será (laborable o festivo, eventos, previsión del tiempo). En `parkings` de `GET /api/state` salen el precio de ahora
+(`price`), la tarifa de hoy (`today`) y la programada para mañana (`tomorrow`).
+
+Quien va a aparcar elige entre los parkings de su zona según el precio: uno más caro que sus vecinos les manda coches y uno
+más barato se los quita. Subir todos a la vez no cambia a qué parking va la gente, pero **sí cuántos van en coche**: con
+los parkings caros (de media), parte de la gente deja el coche y va en autobús, en bici o andando (con todos al doble, un
+7,5 % menos de coches; como mucho, un 15 %). Los autobuses se llenan más y hay más gente en las calles y en los
+semáforos; y unos precios altos cuentan como **coste de la intervención** para los ciudadanos. `parking_premium` en
+`city.csv`: cuánto más caros que el precio base están, de media (0 = al precio base; 1 = el doble).
 
 ```sh
-curl -X PATCH http://localhost:8080/api/parking/U-125_53 -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"price":3.5}'
+curl -X PATCH http://localhost:8080/api/parking/U-125_53 -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"price": 2, "schedule": [{"from": "17:00", "to": "22:00", "price": 4}]}'
 ```
 
 ### 3.7 La demanda no se controla
