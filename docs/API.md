@@ -301,14 +301,9 @@ dan abasto (gente en tierra o esperas muy largas) parte de esa gente coge el coc
 
 ## Lo que NO se puede hacer (todavía)
 
-<<<<<<< HEAD
 El simulador no modela: tarificación por congestión, calidad del aire ni emisiones, ni se pueden
-cambiar plazas de parking, trazado o frecuencias de las líneas (solo su número de autobuses), ni mover bicicletas entre
-puestos. Tampoco hay histórico de las acciones ya aplicadas: guardadlas vosotros si queréis evaluarlas.
-=======
-El simulador no modela: precios de parking, tarificación por congestión, calidad del aire ni emisiones, ni se pueden
-cambiar plazas de parking, ni el trazado o las frecuencias de las líneas (solo su número de autobuses). Tampoco hay histórico de las acciones ya aplicadas: guardadlas vosotros si queréis evaluarlas.
->>>>>>> calibracion
+cambiar plazas de parking, ni el trazado o las frecuencias de las líneas (solo su número de autobuses). Tampoco hay
+histórico de las acciones ya aplicadas: guardadlas vosotros si queréis evaluarlas.
 
 ## Hacer un gestor autónomo
 
