@@ -173,6 +173,7 @@ async function withServer(fn) {
   const city = { nodes: [-250, -250, 250, -250, 250, 250, -250, 250], ways: [[4, 0, 0, 1, 2, 3, 0]], signals: [], parking: { underground: [] } };
   const runtime = new Runtime({ engine: new SimEngine({ data: city, maxCars: 20 }), store: new Store(), now: () => 1_000_000, checkpointMs: 1e9 });
   const server = http.createServer(createApp({ runtime, store: runtime.store }));
+  server.keepAliveTimeout = 60_000; // los ticks largos no deben cerrar la conexión que reutiliza fetch
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const get = async (path) => {
     const res = await fetch(`http://127.0.0.1:${server.address().port}${path}`);

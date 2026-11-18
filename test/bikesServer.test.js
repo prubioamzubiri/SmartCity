@@ -36,6 +36,7 @@ test('API: the server simulates the bike stations, the riders and records the tr
   const engine = new SimEngine({ data: city(), maxCars: 5 });
   const runtime = new Runtime({ engine, store, now, checkpointMs: 1e9 });
   const server = http.createServer(createApp({ runtime, store, token: 'secreto' }));
+  server.keepAliveTimeout = 60_000; // los ticks largos no deben cerrar la conexión que reutiliza fetch
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -130,6 +131,7 @@ test('API: schedule capacities, all-or-nothing, and see them applied', async (t)
   const store = new Store();
   const runtime = new Runtime({ engine: new SimEngine({ data: city(), maxCars: 0 }), store, now, checkpointMs: 1e9 });
   const server = http.createServer(createApp({ runtime, store, token: 'secreto' }));
+  server.keepAliveTimeout = 60_000; // los ticks largos no deben cerrar la conexión que reutiliza fetch
   server.keepAliveTimeout = 120_000; // el catch-up bloquea el servidor más que el timeout por defecto
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
@@ -212,6 +214,7 @@ test('API: ask a van to move bikes', async (t) => {
   const engine = new SimEngine({ data: city(), maxCars: 5 });
   const runtime = new Runtime({ engine, store, now, checkpointMs: 1e9 });
   const server = http.createServer(createApp({ runtime, store, token: 'secreto' }));
+  server.keepAliveTimeout = 60_000; // los ticks largos no deben cerrar la conexión que reutiliza fetch
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;

@@ -162,6 +162,7 @@ function run(runtime, now, ms) {
 async function serve(t, { store = new Store(), now = clock(), token = 'secreto' } = {}) {
   const runtime = new Runtime({ engine: new SimEngine({ data: city(), maxCars: 5 }), store, now, checkpointMs: 1e9 });
   const server = http.createServer(createApp({ runtime, store, token }));
+  server.keepAliveTimeout = 60_000; // los ticks largos no deben cerrar la conexión que reutiliza fetch
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const baseUrl = `http://127.0.0.1:${server.address().port}`;

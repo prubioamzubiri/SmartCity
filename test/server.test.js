@@ -144,6 +144,7 @@ async function api(t, { token = 'secreto' } = {}) {
   const runtime = setup(store, now, { sensors: false });
   run(runtime, now, 2 * CHUNK);
   const server = http.createServer(createApp({ runtime, store, token }));
+  server.keepAliveTimeout = 60_000; // los ticks largos no deben cerrar la conexión que reutiliza fetch
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
