@@ -97,6 +97,11 @@ export class ApiClient {
     return this.request('/api/parking/tracked', { method: 'PUT', body: { ids } });
   }
 
+  // Tarifa de mañana de un parking (se aplica a las 0:00): precio base y franjas [{ from, to, price }].
+  setParkingTariff(id, price, schedule = []) {
+    return this.request(`/api/parking/${encodeURIComponent(id)}`, { method: 'PATCH', body: { price, schedule } });
+  }
+
   setTrackedBuses(ids) {
     return this.request('/api/buses/tracked', { method: 'PUT', body: { ids } });
   }

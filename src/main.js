@@ -7,7 +7,7 @@ import { createBuildings } from './city/buildings.js';
 import { createRoads } from './city/roads.js';
 import { createCrosswalks } from './city/crosswalks.js';
 import {
-  createParking, createParkingPicker, highlightTracked, lotOccupancy, parkingStats,
+  createParking, createParkingPicker, highlightTracked, setPriceLabels, lotOccupancy, parkingStats,
   updateParkingOccupancy, PARKING_TYPE_LABEL,
 } from './city/parking.js';
 import { createWater } from './city/water.js';
@@ -164,7 +164,7 @@ async function main() {
   });
   const hud = createHud({
     sync, signals, localGraphKey: graphKey, setMode, getMode: () => mode, focusSignal, focusPoint, graph, restrictionView,
-    parking: { layer: parkingLayer, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked) },
+    parking: { layer: parkingLayer, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked), prices: (priceOf) => setPriceLabels(parkingLayer, priceOf, CONFIG.parking.basePrice) },
     server: { view: serverView },
     pedestrianSensors: { view: pedestrianSensorView },
     transit: { buses, view: busView },
