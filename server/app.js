@@ -11,7 +11,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { BIKE_COLUMNS, BUS_COLUMNS, CITY_COLUMNS, PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
+import { createFaults } from './faults.js';
+import { FAULT_COLUMNS, BIKE_COLUMNS, BUS_COLUMNS, CITY_COLUMNS, PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
 
 const MAX_BODY = 64 * 1024;
 const TIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/;
@@ -55,6 +56,9 @@ const CSV_EXPORTS = {
 };
 
 const digest = (s) => createHash('sha256').update(s).digest();
+
+// Respuestas sin fallos de sensores: posiciones para dibujar, documentación y calendario.
+const NO_FAULTS = new Set(['/api/cars', '/api/pedestrians', '/api/health', '/api/docs', '/api/docs.md', '/api/events', '/api/holidays']);
 
 async function readJson(req) {
   let size = 0;
@@ -273,8 +277,18 @@ function simSecondsOf(value) {
 const DOCS_FILE = new URL('../docs/API.md', import.meta.url);
 
 // Listener HTTP de la API. Las lecturas son públicas; las escrituras exigen `Authorization: Bearer <token>`.
-export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFile = DOCS_FILE }) {
+// `rawKey`: clave con la que el profesor (cabecera X-Raw-Key) recibe los datos sin los fallos de los sensores.
+// `faults`: fallos de los sensores (server/faults.js); sin él, los datos salen tal cual.
+export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFile = DOCS_FILE, rawKey = '', faults = createFaults({ config: { enabled: false } }) }) {
   const tokenHash = token ? digest(token) : null;
+  const rawKeyHash = rawKey ? digest(rawKey) : null;
+  // ¿Trae la petición la clave de los datos limpios?
+  const clean = (req) => {
+    const given = req.headers['x-raw-key'];
+    return Boolean(rawKeyHash && typeof given === 'string' && timingSafeEqual(digest(given), rawKeyHash));
+  };
+  // Fallos que se calculan al responder (API en vivo y tiempo): solo con los fallos activados.
+  const faulty = (req) => faults.enabled && !clean(req);
 
   const authorize = (req) => {
     if (!tokenHash) return;
@@ -336,12 +350,24 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
     };
   };
 
+  function* withRowFaults(kind, rows) {
+    for (const row of rows) {
+      const out = faults.csvRow(kind, row);
+      if (out) yield out;
+    }
+  }
+
   async function route(req, res, url) {
     const { pathname } = url;
     const method = req.method;
+    const withFaults = method === 'GET' && !NO_FAULTS.has(pathname) && faulty(req);
     const send = (status, body) => {
+      let json = JSON.stringify(body);
+      if (withFaults && status < 300) {
+        json = JSON.stringify(faults.live(pathname, JSON.parse(json), Math.floor(runtime.engine.simTime / 60)));
+      }
       res.writeHead(status, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(body));
+      res.end(json);
     };
 
     if (method === 'GET' && pathname === '/api/health') return send(200, { ok: true });
@@ -458,13 +484,22 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': 'attachment; filename="tiempo.csv"',
       });
-      await pipeline(Readable.from(csvLines(WEATHER_COLUMNS, rows)), res);
+      await pipeline(Readable.from(csvLines(WEATHER_COLUMNS, faulty(req) ? withRowFaults('weather', rows) : rows)), res);
+      return undefined;
+    }
+
+    // Registro de los fallos de los sensores (dato real y dato mostrado): solo con la clave de los datos limpios.
+    if (method === 'GET' && pathname === '/api/faults.csv') {
+      if (!clean(req)) throw new HttpError(404, 'No encontrado');
+      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="fallos.csv"' });
+      await pipeline(Readable.from(csvLines(FAULT_COLUMNS, store.iterate('faults', exportFilters(url)))), res);
       return undefined;
     }
 
     if (method === 'GET' && CSV_EXPORTS[pathname]) {
       const { kind, columns, filename } = CSV_EXPORTS[pathname];
-      const rows = store.iterate(kind, exportFilters(url));
+      // Los históricos salen con los fallos que se anotaron al grabarlos (aunque luego cambien las frecuencias).
+      const rows = clean(req) ? store.iterate(kind, exportFilters(url)) : store.iterateShown(kind, exportFilters(url));
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="${filename}.csv"`,

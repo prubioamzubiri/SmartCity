@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { SimEngine } from '../src/core/engine.js';
 import { Store } from './store.js';
+import { applyFaultEnv, createFaults } from './faults.js';
 import { DEFAULT_SCALE, Runtime } from './runtime.js';
 import { createApp } from './app.js';
 import { withBikeStations } from '../src/bikes/sharing.js';
@@ -28,7 +29,15 @@ const data = JSON.parse(fs.readFileSync(cityFile, 'utf8'));
 // Sin puestos de OSM en el mapa, usa el catálogo municipal igual que el visor.
 const municipal = fs.existsSync(municipalFile) ? JSON.parse(fs.readFileSync(municipalFile, 'utf8')) : null;
 withBikeStations(data, municipal);
-const store = new Store(dbFile);
+let faultSettings;
+try {
+  faultSettings = applyFaultEnv();
+} catch (err) {
+  console.error(err.message);
+  process.exit(1);
+}
+const faults = createFaults();
+const store = new Store(dbFile, { faults });
 const runtime = new Runtime({
   engine: new SimEngine({ data }),
   store,
@@ -61,7 +70,13 @@ if (Object.keys(demand).length) {
   runtime.mutate((e) => e.setParams(demand));
   log(`Demanda en hora punta: ${JSON.stringify(runtime.engine.params)}`);
 }
-const server = http.createServer(createApp({ runtime, store, token: env.SMARTCITY_TOKEN, corsOrigin: env.CORS_ORIGIN ?? '*' }));
+if (Object.keys(faultSettings).length) log(`Fallos de los sensores: ${JSON.stringify(CONFIG.faults)}`);
+if (CONFIG.faults.enabled && !env.RAW_DATA_KEY) {
+  log('RAW_DATA_KEY no definido: todos reciben los datos con fallos de sensores (también la métrica del profesor)');
+}
+const server = http.createServer(createApp({
+  runtime, store, token: env.SMARTCITY_TOKEN, corsOrigin: env.CORS_ORIGIN ?? '*', rawKey: env.RAW_DATA_KEY ?? '', faults,
+}));
 server.listen(port, () => log(`API en http://localhost:${port} · escala ×${runtime.scale.toFixed(2)} · ${JSON.stringify(runtime.status())}`));
 
 const loop = runtime.start();

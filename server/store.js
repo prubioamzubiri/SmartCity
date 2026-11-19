@@ -57,7 +57,17 @@ CREATE TABLE IF NOT EXISTS city_records (
   limited_m INTEGER, signals_all_red INTEGER, trips_done INTEGER, trip_min REAL, delay_min REAL, trips_lost INTEGER
 );
 CREATE INDEX IF NOT EXISTS city_time ON city_records (timestamp);
+CREATE TABLE IF NOT EXISTS fault_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp TEXT NOT NULL, kind TEXT NOT NULL, entity_id TEXT, column_name TEXT NOT NULL, dato_real, dato_mostrado
+);
+CREATE INDEX IF NOT EXISTS fault_time ON fault_records (timestamp);
+CREATE INDEX IF NOT EXISTS fault_kind_time ON fault_records (kind, timestamp);
 `;
+
+// Registro de los fallos de los sensores: por cada dato que se descarga mal, el real y el que se muestra.
+// `column_name` = * cuando falta la fila entera (el sensor no envió nada).
+export const FAULT_COLUMNS = ['timestamp', 'kind', 'entity_id', 'column_name', 'dato_real', 'dato_mostrado'];
 
 const TABLES = {
   traffic: { table: 'traffic_records', columns: TRAFFIC_COLUMNS, idColumn: 'sensor_id' },
@@ -66,10 +76,26 @@ const TABLES = {
   buses: { table: 'bus_records', columns: BUS_COLUMNS, idColumn: 'line_id' },
   bikes: { table: 'bike_records', columns: BIKE_COLUMNS, idColumn: 'station_id' },
   city: { table: 'city_records', columns: CITY_COLUMNS, idColumn: null },
+  faults: { table: 'fault_records', columns: FAULT_COLUMNS, idColumn: 'entity_id' },
 };
 
+// Diferencias entre una fila guardada y la que se descarga (null = la fila no se descarga).
+function faultsOf(kind, row, shown, idColumn) {
+  const base = { timestamp: row.timestamp, kind, entity_id: idColumn ? row[idColumn] : null };
+  if (shown === null) return [{ ...base, column_name: '*', dato_real: '(fila)', dato_mostrado: '' }];
+  if (shown === row) return [];
+  const out = [];
+  for (const [column, value] of Object.entries(shown)) {
+    if (value !== row[column]) out.push({ ...base, column_name: column, dato_real: row[column] ?? '', dato_mostrado: value ?? '' });
+  }
+  return out;
+}
+
 export class Store {
-  constructor(file = ':memory:') {
+  // `faults`: fallos de los sensores (server/faults.js). Con ellos, cada lote de registros anota además qué datos se
+  // descargarán mal (fault_records). Los registros se guardan siempre tal cual.
+  constructor(file = ':memory:', { faults = null } = {}) {
+    this.faults = faults?.enabled ? faults : null;
     this.db = new DatabaseSync(file);
     this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec('PRAGMA synchronous = NORMAL');
@@ -116,7 +142,16 @@ export class Store {
     this.db.exec('BEGIN');
     try {
       for (const kind of Object.keys(TABLES)) {
-        for (const r of records[kind] ?? []) this.inserts[kind].run(...TABLES[kind].columns.map((c) => r[c] ?? null));
+        if (kind === 'faults') continue;
+        const { columns, idColumn } = TABLES[kind];
+        for (const r of records[kind] ?? []) {
+          this.inserts[kind].run(...columns.map((c) => r[c] ?? null));
+          if (!this.faults) continue;
+          const row = Object.fromEntries(columns.map((c) => [c, r[c] ?? null]));
+          for (const f of faultsOf(kind, row, this.faults.csvRow(kind, row), idColumn)) {
+            this.inserts.faults.run(...FAULT_COLUMNS.map((c) => f[c] ?? null));
+          }
+        }
       }
       this.saveSnapshotStmt.run(JSON.stringify(snapshot), wallMs);
       this.db.exec('COMMIT');
@@ -154,6 +189,42 @@ export class Store {
       if (rows.length < batch) return;
       rows = next.all(...args, lastTs, lastRowId, batch);
     }
+  }
+
+  // Como `iterate`, pero con los fallos anotados al grabar cada fila (lo que ven los alumnos). Así, cambiar las
+  // frecuencias de los fallos no cambia los datos ya grabados: lo descargado y el registro siempre coinciden.
+  *iterateShown(kind, filters = {}, batch = 2000) {
+    const { idColumn } = TABLES[kind];
+    const query = this.db.prepare(
+      'SELECT timestamp, entity_id, column_name, dato_mostrado FROM fault_records WHERE kind = ? AND timestamp >= ? AND timestamp <= ?',
+    );
+    const keyOf = (timestamp, entity) => `${timestamp}|${entity ?? ''}`;
+    let rows = [];
+    const shown = function* () {
+      const faults = new Map();
+      for (const f of query.all(kind, rows[0].timestamp, rows[rows.length - 1].timestamp)) {
+        const k = keyOf(f.timestamp, f.entity_id);
+        if (!faults.has(k)) faults.set(k, []);
+        faults.get(k).push(f);
+      }
+      for (const row of rows) {
+        const own = faults.get(keyOf(row.timestamp, idColumn ? row[idColumn] : null));
+        if (!own) {
+          yield row;
+          continue;
+        }
+        if (own.some((f) => f.column_name === '*')) continue; // la fila no llegó
+        const out = { ...row };
+        for (const f of own) out[f.column_name] = f.dato_mostrado;
+        yield out;
+      }
+      rows = [];
+    };
+    for (const row of this.iterate(kind, filters, batch)) {
+      rows.push(row);
+      if (rows.length >= batch) yield* shown();
+    }
+    if (rows.length) yield* shown();
   }
 
   count(kind) {
