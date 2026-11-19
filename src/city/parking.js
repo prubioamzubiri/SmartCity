@@ -258,3 +258,55 @@ export function parkingStats(data) {
   const capacity = p.areas.reduce((sum, a) => sum + a[0], 0);
   return { lots: p.areas.length + p.points.length / 2, spaces: p.spaces.length / 2, street: p.street.length, capacity, underground: p.underground?.length ?? 0 };
 }
+
+// Precio actual (€/h) sobre la P de cada parking subterráneo; en rojo si es más caro que el de base, en verde si más barato.
+const priceTextures = new Map();
+function priceTexture(text, color) {
+  const key = `${text}|${color}`;
+  let t = priceTextures.get(key);
+  if (t) return t;
+  const canvas = document.createElement('canvas');
+  canvas.width = 192;
+  canvas.height = 80;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.beginPath();
+  ctx.roundRect(4, 4, 184, 72, 20);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.font = 'bold 52px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 96, 44);
+  t = new THREE.CanvasTexture(canvas);
+  priceTextures.set(key, t);
+  return t;
+}
+
+export function setPriceLabels(group, priceOf, basePrice) {
+  for (const sprite of group.userData.markers ?? []) {
+    const price = priceOf(sprite.userData.id);
+    let label = sprite.userData.priceLabel;
+    if (price === undefined || price === null) {
+      if (label) label.visible = false;
+      continue;
+    }
+    const text = `${Number(price).toLocaleString('es-ES', { maximumFractionDigits: 2 })} €`;
+    const color = price > basePrice + 1e-9 ? '#ff8a80' : price < basePrice - 1e-9 ? '#9cff9c' : '#ffffff';
+    if (!label) {
+      label = new THREE.Sprite(new THREE.SpriteMaterial({ depthWrite: false }));
+      label.scale.set(MARKER_SIZE * 1.4, MARKER_SIZE * 0.58, 1);
+      label.position.set(sprite.position.x, MARKER_SIZE * 1.85, sprite.position.z);
+      label.renderOrder = 2;
+      label.raycast = () => {};
+      sprite.userData.priceLabel = label;
+      group.add(label);
+    }
+    if (label.userData.key !== `${text}|${color}`) {
+      label.material.map = priceTexture(text, color);
+      label.material.needsUpdate = true;
+      label.userData.key = `${text}|${color}`;
+    }
+    label.visible = true;
+  }
+}

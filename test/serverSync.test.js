@@ -63,6 +63,7 @@ test('server exposes its cars and live values for the viewer', async (t) => {
   const store = new Store();
   const runtime = new Runtime({ engine: new SimEngine({ data: city(), maxCars: 60 }), store, now: () => wall, checkpointMs: 1e9 });
   const server = http.createServer(createApp({ runtime, store, token: 'secreto' }));
+  server.keepAliveTimeout = 60_000; // los ticks largos no deben cerrar la conexión que reutiliza fetch
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const api = new ApiClient({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: 'secreto' });
@@ -99,6 +100,7 @@ test('server exposes the pedestrians (on the sidewalks and crossings) at the sim
   const data = { ...city(), crossings: [0, -250, 0, 1, 4] };
   const runtime = new Runtime({ engine: new SimEngine({ data, maxCars: 10 }), store, now: () => wall, checkpointMs: 1e9 });
   const server = http.createServer(createApp({ runtime, store }));
+  server.keepAliveTimeout = 60_000; // los ticks largos no deben cerrar la conexión que reutiliza fetch
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const api = new ApiClient({ baseUrl: `http://127.0.0.1:${server.address().port}` });

@@ -112,11 +112,12 @@ export const CONFIG = {
     heavyRain: 2, // mm/h con los que el efecto de la lluvia es máximo
     // Efecto sobre la actividad (1 = el máximo de la lluvia o del buen tiempo).
     effects: {
-      carsRain: 0.2, // más coches (y más usuarios de autobús y aparcamiento) con lluvia
+      carsRain: 0.35, // más coches (y aparcamientos llenos) con lluvia
+      transitRain: 0.6, // y aún más gente en autobús
       speedRain: 0.18, // los coches circulan más despacio con lluvia
       pedestriansRain: 0.6, // menos peatones con lluvia
       bikesRain: 0.85, // y casi nadie en bici
-      sun: 0.15, // más peatones con sol y temperatura agradable (12–32 °C)
+      sun: 0.4, // más peatones con sol y temperatura agradable (12–32 °C)
       bikesSun: 1.5, // las bicis responden más al buen tiempo que los peatones
       cold: 0.2, // menos gente por debajo de 8 °C
     },
@@ -125,8 +126,11 @@ export const CONFIG = {
   },
 
   cars: {
-    max: 3000,
-    initialMax: 2500,
+    max: 4500, // tope de coches a la vez (también con los eventos)
+    // Coches en hora punta por defecto (MAX_CARS). Como los coches eligen ruta con el tráfico de ahora y esquivan los
+    // atascos, hacen falta más que con rutas fijas para que la ciudad se sature en punta como una real: con 2500 iba tan
+    // holgada que los semáforos apenas importaban (el mejor reparto del verde ganaba un 0-5 %; con 3400, un 5-15 %).
+    initialMax: 3400,
     radius: 2.2,
     length: 5,
     minGap: 2,
@@ -135,23 +139,100 @@ export const CONFIG = {
     laneOffset: 2.2,
     lookAhead: 60,
     stopGap: 3,
-    stuckSeconds: 300, // un coche parado tanto tiempo reaparece en otro punto (rompe bloqueos sin salida)
+    stuckSeconds: 120, // un coche parado tanto tiempo abandona y reaparece en otro punto: deshace los bloqueos (con más, un
+    // atasco que no se deshace hacía el tráfico caótico: un cambio mínimo movía el índice del día ±8 puntos)
     // m/s por clase de vía: autovía, primaria, secundaria, terciaria, residencial
     speedByClass: [22, 16, 13, 11, 8],
   },
 
   // Viajes en coche: cada coche va de su origen a una zona de destino y desaparece al llegar.
   trips: {
-    gridCells: 8, // la ciudad se divide en 8 × 8 celdas; cada celda con calles es una zona de destino
+    // La ciudad se divide en 14 × 14 celdas; cada celda con calles es una zona de destino. Con pocas zonas, los barrios
+    // de calles pequeñas (como el Centro, todo de sentido único) se quedaban sin destinos y los coches los rodeaban.
+    gridCells: 14,
+    activityBase: 0.5, // peso de una calle sin comercios ni servicios frente a la actividad que le dan (pesos de los peatones)
     minZoneLength: 400, // metros de calle mínimos para que una celda sea zona de destino
     arriveSeconds: 25, // el viaje termina a menos de tantos segundos (sin tráfico) del centro de la zona
-    choiceSeconds: 1, // azar al elegir ruta: una opción peor en tantos segundos pierde ~63 % de probabilidad (más, y dan vueltas)
+    // Rutas con el tráfico de ahora: cada minuto se mide la velocidad de cada tramo (media móvil) y los caminos a cada
+    // destino se recalculan cada `refreshMinutes` minutos simulados. Así los coches evitan los atascos.
+    congestionSmoothing: 0.3,
+    congestionMinSpeed: 1, // m/s: un tramo parado cuenta como si se fuera a esta velocidad
+    refreshMinutes: 15,
+    choiceSeconds: 30, // azar al elegir ruta entre los tramos que acercan al destino: una opción peor en tantos segundos pierde ~63 % de probabilidad
     maxTripSeconds: 3600, // un viaje que dura más se da por perdido (coche dando vueltas)
+    parkSearchSeconds: 420, // quien llega a un evento da vueltas por la zona buscando aparcamiento tanto tiempo
+  },
+
+  // Lugares de interés: atraen viajes (y de ellos sale gente) según la hora y el tipo de día. Ocio y playas, sobre todo
+  // en días libres (fines de semana y festivos); las playas, en verano y con buen tiempo; zonas de empresas, por la
+  // mañana de los días de trabajo (y de ellas sale la gente por la tarde). Coordenadas aproximadas.
+  pois: {
+    places: [
+      { id: 'parte-vieja', name: 'Parte Vieja', kind: 'ocio', lat: 43.3236, lon: -1.9852, radius: 350 },
+      { id: 'centro', name: 'Centro (comercio)', kind: 'ocio', lat: 43.3195, lon: -1.9815, radius: 450 },
+      { id: 'kursaal', name: 'Kursaal y Gros', kind: 'ocio', lat: 43.3243, lon: -1.9752, radius: 400 },
+      { id: 'concha', name: 'Playa de La Concha', kind: 'playa', lat: 43.3175, lon: -1.9880, radius: 600 },
+      { id: 'zurriola', name: 'Playa de la Zurriola', kind: 'playa', lat: 43.3262, lon: -1.9730, radius: 350 },
+      { id: 'ondarreta', name: 'Playa de Ondarreta', kind: 'playa', lat: 43.3168, lon: -2.0010, radius: 400 },
+      { id: 'miramon', name: 'Miramón (parque tecnológico y hospitales)', kind: 'trabajo', lat: 43.2925, lon: -1.9745, radius: 700, size: 2 },
+      { id: 'zuatzu', name: 'Zuatzu', kind: 'trabajo', lat: 43.2985, lon: -2.0195, radius: 500 },
+      { id: 'igara', name: 'Igara', kind: 'trabajo', lat: 43.3045, lon: -2.0110, radius: 400 },
+      { id: 'martutene', name: 'Martutene', kind: 'trabajo', lat: 43.2995, lon: -1.9520, radius: 500 },
+      { id: 'amara', name: 'Oficinas de Amara', kind: 'trabajo', lat: 43.3110, lon: -1.9790, radius: 400 },
+    ],
+    // [desde, hasta, intensidad] por hora: `to` = cuánto atraen como destino; `from` = cuánta gente sale de ellos.
+    profiles: {
+      trabajo: { workday: { to: [[7, 10, 1.5], [10, 15, 0.5]], from: [[13, 15, 0.5], [16, 19, 1.5]] } },
+      ocio: {
+        workday: { to: [[11, 14, 0.25], [17, 21, 0.75]], from: [[20, 23, 0.75]] },
+        free: { to: [[11, 14, 1], [17, 21, 1.25]], from: [[14, 16, 0.5], [20, 24, 1.25]] },
+      },
+      playa: { summer: [0.3, 1], workday: { to: [[11, 19, 0.5]], from: [[17, 21, 0.5]] }, free: { to: [[10, 18, 1.5]], from: [[17, 21, 1.5]] } },
+    },
+    minEdges: 20, // un lugar sin tantos tramos de calle alrededor no está en el mapa (ciudades de prueba)
+    maxPoints: 6, // destinos por lugar, repartidos por su área
+    pointSpacing: 200, // metros entre destinos de un mismo lugar
+    pointWeight: 6, // un lugar con intensidad 1 atrae como 6 zonas medias de la cuadrícula
+    spawnShare: 0.03, // fracción de los coches nuevos que salen de un lugar por unidad de intensidad `from` (tope 0,5 en total)
+  },
+
+  // Parkings subterráneos: llegan coches según la demanda de la ciudad y los eventos cercanos, se quedan un rato y se van.
+  // El gestor fija el precio de cada uno: los conductores eligen entre los de su zona según el precio.
+  parking: {
+    basePrice: 2, // €/h por defecto
+    minPrice: 0.5,
+    maxPrice: 6,
+    maxBands: 4, // franjas horarias por tarifa diaria
+    priceSensitivity: 1, // con el doble de precio que el de base, un parking atrae e^-1 ≈ 37 % de los coches que atraería
+    nearMeters: 1000, // entre los parkings a menos de esto se reparte quien quiere aparcar en la zona
+    stepSeconds: 60,
+    staySeconds: 7200, // estancia media
+    arrivalsPerHour: 0.45, // coches que llegan por hora y plaza con la demanda al máximo (ocupación de equilibrio ≈ 90 %)
+    eventMeters: 800, // parkings a los que van los coches de un evento
+    eventCarsPerBoost: 600, // coches por hora que buscan parking por unidad de `boost` de un evento mientras llega la gente
+    eventLeaveSeconds: 2700, // los del evento se van en unos 45 min al terminar
+    searchSeconds: 600, // quien no encuentra sitio da vueltas unos 10 min (y acaba en la calle o se va)
+    spillShare: 0.5, // de los que encuentran lleno su parking, los que prueban en otro de la zona (el resto da vueltas)
+    searchCars: 1, // cada coche buscando sitio es un coche más en la calle
+    // Con los parkings caros, parte de la gente deja el coche: por cada vez el precio base de más (media por plaza),
+    // un `shiftPerPremium` menos de coches, como mucho `maxShift`. Esa gente va en autobús, en bici o andando
+    // (demanda × 1 + fracción × toTransit, toBikes, toWalk).
+    shiftPerPremium: 0.075,
+    // Los de un evento miran los parkings de alrededor de la sede: con el doble de precio, un 30 % deja el coche.
+    eventShiftPerPremium: 0.3,
+    eventMaxShift: 0.5,
+    maxShift: 0.15,
+    toTransit: 1.5,
+    toBikes: 2,
+    toWalk: 1,
   },
 
   // Peatones: triángulos que caminan por las aceras y cruzan por los pasos de peatones de OSM (solo visual).
   pedestrians: {
     max: 12000, // con la demanda máxima
+    // Espacio peatonal (ped_space): cuánto cuenta cada km de calle cortada según el modo (solo bus: pasan autobuses).
+    spaceShare: { pedestrians_only: 1, buses_and_pedestrians: 0.7 },
+    eventSpace: 10, // junto a un evento en marcha, cada km cuenta 1 + eventSpace × (asistentes / 100.000)
     walkFraction: 0.75, // fracción que camina por las aceras; el resto cruza por los pasos de peatones
     minDensity: 0.15, // fracción de peatones activos aunque la demanda sea nula
     speed: 1.4, // m/s de paseo real (en pantalla: speed × clockScale m/s)
@@ -187,6 +268,17 @@ export const CONFIG = {
     capacityDelaySeconds: 30 * 86400, // un cambio de anclajes tarda 30 días simulados en hacer efecto
     maxCapacity: 60,
     intervalSeconds: 900, // una muestra por estación registrada cada tantos segundos simulados
+    // Ida y vuelta al trabajo (laborables): por la mañana se cogen bicis en los barrios y se dejan en el centro; por la
+    // tarde, al revés. Así hay puestos que se vacían y otros que se llenan cada día, y se puede prever cuáles.
+    commute: {
+      centerRadius: 1000, // metros al centro: puesto del centro
+      suburbRadius: 1500, // a partir de aquí, puesto de barrio (entre medias, sin sesgo)
+      morning: [7, 10], // horas de ida
+      evening: [17, 20], // horas de vuelta
+      strength: 0.8, // coger y dejar se multiplican o dividen por 1 + strength en el sentido de la marea
+    },
+    // Furgonetas para redistribuir bicis entre puestos: van al origen, cargan, viajan y descargan.
+    vans: { count: 3, capacity: 20, speed: 4, handlingSeconds: 900 }, // speed en m/s, en línea recta (sin calles ni tráfico); handling: cargar o descargar
   },
 
   // Transporte público: líneas de autobús circulares (ida y vuelta) que cruzan la ciudad entre paradas de OSM (solo visual).
@@ -214,18 +306,27 @@ export const CONFIG = {
     minFleet: 1, // rango de autobuses por línea que se puede fijar desde la API
     maxFleet: 30,
     reserve: 0.1, // flota total = la inicial de todas las líneas + este tanto por uno de reserva (fija: solo se reparte)
+    deployMinutes: 40, // minutos simulados que tarda un autobús de la reserva en llegar desde la cochera y entrar en servicio
+    patienceSeconds: 900, // (reloj de autobús) quien espera más que esto se cansa y se va (y coge el coche)
+    eventRiders: 2.5, // demanda de más en las líneas que pasan cerca de un evento, por unidad de `boost` (100.000 asistentes)
+    eventArrivalPeak: 2.5, // la llegada se concentra al final: demanda × eventArrivalPeak × nivel² (mismo total)
+    eventReach: 1.5, // una parada sirve a un evento si está a menos de radio × eventReach de la sede
+    // Cambio de modo: si toda la gente que quería ir en autobús se queda sin servicio, la demanda de coches sube esto.
+    modeShift: 0.5,
+    modeShiftFrom: 0.05, // fracción sin servicio a partir de la cual hay cambio de modo
+    // Calles cortadas o solo para autobuses y peatones: menos coches y más gente en autobús, por km (con un tope).
+    closures: { carsPerKm: 0.03, transitPerKm: 0.025, maxKm: 8 },
     clockScale: 12, // ritmo del reloj de los autobuses respecto al tiempo real; nunca supera la escala del servidor
     minService: 0.35, // fracción de la flota en servicio con la demanda mínima (con la máxima, toda)
     capacity: 80, // pasajeros por autobús
     fullAt: 0.9, // ocupación a partir de la cual el autobús se considera lleno
-    boardings: 8, // pasajeros que suben de media en una parada de peso 1 con la demanda máxima
+    boardings: 6, // pasajeros que suben de media en una parada de peso 1 con la demanda máxima y un autobús cada `headway`
     alightMin: 0.1, // fracción de los pasajeros que baja en cada parada: entre alightMin y alightMin + alightSpread
     alightSpread: 0.25,
     minStopWeight: 0.4, // peso de atracción de la parada (el de la calle según los POI entre referencia)
     maxStopWeight: 3,
     referenceWeight: 1.5,
     maxWaiting: 14, // peatones que se dibujan esperando en una parada
-    waitingSeconds: 600, // segundos de espera a partir de los cuales la parada tiene su máximo de gente
     length: 12, // metros del autobús
     width: 3,
     height: 3.2,
@@ -241,6 +342,8 @@ export const CONFIG = {
   signals: {
     green: 20,
     yellow: 3,
+    yellowRange: [3, 6], // segundos de ámbar permitidos (por seguridad, no menos de 3)
+    detectorRange: 100, // metros antes de la línea de parada que cubre el detector de cada semáforo (GET /api/signals)
     lostSeconds: 2, // segundos de rojo para todos al empezar cada verde (despeje y arranque)
     clusterDistance: 45, // metros para agrupar semáforos de un mismo cruce
     // Semáforo apagado o en ámbar intermitente: cruce sin regular.
@@ -254,6 +357,13 @@ export const CONFIG = {
       // Con la calle llena de peatones, tanto por uno del tiempo con el paso ocupado. En ámbar intermitente el peatón tiene
       // prioridad (cruza al llegar y los coches paran); apagado, cruza cuando hay hueco (los coches paran menos).
       pedestrianShare: { flashing: 0.45, off: 0.15 },
+    },
+    // Espera de los peatones en los cruces con semáforo. Quien llega con su semáforo en rojo espera hasta su verde: de
+    // media rojo² / (2 × ciclo) por sentido de cruce (con un ciclo de 24 s, unos 6 s; con uno de 60 s, unos 15 s).
+    pedestrianWait: {
+      arrivalsPerSecond: 0.3, // peatones que llegan a cruzar por segundo a cada cruce con la calle llena (se escala con la gente)
+      maxSeconds: 90, // más de esto no espera nadie (cruza en rojo o da la vuelta): es lo que cuenta en rojo para todos
+      unsignalized: { flashing: 2, off: 8 }, // en ámbar cruza casi al llegar; apagado, espera un hueco entre coches
     },
   },
 

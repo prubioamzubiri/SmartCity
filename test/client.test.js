@@ -19,6 +19,7 @@ async function start(t) {
   const store = new Store();
   const runtime = new Runtime({ engine: new SimEngine({ data: city(), maxCars: 60 }), store, now: () => wall, checkpointMs: 1e9 });
   const server = http.createServer(createApp({ runtime, store, token: 'secreto' }));
+  server.keepAliveTimeout = 60_000; // los ticks largos no deben cerrar la conexión que reutiliza fetch
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   return { base: `http://127.0.0.1:${server.address().port}/`, runtime, advance: (ms) => { wall += ms; while (!runtime.tick()); runtime.checkpoint(); } };

@@ -333,3 +333,7 @@ html, body {
 #top-right button.event-day.holiday > span:first-child { color: #ff8a80; font-weight: 700; }
 .event-panel .legend i.holiday-key { background: #ff5252; }
 .event-holiday { margin-top: 2px; color: #ff8a80; font-weight: 600; }
+.ui-tariff { margin-top: 6px; font-size: 12px; }
+.ui-tariff .ui-row { gap: 4px; margin: 4px 0; align-items: center; }
+#hud .ui-tariff input[type='time'] { width: 92px; padding: 3px 4px; background: var(--ui-surface); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 6px; }
+#hud .ui-tariff input[type='number'] { width: 56px; padding: 3px 4px; background: var(--ui-surface); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 6px; }

@@ -97,12 +97,22 @@ export class ApiClient {
     return this.request('/api/parking/tracked', { method: 'PUT', body: { ids } });
   }
 
+  // Tarifa de mañana de un parking (se aplica a las 0:00): precio base y franjas [{ from, to, price }].
+  setParkingTariff(id, price, schedule = []) {
+    return this.request(`/api/parking/${encodeURIComponent(id)}`, { method: 'PATCH', body: { price, schedule } });
+  }
+
   setTrackedBuses(ids) {
     return this.request('/api/buses/tracked', { method: 'PUT', body: { ids } });
   }
 
   setBikeCapacities(changes) {
     return this.request('/api/bikes/capacity', { method: 'PUT', body: { changes } });
+  }
+
+  // Furgoneta: mueve hasta `bikes` bicis del puesto `from` al `to` (201 con las horas de carga y descarga; 409 si no hay libre).
+  moveBikes(from, to, bikes) {
+    return this.request('/api/bikes/moves', { method: 'POST', body: { from, to, bikes } });
   }
 
   setTrackedBikes(ids) {

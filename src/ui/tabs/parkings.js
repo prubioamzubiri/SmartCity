@@ -1,7 +1,56 @@
+import { CONFIG } from '../../config.js';
 import { el } from '../dom.js';
-import { button, card, cardTitle, empty, hint, meter, stat } from '../widgets.js';
+import { badge, button, card, cardTitle, empty, hint, meter, stat } from '../widgets.js';
 
 const legendItem = (color, text) => el('span', {}, el('i', { style: `background:${color}` }), text);
+const P = CONFIG.parking;
+const euros = (v) => `${Number(v).toLocaleString('es-ES', { maximumFractionDigits: 2 })} €`;
+const describe = (t) => (t ? [`${euros(t.price)}/h`, ...t.schedule.map((b) => `${b.from}–${b.to}: ${euros(b.price)}`)].join(' · ') : `${euros(P.basePrice)}/h (por defecto)`);
+const priceInput = (value) => el('input', { type: 'number', min: P.minPrice, max: P.maxPrice, step: 0.5, value, class: 'ui-stepper-input' });
+
+// Editor de la tarifa de mañana de un parking: precio base y hasta maxBands franjas horarias.
+function tariffEditor(ctx, lot) {
+  const base = priceInput(P.basePrice);
+  const bands = el('div', { class: 'ui-stack' });
+  const addBand = (b = { from: '17:00', to: '20:00', price: P.basePrice }) => {
+    if (bands.children.length >= P.maxBands) return;
+    const row = el('div', { class: 'ui-row ui-band' },
+      el('input', { type: 'time', value: b.from, 'aria-label': 'Desde' }), '–',
+      el('input', { type: 'time', value: b.to, 'aria-label': 'Hasta' }),
+      priceInput(b.price), '€',
+      button('✕', () => { row.remove(); sync(); }, 'ghost'));
+    bands.append(row);
+    sync();
+  };
+  const add = button('+ Franja', () => addBand(), 'ghost');
+  const sync = () => { add.disabled = bands.children.length >= P.maxBands; };
+  const read = () => ({
+    price: Number(base.value),
+    schedule: [...bands.children].map((row) => {
+      const [from, to, price] = row.querySelectorAll('input');
+      return { from: from.value, to: to.value, price: Number(price.value) };
+    }),
+  });
+  const fill = (t) => {
+    base.value = t?.price ?? P.basePrice;
+    bands.replaceChildren();
+    for (const b of t?.schedule ?? []) addBand(b);
+    sync();
+  };
+  const save = button('Guardar para mañana', () => {
+    const { price, schedule } = read();
+    ctx.run((c) => c.setParkingTariff(lot.id, price, schedule), `${lot.name}: tarifa de mañana guardada (se aplica a las 0:00)`);
+  });
+  const reset = button('Por defecto', () => ctx.run((c) => c.setParkingTariff(lot.id, null, []), `${lot.name}: mañana vuelve a la tarifa por defecto`), 'ghost');
+  const node = el('details', { class: 'ui-details ui-tariff' },
+    el('summary', { textContent: 'Cambiar la tarifa de mañana' }),
+    el('div', { class: 'ui-row nowrap' }, el('span', { class: 'ui-field-label', textContent: 'Precio (€/h)' }), base),
+    el('span', { class: 'ui-field-label', textContent: 'Franjas horarias (otro precio a esas horas)' }),
+    bands,
+    el('div', { class: 'ui-row' }, add, save, reset));
+  node.addEventListener('toggle', () => { if (node.open) fill(lot.live?.tomorrow ?? lot.live?.today); });
+  return { node, buttons: [save, reset, add], inputs: () => node.querySelectorAll('input') };
+}
 
 // Parkings subterráneos públicos: ocupación simulada y cuáles registra el servidor.
 export function createParkingsTab(ctx) {
@@ -23,12 +72,16 @@ export function createParkingsTab(ctx) {
 
   const node = el('div', {},
     card(el('div', { class: 'ui-stats two' }, stats.avg.node, stats.full.node)),
-    card(cardTitle('Parkings subterráneos'), hint('«Registrar» guarda su ocupación cada 5 min simulados (CSV de parkings). También puedes pulsar la P de un parking en el mapa.'), list, allNone),
+    card(cardTitle('Parkings subterráneos'),
+      hint('«Registrar» guarda su ocupación cada 5 min simulados (CSV de parkings). También puedes pulsar la P de un parking en el mapa.'),
+      hint(`La tarifa solo cambia a las 0:00: lo que guardes hoy se aplica mañana y se mantiene hasta que la cambies. Precio entre ${euros(P.minPrice)} y ${euros(P.maxPrice)} por hora (por defecto ${euros(P.basePrice)}). Un parking más caro que sus vecinos les manda coches; con los parkings caros, parte de la gente deja el coche. Los precios altos tienen un coste para los ciudadanos.`),
+      list, allNone),
     card(cardTitle('Leyenda del mapa'),
       el('div', { class: 'ui-legend' },
         legendItem('#2ecc71', 'Parking con sitio'), legendItem('#e74c3c', 'Parking lleno'),
         legendItem('#7a4fd6', 'Área subterránea'), legendItem('#4fc3f7', 'Aparcamiento en calle'),
         legendItem('#ffffff', 'Plaza suelta')),
+      hint('Sobre cada P, el precio de ahora: en rojo si es más caro que el de por defecto y en verde si es más barato.'),
       ctx.parking.stats ? hint(`Datos de OSM: ${ctx.parking.stats.lots} aparcamientos, ${ctx.parking.stats.underground} subterráneos públicos, ${ctx.parking.stats.street} tramos con aparcamiento en la calle.`) : ''));
 
   let key = '';
@@ -48,10 +101,15 @@ export function createParkingsTab(ctx) {
           const load = meter();
           const pct = el('span', { class: 'ui-muted' });
           const box = el('input', { type: 'checkbox', onchange: () => toggle(lot.id) });
+          const now = el('div', { class: 'ui-muted' });
+          const flags = el('span', { class: 'ui-badges' });
+          const entry = { id: lot.id, name: lot.name, live: lot };
+          const editor = tariffEditor(ctx, entry);
           const row = el('div', { class: 'ui-item' },
             el('div', { class: 'ui-item-head' }, el('b', { textContent: lot.name }), el('label', { class: 'ui-check' }, box, ' Registrar')),
-            el('div', { class: 'ui-row nowrap' }, load.node, pct));
-          rows.set(lot.id, { load, pct, box });
+            el('div', { class: 'ui-row nowrap' }, load.node, pct),
+            now, flags, editor.node);
+          rows.set(lot.id, { load, pct, box, now, flags, editor, entry });
           list.append(row);
         }
       }
@@ -63,6 +121,11 @@ export function createParkingsTab(ctx) {
         r.pct.textContent = `${Math.round(lot.occupancy * 100)} % de ${lot.capacity} plazas`;
         r.box.checked = lot.tracked;
         r.box.disabled = !writable;
+        r.entry.live = lot;
+        r.now.textContent = lot.price === undefined ? '' : `Ahora: ${euros(lot.price)}/h · Hoy: ${describe(lot.today)}`;
+        r.flags.replaceChildren(...(lot.tomorrow ? [badge(`Mañana: ${describe(lot.tomorrow)}`, 'warn')] : []));
+        for (const b of r.editor.buttons) b.disabled = !writable;
+        for (const i of r.editor.inputs()) i.disabled = !writable;
         sum += lot.occupancy;
         if (lot.occupancy >= 0.95) full++;
       }
@@ -70,6 +133,8 @@ export function createParkingsTab(ctx) {
       stats.full.set(String(full), `de ${lots.length}`);
       for (const b of allNone.querySelectorAll('button')) b.disabled = !writable;
       ctx.parking.highlight((id) => lots.some((p) => p.id === id && p.tracked));
+      const prices = new Map(lots.map((p) => [p.id, p.price]));
+      ctx.parking.prices?.((id) => prices.get(id));
     },
   };
 }

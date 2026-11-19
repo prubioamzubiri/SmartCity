@@ -30,12 +30,19 @@ export class TrafficSim {
     this.targetCount = 0;
     this.speedScale = 1; // multiplicador de la velocidad de todos los coches (el tiempo: lluvia)
     this.attractors = []; // sedes de eventos en curso que atraen coches
+    this.origins = []; // lugares de los que sale gente ahora (zonas de empresas por la tarde...): { edges, weight }
     this.venueEdges = new Map(); // id de la sede -> tramos cercanos (solo se calculan una vez)
     this.closed = new Uint8Array(graph.edgeCount); // 1 = tramo cortado a los coches
     this.zone = new Int32Array(graph.edgeCount); // zona con límite de entrada a la que pertenece el tramo (0 = ninguna)
     this.zoneLimit = new Map(); // zona -> coches que puede haber dentro como máximo
     this.zoneCount = new Map(); // zona -> coches que hay dentro ahora
     for (let i = 0; i < n; i++) this.factor[i] = 0.85 + this.rng() * 0.25;
+    // Cada coche tiene su propia secuencia aleatoria (dónde aparece, adónde va, por dónde gira). Con una sola para toda
+    // la ciudad, que un coche gire un segundo antes desplazaba los sorteos de todos los demás y cualquier cambio mínimo
+    // (1 s de verde en un cruce) cambiaba el tráfico de toda la ciudad: el resultado de un gestor era casi lotería.
+    this.carRng = new Uint32Array(n);
+    const base = (this.rng() * 4294967296) >>> 0;
+    for (let i = 0; i < n; i++) this.carRng[i] = (base ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0;
     // Viajes: zona de destino de cada coche, cuándo salió y cuánto tardaría sin tráfico ni cortes.
     // Sin coordenadas (grafos mínimos de algunos tests) no hay zonas: los coches circulan al azar como antes.
     this.trips = graph.nx && graph.nodeCount ? new TripPlanner(graph) : null;
@@ -43,6 +50,7 @@ export class TrafficSim {
     this.tripStart = new Float64Array(n);
     this.tripFree = new Float32Array(n);
     this.routed = new Uint8Array(n); // 1 = el viaje tenía camino al destino al empezar
+    this.parking = new Float64Array(n); // > 0: llegó a un evento y busca aparcamiento por la zona hasta ese instante
     this.clock = 0; // segundos simulados que ha avanzado esta simulación
     // Acumulados: viajes terminados, sus segundos y su retraso, y viajes perdidos (cortes, atascos, vueltas sin fin).
     this.tripTotals = { done: 0, seconds: 0, delay: 0, lost: 0 };
@@ -59,6 +67,7 @@ export class TrafficSim {
       activeCount: n,
       targetCount: this.targetCount,
       rng: this.rng.getState(),
+      carRng: toBase64(this.carRng),
       edge: toBase64(this.edge.subarray(0, n)),
       pos: toBase64(this.pos.subarray(0, n)),
       speed: toBase64(this.speed.subarray(0, n)),
@@ -69,6 +78,10 @@ export class TrafficSim {
       tripStart: toBase64(this.tripStart.subarray(0, n)),
       tripFree: toBase64(this.tripFree.subarray(0, n)),
       routed: toBase64(this.routed.subarray(0, n)),
+      parking: toBase64(this.parking.subarray(0, n)),
+      edgeSpeed: this.edgeSpeed ? toBase64(this.edgeSpeed) : null,
+      congestionMinute: this.congestionMinute ?? null,
+      routeSpeed: this.routeSpeed ? toBase64(this.routeSpeed) : null,
       clock: this.clock,
       tripTotals: { ...this.tripTotals },
     };
@@ -100,6 +113,7 @@ export class TrafficSim {
     this.targetCount = state.targetCount;
     for (let i = 0; i < n; i++) this.place(i, this.edge[i]);
     this.rng.setState(state.rng);
+    if (state.carRng) this.carRng.set(fromBase64(state.carRng, Uint32Array));
     this.clock = state.clock ?? 0;
     this.tripTotals = { done: 0, seconds: 0, delay: 0, lost: 0, ...state.tripTotals };
     if (state.dest) {
@@ -107,6 +121,17 @@ export class TrafficSim {
       this.tripStart.set(fromBase64(state.tripStart, Float64Array));
       this.tripFree.set(fromBase64(state.tripFree, Float32Array));
       if (state.routed) this.routed.set(fromBase64(state.routed, Uint8Array));
+      this.parking.fill(0);
+      if (state.parking) this.parking.set(fromBase64(state.parking, Float64Array));
+      if (state.edgeSpeed && this.trips) {
+        this.edgeSpeed = fromBase64(state.edgeSpeed, Float32Array);
+        this.congestionMinute = state.congestionMinute ?? null;
+        this.trips.setLiveSpeeds(this.edgeSpeed, T.congestionMinSpeed);
+      }
+      if (state.routeSpeed && this.trips) {
+        this.routeSpeed = fromBase64(state.routeSpeed, Float32Array);
+        this.trips.setRouteSpeeds(this.routeSpeed, T.congestionMinSpeed);
+      }
     } else if (this.trips) {
       // Snapshot de antes de los viajes: cada coche recibe un destino desde donde está.
       for (let i = 0; i < n; i++) this.startTrip(i, this.edge[i], this.pos[i]);
@@ -118,8 +143,17 @@ export class TrafficSim {
   }
 
   // Sedes de eventos [{ id, x, z, radius, weight }]: los coches nuevos aparecen cerca de ellas y los demás tienden a ir hacia allí.
+  // Sedes de los eventos en curso. Si parte de sus calles está cortada a los coches, atraen menos coches en proporción
+  // (`access`): esa gente va andando o en autobús.
   setAttractors(list) {
-    this.attractors = list.map((a) => ({ ...a, pull: Math.min(1, a.weight) * E.steering, edges: this.edgesNear(a) }));
+    this.attractors = list.map((a) => {
+      const edges = this.edgesNear(a);
+      let closed = 0;
+      for (const e of edges) if (this.closed[e] === 1) closed++;
+      const access = edges.length ? 1 - closed / edges.length : 1;
+      const weight = a.weight * access;
+      return { ...a, base: a.weight, weight, access, pull: Math.min(1, weight) * E.steering, edges };
+    });
   }
 
   edgesNear({ id, x, z, radius }) {
@@ -141,24 +175,81 @@ export class TrafficSim {
     return edges;
   }
 
-  spawnEdge() {
-    const list = this.attractors;
-    if (list.length) {
+  // Velocidad que llevan ahora los coches en cada tramo, suavizada (media móvil): la usan para elegir ruta evitando los
+  // atascos. Un tramo sin coches vuelve poco a poco a su velocidad libre.
+  updateCongestion(minute = null) {
+    if (!this.trips) return;
+    // Una vez por minuto simulado (tras restaurar un snapshot, el motor repite el minuto en curso).
+    if (minute !== null && minute === this.congestionMinute) return;
+    this.congestionMinute = minute;
+    const g = this.g;
+    if (!this.edgeSpeed) this.edgeSpeed = Float32Array.from(g.speed);
+    const sum = new Float32Array(g.edgeCount);
+    const count = new Uint16Array(g.edgeCount);
+    for (let i = 0; i < this.activeCount; i++) {
+      sum[this.edge[i]] += this.speed[i];
+      count[this.edge[i]]++;
+    }
+    const a = T.congestionSmoothing;
+    for (let e = 0; e < g.edgeCount; e++) {
+      const now = count[e] ? sum[e] / count[e] : g.speed[e] * this.speedScale;
+      this.edgeSpeed[e] += a * (now - this.edgeSpeed[e]);
+    }
+    this.trips.setLiveSpeeds(this.edgeSpeed, T.congestionMinSpeed);
+  }
+
+  // Recalcula los caminos a todos los destinos con el tráfico de ahora (lo llama el motor cada pocos minutos).
+  refreshRoutes() {
+    if (!this.trips || !this.edgeSpeed) return;
+    this.routeSpeed = Float32Array.from(this.edgeSpeed);
+    this.trips.setRouteSpeeds(this.routeSpeed, T.congestionMinSpeed);
+  }
+
+  // Número aleatorio de la secuencia del coche `i` (mulberry32); sin coche (i < 0), la secuencia general.
+  rand(i) {
+    if (i < 0) return this.rng();
+    const state = (this.carRng[i] + 0x6d2b79f5) >>> 0;
+    this.carRng[i] = state;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  spawnEdge(i = -1) {
+    // Parte de los coches nuevos sale de los lugares de interés que ahora generan viajes.
+    if (this.origins.length) {
       let total = 0;
-      for (const a of list) total += a.edges.length ? a.weight : 0;
-      if (total > 0 && this.rng() < Math.min(E.spawnShare, total)) {
-        let r = this.rng() * total;
-        for (const a of list) {
-          if (!a.edges.length) continue;
-          r -= a.weight;
-          if (r <= 0) {
-            const e = a.edges[(this.rng() * a.edges.length) | 0];
-            return this.restricted(e) ? this.randomEdge() : e;
+      for (const o of this.origins) total += o.weight;
+      if (total > 0 && this.rand(i) < Math.min(0.5, total)) {
+        let r = this.rand(i) * total;
+        for (const o of this.origins) {
+          r -= o.weight;
+          if (r <= 0 && o.edges.length) {
+            const e = o.edges[(this.rand(i) * o.edges.length) | 0];
+            if (!this.restricted(e) && !this.outside(e)) return e;
+            break;
           }
         }
       }
     }
-    return this.randomEdge();
+    const list = this.attractors;
+    if (list.length) {
+      let total = 0;
+      for (const a of list) total += a.edges.length ? a.weight : 0;
+      if (total > 0 && this.rand(i) < Math.min(E.spawnShare, total)) {
+        let r = this.rand(i) * total;
+        for (const a of list) {
+          if (!a.edges.length) continue;
+          r -= a.weight;
+          if (r <= 0) {
+            const e = a.edges[(this.rand(i) * a.edges.length) | 0];
+            return this.restricted(e) ? this.randomEdge(i) : e;
+          }
+        }
+      }
+    }
+    return this.randomEdge(i);
   }
 
   // Sesgo de elegir el tramo `c` por acercar el coche a la sede de un evento (1 = sin sesgo). Dentro de la
@@ -185,11 +276,11 @@ export class TrafficSim {
     return this.trips !== null && !this.trips.inMain[this.g.B[e]];
   }
 
-  randomEdge() {
+  randomEdge(i = -1) {
     const g = this.g;
     for (let tries = 0; tries < 6; tries++) {
-      const e = (this.rng() * g.edgeCount) | 0;
-      if ((this.rng() * 5 < 5 - g.cls[e] || tries === 5) && !this.restricted(e) && !this.outside(e)) return e;
+      const e = (this.rand(i) * g.edgeCount) | 0;
+      if ((this.rand(i) * 5 < 5 - g.cls[e] || tries === 5) && !this.restricted(e) && !this.outside(e)) return e;
     }
     for (let e = 0; e < g.edgeCount; e++) if (!this.restricted(e) && !this.outside(e)) return e;
     for (let e = 0; e < g.edgeCount; e++) if (!this.restricted(e)) return e;
@@ -233,8 +324,8 @@ export class TrafficSim {
   // opciones parecidas); sin coche, o si el destino ya no tiene camino, al azar como antes.
   chooseNext(e, i = -1) {
     if (e < 0) return -1;
-    if (i >= 0 && this.trips) {
-      const c = this.towards(e, this.trips.live[this.dest[i]]);
+    if (i >= 0 && this.trips && !this.parking[i]) {
+      const c = this.towards(e, this.trips.live[this.dest[i]], i);
       if (c !== -2) return c;
     }
     const g = this.g;
@@ -253,7 +344,7 @@ export class TrafficSim {
       total += this.weight(e, c);
     }
     if (total === 0) return fallback >= 0 && this.allows(e, fallback) ? fallback : -1;
-    let r = this.rng() * total;
+    let r = this.rand(i) * total;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
       if (c === rev) continue;
@@ -263,42 +354,49 @@ export class TrafficSim {
     return fallback >= 0 && this.allows(e, fallback) ? fallback : -1;
   }
 
-  // Tramo hacia el destino según su campo de tiempos (-2 si ningún tramo permitido tiene camino).
-  towards(e, field) {
+  // Tramo hacia el destino según su campo de tiempos (-2 si ningún tramo permitido tiene camino). Solo valen los tramos
+  // que acercan al destino (así no hay vueltas en círculo) y, entre ellos, se reparte con un margen de `choiceSeconds`:
+  // una alternativa algo más lenta también se usa. Con un margen de 1 s todos los coches iban por el mismo camino y
+  // había giros y calles que no usaba nadie.
+  towards(e, field, i = -1) {
     const g = this.g;
     const node = g.B[e];
     const rev = g.rev[e];
     const start = g.outStart[node];
     const end = g.outStart[node + 1];
+    const here = field[node];
     let best = Infinity;
+    let closer = false;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
       if (c === rev && end - start > 1) continue;
       if (!this.allows(e, c)) continue;
-      const cost = this.trips.time[c] + field[g.B[c]];
+      const cost = this.trips.liveTime[c] + field[g.B[c]];
       if (cost < best) best = cost;
+      if (field[g.B[c]] < here) closer = true;
     }
     if (best === Infinity) {
       // Cambio de sentido solo si no queda otra (callejón o calle cortada más adelante).
       if (rev >= 0 && this.allows(e, rev) && field[g.B[rev]] < Infinity) return rev;
       return -2;
     }
+    const usable = (c, cost) => cost < Infinity && (!closer || field[g.B[c]] < here);
     let total = 0;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
       if (c === rev && end - start > 1) continue;
       if (!this.allows(e, c)) continue;
-      const cost = this.trips.time[c] + field[g.B[c]];
-      if (cost < Infinity) total += Math.exp((best - cost) / T.choiceSeconds);
+      const cost = this.trips.liveTime[c] + field[g.B[c]];
+      if (usable(c, cost)) total += Math.exp((best - cost) / T.choiceSeconds);
     }
-    let r = this.rng() * total;
+    let r = this.rand(i) * total;
     let last = -2;
     for (let k = start; k < end; k++) {
       const c = g.outList[k];
       if (c === rev && end - start > 1) continue;
       if (!this.allows(e, c)) continue;
-      const cost = this.trips.time[c] + field[g.B[c]];
-      if (cost === Infinity) continue;
+      const cost = this.trips.liveTime[c] + field[g.B[c]];
+      if (!usable(c, cost)) continue;
       last = c;
       r -= Math.exp((best - cost) / T.choiceSeconds);
       if (r <= 0) return c;
@@ -335,11 +433,12 @@ export class TrafficSim {
   }
 
   spawn(i) {
-    const e = this.spawnEdge();
+    const e = this.spawnEdge(i);
     this.place(i, e);
-    this.pos[i] = this.rng() * this.g.len[e];
+    this.pos[i] = this.rand(i) * this.g.len[e];
     this.speed[i] = 0;
     this.stuck[i] = 0;
+    this.parking[i] = 0;
     this.startTrip(i, e, this.pos[i]);
     this.route(i, e);
   }
@@ -352,8 +451,10 @@ export class TrafficSim {
     const node = this.g.B[e];
     let zone = 0;
     for (let tries = 0; tries < 8; tries++) {
-      zone = this.pickZone();
+      zone = this.pickZone(i);
       if (t.live[zone][node] < Infinity) break;
+      // La sede de un evento cortada a los coches no es un viaje perdido: esa gente va andando o en autobús.
+      if (t.isPoint(zone)) continue;
       if (t.free[zone][node] < Infinity) this.tripTotals.lost++;
     }
     this.dest[i] = zone;
@@ -364,20 +465,21 @@ export class TrafficSim {
   }
 
   // Con eventos en curso, parte de los viajes van a la zona de la sede.
-  pickZone() {
+  pickZone(i = -1) {
     const list = this.attractors;
     if (list.length) {
       let total = 0;
       for (const a of list) total += a.weight;
-      if (total > 0 && this.rng() < Math.min(E.spawnShare, total)) {
-        let r = this.rng() * total;
+      if (total > 0 && this.rand(i) < Math.min(E.spawnShare, total)) {
+        let r = this.rand(i) * total;
         for (const a of list) {
           r -= a.weight;
-          if (r <= 0) return (a.zone ??= this.trips.nearest(a.x, a.z));
+          // Destino: la propia sede (si el motor la ha registrado) o la zona más cercana.
+          if (r <= 0) return (a.zone ??= this.trips.points.get(a.venue) ?? this.trips.nearest(a.x, a.z));
         }
       }
     }
-    return this.trips.pick(this.rng());
+    return this.trips.pick(this.rand(i));
   }
 
   // Los tres próximos tramos del coche `i` desde el tramo `e`.
@@ -402,6 +504,15 @@ export class TrafficSim {
         this.tripTotals.lost++;
       }
     }
+    // Quien llega a la sede de un evento da vueltas por la zona buscando aparcamiento (`parkSearchSeconds`) y luego
+    // aparca y deja la calle. Es lo que colapsa los alrededores de un evento.
+    // (Los lugares de interés, no: allí se aparca al llegar.)
+    if (arrived && this.trips && this.trips.isPoint(this.dest[i]) && !respawn && !this.trips.zones[this.dest[i]].point?.startsWith('poi:')) {
+      this.parking[i] = this.clock + T.parkSearchSeconds;
+      this.routed[i] = 0;
+      return;
+    }
+    if (arrived && this.trips && this.trips.isPoint(this.dest[i])) respawn = true;
     if (respawn || !this.trips) {
       this.detach(i);
       this.spawn(i);
@@ -528,6 +639,24 @@ export class TrafficSim {
     return gap;
   }
 
+  // Detector de un semáforo (como las espiras de un cruce real): coches a menos de `range` metros de la línea de parada
+  // en las calles que llegan por cada eje, y cuántos de ellos están parados. Devuelve [[coches, parados] × eje].
+  detectorCounts(s, range = CONFIG.signals.detectorRange) {
+    const g = this.g;
+    const out = [[0, 0], [0, 0]];
+    for (const a of this.signals.signals[s].approaches ?? []) {
+      const list = this.edgeCars[a];
+      if (!list) continue;
+      const axis = out[g.grp[a]];
+      for (const j of list) {
+        if (g.len[a] - this.pos[j] > range) continue;
+        axis[0]++;
+        if (this.speed[j] < 1) axis[1]++;
+      }
+    }
+    return out;
+  }
+
   // En el cruce sin regular `s`, el coche que llega por `e` cede el paso si viene alguien por una calle con prioridad
   // (de más categoría; a igual categoría, el eje este-oeste). Como la prioridad es un orden estricto, nunca se esperan
   // dos coches mutuamente.
@@ -551,7 +680,13 @@ export class TrafficSim {
     this.adjustPopulation();
     const g = this.g;
     for (let i = 0; i < this.activeCount; i++) {
-      if (this.trips && this.clock - this.tripStart[i] > T.maxTripSeconds) this.endTrip(i, false);
+      if (this.parking[i] && this.clock > this.parking[i]) {
+        // Encontró sitio: aparca y deja la calle (su hueco lo ocupa un coche nuevo).
+        this.detach(i);
+        this.spawn(i);
+        continue;
+      }
+      if (this.trips && !this.parking[i] && this.clock - this.tripStart[i] > T.maxTripSeconds) this.endTrip(i, false);
       const gap = this.freeGap(i);
       const e0 = this.edge[i];
       const vmax = g.speed[e0] * this.factor[i] * this.speedScale;
@@ -603,7 +738,7 @@ export class TrafficSim {
       p = 0;
       const left = this.trips ? this.trips.live[this.dest[i]][g.B[ne]] : 1;
       // Sin camino desde el principio (encerrado por cortes) sigue dando vueltas sin contar más viajes perdidos.
-      if (left <= T.arriveSeconds || (left === Infinity && this.routed[i])) {
+      if (!this.parking[i] && (left <= T.arriveSeconds || (left === Infinity && this.routed[i]))) {
         // Llegó (o un corte le ha dejado sin camino): encadena otro viaje desde aquí y sigue avanzando.
         this.endTrip(i, left !== Infinity);
         continue;

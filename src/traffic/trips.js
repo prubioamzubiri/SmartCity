@@ -65,6 +65,9 @@ export class TripPlanner {
     const { nodeCount, edgeCount, B, len, speed } = graph;
     this.time = new Float32Array(edgeCount);
     for (let e = 0; e < edgeCount; e++) this.time[e] = len[e] / speed[e];
+    // Tiempos con el tráfico de ahora (los que usan los coches para elegir ruta); al principio, los de sin tráfico.
+    this.liveTime = Float32Array.from(this.time);
+    this.routeTime = null; // tiempos con los que se calcularon los caminos (null = sin tráfico)
     // Aristas entrantes por nodo (para Dijkstra hacia atrás desde el destino).
     this.inStart = new Int32Array(nodeCount + 1);
     for (let e = 0; e < edgeCount; e++) this.inStart[B[e] + 1]++;
@@ -86,6 +89,81 @@ export class TripPlanner {
       this.cumulative[i] = total;
     });
     this.totalWeight = total;
+    this.gridZones = this.zones.length;
+    this.points = new Map(); // destinos con nombre (sedes de eventos) -> índice de zona
+  }
+
+  // Peso de cada zona como destino según la actividad de sus calles (comercios, servicios...: `edgeWeights`, los
+  // mismos pesos que usan los peatones) y no solo por los metros de calle. El centro, con más actividad, atrae más.
+  setZoneWeights(edgeWeights) {
+    const g = this.g;
+    const byCell = new Map();
+    for (let e = 0; e < g.edgeCount; e++) {
+      const c = this.cellOf(g.nx[g.A[e]], g.nz[g.A[e]]);
+      byCell.set(c, (byCell.get(c) ?? 0) + g.len[e] * (T.activityBase + (edgeWeights[e] ?? 0)));
+    }
+    for (let i = 0; i < this.gridZones; i++) {
+      const z = this.zones[i];
+      z.base = byCell.get(z.cell) ?? z.base;
+    }
+    this.setZoneFactors(this.zoneFactors);
+  }
+
+  // Pesos de los destinos: las zonas de la cuadrícula, multiplicadas por `factors[i]`, y los destinos propios (lugares
+  // de interés según la hora) con el peso que se les dé en `pointWeights` (clave -> peso; sin peso, nunca se sortean).
+  setZoneFactors(factors = null, pointWeights = null) {
+    this.zoneFactors = factors;
+    this.pointWeights = pointWeights;
+    if (this.cumulative.length !== this.zones.length) this.cumulative = new Float64Array(this.zones.length);
+    let total = 0;
+    for (let i = 0; i < this.zones.length; i++) {
+      const z = this.zones[i];
+      z.weight = i < this.gridZones ? z.base * (factors?.[i] ?? 1) : (pointWeights?.get(z.point) ?? 0);
+      total += z.weight;
+      this.cumulative[i] = total;
+    }
+    this.totalWeight = total;
+  }
+
+  // Peso medio de una zona de la cuadrícula (la unidad para los pesos de los destinos propios).
+  meanZoneWeight() {
+    let sum = 0;
+    for (let i = 0; i < this.gridZones; i++) sum += this.zones[i].base;
+    return sum / Math.max(1, this.gridZones);
+  }
+
+  // Destino propio en un punto (la sede de un evento): el cruce del núcleo más cercano. No entra en el sorteo normal.
+  addPoint(key, x, z) {
+    if (this.points.has(key)) return this.points.get(key);
+    const g = this.g;
+    let best = -1;
+    let bestD = Infinity;
+    for (let n = 0; n < g.nodeCount; n++) {
+      if (!this.inMain[n]) continue;
+      // Un cruce de calles normales: nadie va a una autovía (en ciudades de prueba sin clases, vale cualquiera).
+      if (g.cls) {
+        let street = false;
+        for (let k = g.outStart[n]; k < g.outStart[n + 1] && !street; k++) street = g.cls[g.outList[k]] > 0;
+        if (!street) continue;
+      }
+      const d = (g.nx[n] - x) ** 2 + (g.nz[n] - z) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = n;
+      }
+    }
+    if (best < 0) return -1;
+    const index = this.zones.length;
+    this.zones.push({ cell: -1, node: best, x: g.nx[best], z: g.nz[best], weight: 0, point: key });
+    const free = this.field(best, null);
+    this.free = [...this.free, free];
+    this.live = this.live === this.free ? this.free : [...this.live, this.field(best, this.closed, this.routeTime ?? this.time)];
+    this.points.set(key, index);
+    return index;
+  }
+
+  isPoint(zone) {
+    return zone >= this.gridZones;
   }
 
   // Núcleo de la red: cruces desde los que se puede ir a cualquier otro del núcleo y volver (la mayor componente
@@ -149,6 +227,7 @@ export class TripPlanner {
     const sx = (maxX - minX) / cells || 1;
     const sz = (maxZ - minZ) / cells || 1;
     const cellOf = (x, z) => Math.min(cells - 1, Math.floor((x - minX) / sx)) * cells + Math.min(cells - 1, Math.floor((z - minZ) / sz));
+    this.cellOf = cellOf;
     const acc = new Map();
     for (let e = 0; e < g.edgeCount; e++) {
       const a = g.A[e];
@@ -177,13 +256,14 @@ export class TripPlanner {
           best = n;
         }
       }
-      if (best >= 0) zones.push({ cell, node: best, x: g.nx[best], z: g.nz[best], weight: s.length });
+      if (best >= 0) zones.push({ cell, node: best, x: g.nx[best], z: g.nz[best], weight: s.length, base: s.length });
     }
     return zones;
   }
 
-  // Segundos sin tráfico desde cada nodo hasta `target` (Infinity si no se puede llegar). `closed`: tramos prohibidos.
-  field(target, closed) {
+  // Segundos desde cada nodo hasta `target` (Infinity si no se puede llegar) con los tiempos `time` (por defecto, sin
+  // tráfico). `closed`: tramos prohibidos.
+  field(target, closed, time = this.time) {
     const g = this.g;
     const dist = new Float32Array(g.nodeCount).fill(Infinity);
     const heap = new Heap(1024);
@@ -197,7 +277,7 @@ export class TripPlanner {
       for (let k = this.inStart[n]; k < this.inStart[n + 1]; k++) {
         const e = this.inList[k];
         if (closed && closed[e] === 1) continue;
-        const nd = d + this.time[e];
+        const nd = d + time[e];
         const a = g.A[e];
         if (nd < dist[a]) {
           dist[a] = nd;
@@ -213,16 +293,36 @@ export class TripPlanner {
     let any = false;
     for (let e = 0; e < closed.length && !any; e++) any = closed[e] === 1;
     if (!any) {
-      this.live = this.free;
+      if (!this.closed) return;
       this.closed = null;
+      this.live = this.routeTime ? this.zones.map((z) => this.field(z.node, null, this.routeTime)) : this.free;
       return;
     }
     if (this.closed && this.closed.length === closed.length && this.closed.every((v, e) => v === closed[e])) return;
     this.closed = Uint8Array.from(closed);
-    this.live = this.zones.map((z) => this.field(z.node, this.closed));
+    this.live = this.zones.map((z) => this.field(z.node, this.closed, this.routeTime ?? this.time));
   }
 
-  // Zona de destino al azar, proporcional a su peso (r en [0, 1)).
+  // Tiempos de cada tramo con una velocidad dada por tramo (m/s), sin bajar de `minSpeed`.
+  timesFor(speeds, minSpeed) {
+    const { len } = this.g;
+    const time = new Float32Array(len.length);
+    for (let e = 0; e < len.length; e++) time[e] = len[e] / Math.max(minSpeed, speeds[e]);
+    return time;
+  }
+
+  // Tiempos con el tráfico de ahora (con ellos eligen los coches el tramo siguiente en cada cruce).
+  setLiveSpeeds(speeds, minSpeed) {
+    this.liveTime = this.timesFor(speeds, minSpeed);
+  }
+
+  // Recalcula los caminos a todos los destinos con estas velocidades (cada pocos minutos simulados).
+  setRouteSpeeds(speeds, minSpeed) {
+    this.routeTime = this.timesFor(speeds, minSpeed);
+    this.live = this.zones.map((z) => this.field(z.node, this.closed, this.routeTime));
+  }
+
+  // Zona de destino al azar, proporcional a su peso (r en [0, 1)); los destinos propios solo si tienen peso.
   pick(r) {
     const x = r * this.totalWeight;
     let lo = 0;
