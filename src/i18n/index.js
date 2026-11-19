@@ -7,7 +7,7 @@ import en from './en.js';
 
 export const LANGS = ['es', 'eu', 'en'];
 const DICTS = { eu, en };
-const LOCALES = { es: 'es-ES', eu: 'eu-ES', en: 'en-GB' };
+const LOCALES = { es: 'es-ES', eu: 'es-ES', en: 'en-GB' }; // el euskera escribe los números como el castellano
 let current = 'es';
 
 // Cambia el idioma (devuelve el que queda; uno desconocido no cambia nada).

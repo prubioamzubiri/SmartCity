@@ -39,7 +39,7 @@ export function createBusesTab(ctx) {
 
   const legend = el('div', { class: 'ui-legend' },
     el('span', {}, el('i', { style: `background:${hex(loadColor(0))}` }), t('Con sitio')),
-    el('span', {}, el('i', { style: `background:${hex(loadColor(0.5))}` }), 'Bastante gente'),
+    el('span', {}, el('i', { style: `background:${hex(loadColor(0.5))}` }), t('Bastante gente')),
     el('span', {}, el('i', { style: `background:${hex(loadColor(1))}` }), 'Lleno'),
     el('span', {}, el('i', { style: `background:${hex(CONFIG.pedestrians.color)}` }), t('Esperando en la parada')));
   const allNone = el('div', { class: 'ui-row' },
@@ -95,7 +95,7 @@ export function createBusesTab(ctx) {
         const st = b.stats[r.li];
         const occupancy = st.active ? st.passengers / (st.active * CONFIG.transit.capacity) : 0;
         r.load.set(occupancy, hex(loadColor(occupancy)));
-        r.info.textContent = t('{active} en servicio · {v} %{v2}{v3}{v4}', { active: st.active, v: Math.round(occupancy * 100), v2: st.full ? ` · ${st.full} llenos` : '', v3: st.waiting ? ` · ${st.waiting} esperando` : '', v4: st.leftBehind ? t(' · {leftBehind} en tierra', { leftBehind: st.leftBehind }) : '' });
+        r.info.textContent = t('{active} en servicio · {v} %{v2}{v3}{v4}', { active: st.active, v: Math.round(occupancy * 100), v2: st.full ? t(' · {full} llenos', { full: st.full }) : '', v3: st.waiting ? t(' · {waiting} esperando', { waiting: st.waiting }) : '', v4: st.leftBehind ? t(' · {leftBehind} en tierra', { leftBehind: st.leftBehind }) : '' });
         active += st.active;
         riders += st.passengers;
         full += st.full;

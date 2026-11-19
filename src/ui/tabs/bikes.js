@@ -65,7 +65,7 @@ export function createBikesTab(ctx) {
     const node = el('div', { class: 'ui-item' },
       el('div', { class: 'ui-item-head' },
         el('button', { type: 'button', class: 'ui-link strong', textContent: station.name, title: t('Ver en el mapa'), onclick: () => ctx.bikes.focus(station) }),
-        el('label', { class: 'ui-check' }, record, ' Registrar')),
+        el('label', { class: 'ui-check' }, record, t(' Registrar'))),
       el('div', { class: 'ui-row nowrap' }, load.node, count),
       el('div', { class: 'ui-row between' }, el('span', { class: 'ui-field-label', textContent: t('Anclajes') }), el('span', { class: 'ui-row nowrap' }, capacity.node, apply)),
       el('div', { class: 'ui-row between' }, el('span', { class: 'ui-field-label', textContent: t('Furgoneta') }),
@@ -94,7 +94,7 @@ export function createBikesTab(ctx) {
           ctx.toast(t('JSON no válido. Formato: { "id del puesto": anclajes }'), 'error');
         }
       }),
-      button(t('Cancelar pendientes'), () => schedule(Object.fromEntries((ctx.state()?.bikes?.stations ?? []).filter((s) => s.pending).map((s) => [s.id, null])), 'Cambios pendientes cancelados'), 'ghost danger')));
+      button(t('Cancelar pendientes'), () => schedule(Object.fromEntries((ctx.state()?.bikes?.stations ?? []).filter((s) => s.pending).map((s) => [s.id, null])), t('Cambios pendientes cancelados')), 'ghost danger')));
 
   const allNone = el('div', { class: 'ui-row' },
     button(t('Registrar todos'), () => setTracked(stations.map((s) => s.id), t('Se registran todos los puestos')), 'ghost'),

@@ -54,7 +54,7 @@ export function createDataTab(ctx) {
   return {
     node,
     onState(s) {
-      for (const d of DOWNLOADS) if (d.records) counts.get(d.kind).textContent = `${(s.records[d.records] ?? 0).toLocaleString(locale())} filas`;
+      for (const d of DOWNLOADS) if (d.records) counts.get(d.kind).textContent = t('{v} filas', { v: (s.records[d.records] ?? 0).toLocaleString(locale()) });
       for (const b of buttons) b.disabled = false;
       const current = sensor.value;
       sensor.replaceChildren(el('option', { value: '', textContent: t('Todos') }),

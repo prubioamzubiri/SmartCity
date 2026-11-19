@@ -94,8 +94,8 @@ export function createHud(deps) {
     const items = [];
     if (!state) items.push([t('Sin conexión'), 'danger']);
     else {
-      items.push(state.caughtUp ? ['Conectado', 'ok'] : [`Recuperando ${Math.round(state.behindSimSeconds / 3600)} h`, 'warn']);
-      if (!ctx.canWrite()) items.push(['Solo lectura', 'warn']);
+      items.push(state.caughtUp ? [t('Conectado'), 'ok'] : [t('Recuperando {v} h', { v: Math.round(state.behindSimSeconds / 3600) }), 'warn']);
+      if (!ctx.canWrite()) items.push([t('Solo lectura'), 'warn']);
     }
     pills.replaceChildren(...items.map(([text, kind]) => el('span', { class: `ui-pill ${kind}`, textContent: text })));
     shell.flag('connection', !state || !ctx.canWrite(), state ? 'warn' : 'danger');

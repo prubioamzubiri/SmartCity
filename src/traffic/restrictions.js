@@ -2,7 +2,7 @@ import { CONFIG } from '../config.js';
 import { t } from '../i18n/index.js';
 
 export const RESTRICTION_MODES = {
-  pedestrians_only: 'Calle cortada: solo peatones (ni coches ni autobuses)',
+  pedestrians_only: t('Calle cortada: solo peatones (ni coches ni autobuses)'),
   buses_and_pedestrians: t('Solo autobuses y peatones (los coches no pasan)'),
   entry_limit: t('Zona de acceso restringido: los coches de fuera solo entran si hay menos de `limit` dentro'),
 };

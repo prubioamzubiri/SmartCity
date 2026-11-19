@@ -26,11 +26,11 @@ export function createSensorsTab(ctx) {
         list.replaceChildren();
         if (!sensors.length) list.append(empty(emptyText));
         for (const s of sensors) {
-          const name = el('input', { type: 'text', value: s.name, maxLength: 60, disabled: !writable, 'aria-label': t('Nombre del sensor'), onchange: () => ctx.run((c) => rename(c, s.id, name.value), 'Nombre guardado') });
+          const name = el('input', { type: 'text', value: s.name, maxLength: 60, disabled: !writable, 'aria-label': t('Nombre del sensor'), onchange: () => ctx.run((c) => rename(c, s.id, name.value), t('Nombre guardado')) });
           const count = el('span', { class: 'ui-count' });
           const del = el('button', { type: 'button', class: 'ui-icon-button', textContent: t('✕'), disabled: !writable, title: t('Borrar (su histórico se conserva)'), onclick: (ev) => {
             ev.stopPropagation();
-            ctx.run((c) => remove(c, s.id), `Sensor ${s.id} borrado`);
+            ctx.run((c) => remove(c, s.id), t('Sensor {id} borrado', { id: s.id }));
           } });
           const row = el('div', { class: 'ui-list-row sensor', onclick: () => select(kind, s.id) }, name, count, del);
           rows.set(s.id, { row, count });
@@ -82,11 +82,11 @@ export function createSensorsTab(ctx) {
     removeSelected() {
       if (!selected) return;
       const g = selected.kind === 'traffic' ? traffic : walkers;
-      ctx.run((c) => g.remove(c, selected.id), `Sensor ${selected.id} borrado`);
+      ctx.run((c) => g.remove(c, selected.id), t('Sensor {id} borrado', { id: selected.id }));
     },
     place(mode, x, z) {
       const g = mode === 'sensor' ? traffic : walkers;
-      ctx.run((c) => g.add(c, x, z), 'Sensor colocado');
+      ctx.run((c) => g.add(c, x, z), t('Sensor colocado'));
     },
     clear() {
       for (const g of [traffic, walkers]) for (const id of [...g.view.markers.keys()]) g.view.remove(id);

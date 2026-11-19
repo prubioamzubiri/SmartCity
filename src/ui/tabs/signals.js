@@ -47,8 +47,8 @@ export function createSignalsTab(ctx) {
   const send = (settings, ok) => ctx.run((c) => c.setSignal(selected, settings), ok);
   const mode = segmented(MODES, (m) => send({ mode: m === 'normal' ? null : m }, t('Semáforo {selected}: {v}', { selected, v: MODE_LABEL[m] })), { ariaLabel: t('Modo del semáforo') });
   const timing = (key, label, min, max) => stepper({ min, max, label, onChange: (v) => send({ [key]: v }, t('Semáforo {selected}: {toLowerCase} {v} s', { selected, toLowerCase: label.toLowerCase(), v })) });
-  const greenA = timing('greenA', 'Verde este-oeste', 5, 180);
-  const greenB = timing('greenB', 'Verde norte-sur', 5, 180);
+  const greenA = timing('greenA', t('Verde este-oeste'), 5, 180);
+  const greenB = timing('greenB', t('Verde norte-sur'), 5, 180);
   const yellow = timing('yellow', 'Ámbar', ...CONFIG.signals.yellowRange);
   const timings = el('div', { class: 'ui-grid3' },
     field(t('Verde E-O (s)'), greenA.node), field(t('Verde N-S (s)'), greenB.node), field(t('Ámbar (s)'), yellow.node));
@@ -62,8 +62,8 @@ export function createSignalsTab(ctx) {
   // --- Plan general (todos los que no tienen ajustes propios) ---
   const sendPlan = (plan, ok) => ctx.run((c) => c.setSignalPlan(plan), ok);
   const general = (patch, ok) => sendPlan({ default: { ...signals.plan.default, ...patch }, signals: signals.plan.signals }, ok);
-  const defMode = segmented(MODES, (m) => general({ mode: m === 'normal' ? undefined : m }, t('Todos los semáforos: {v}', { v: MODE_LABEL[m] })), { ariaLabel: 'Modo general' });
-  const defGreen = stepper({ min: 5, max: 180, label: t('Verde general'), onChange: (v) => general({ green: v }, `Verde general: ${v} s`) });
+  const defMode = segmented(MODES, (m) => general({ mode: m === 'normal' ? undefined : m }, t('Todos los semáforos: {v}', { v: MODE_LABEL[m] })), { ariaLabel: t('Modo general') });
+  const defGreen = stepper({ min: 5, max: 180, label: t('Verde general'), onChange: (v) => general({ green: v }, t('Verde general: {v} s', { v })) });
   const defYellow = stepper({ min: CONFIG.signals.yellowRange[0], max: CONFIG.signals.yellowRange[1], label: t('Ámbar general'), onChange: (v) => general({ yellow: v }, t('Ámbar general: {v} s', { v })) });
   const overridesInfo = el('span', { class: 'ui-muted' });
   const clearAll = button(t('Quitar todos los ajustes propios'), () => sendPlan({ default: signals.plan.default, signals: {} }, t('Todos los semáforos siguen el plan general')), 'ghost danger');
@@ -105,7 +105,7 @@ export function createSignalsTab(ctx) {
       try {
         const res = await fetch(planUrl.value);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        await sendPlan(await res.json(), 'Plan cargado');
+        await sendPlan(await res.json(), t('Plan cargado'));
       } catch (err) {
         ctx.toast(t('No se pudo cargar: {message}', { message: err.message }), 'error');
       }

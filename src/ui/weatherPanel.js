@@ -83,7 +83,7 @@ export function createWeatherPanel({ bar, host, sync }) {
   return {
     // Tiempo actual que publica el servidor en su estado (null sin conexión o con el tiempo desactivado).
     update(current) {
-      toggle.textContent = current ? `${summary(current)} · Tiempo` : '🌡️ Tiempo';
+      toggle.textContent = current ? t('{v} · Tiempo', { v: summary(current) }) : t('🌡️ Tiempo');
       toggle.disabled = !current;
       if (!current && open) close();
     },

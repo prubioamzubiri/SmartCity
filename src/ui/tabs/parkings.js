@@ -107,7 +107,7 @@ export function createParkingsTab(ctx) {
           const entry = { id: lot.id, name: lot.name, live: lot };
           const editor = tariffEditor(ctx, entry);
           const row = el('div', { class: 'ui-item' },
-            el('div', { class: 'ui-item-head' }, el('b', { textContent: lot.name }), el('label', { class: 'ui-check' }, box, ' Registrar')),
+            el('div', { class: 'ui-item-head' }, el('b', { textContent: lot.name }), el('label', { class: 'ui-check' }, box, t(' Registrar'))),
             el('div', { class: 'ui-row nowrap' }, load.node, pct),
             now, flags, editor.node);
           rows.set(lot.id, { load, pct, box, now, flags, editor, entry });

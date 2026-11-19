@@ -129,7 +129,7 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
       const holiday = holidayOf(cell.day);
       const button = el('button', {
         class: `event-day${cell.inMonth ? '' : ' outside'}${cell.day === today ? ' today' : ''}${cell.day === selectedDay ? ' selected' : ''}${holiday ? ' holiday' : ''}`,
-        title: [holiday ? `Festivo: ${holiday}` : '', ...events.map((e) => e.name)].filter(Boolean).join('\n'),
+        title: [holiday ? t('Festivo: {holiday}', { holiday }) : '', ...events.map((e) => e.name)].filter(Boolean).join('\n'),
         onclick: () => {
           selectedDay = cell.day;
           render(true);

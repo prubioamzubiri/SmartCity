@@ -229,7 +229,7 @@ async function main() {
     } else if (parkingLayer.visible && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
       const lot = pickParking(hitPoint.x, hitPoint.z);
       if (lot) {
-        label = `Parking ${PARKING_TYPE_LABEL[lot.type]}`;
+        label = t('Parking {v}', { v: PARKING_TYPE_LABEL[lot.type] });
         if (lot.type === 2) {
           label += lot.estimated ? t(' · capacidad desconocida') : t(' · {n} plazas', { n: lot.capacity });
         } else {

@@ -6,9 +6,9 @@ import { describeWay, MAX_RADIUS } from '../../traffic/restrictions.js';
 import { t } from '../../i18n/index.js';
 
 export const MODES = {
-  pedestrians_only: { label: t('Cortada'), long: 'Calle cortada: solo peatones', help: t('No pasan coches ni autobuses. Las líneas de autobús que pasen por aquí quedan suspendidas.') },
-  buses_and_pedestrians: { label: t('Solo bus'), long: 'Solo autobuses y peatones', help: t('Los coches no pasan; los autobuses siguen su recorrido.') },
-  entry_limit: { label: t('Acceso limitado'), long: 'Acceso limitado a coches', help: t('Los coches de fuera solo entran si dentro hay menos del límite (0 = no entra ninguno; los de dentro pueden salir).') },
+  pedestrians_only: { label: t('Cortada'), long: t('Calle cortada: solo peatones'), help: t('No pasan coches ni autobuses. Las líneas de autobús que pasen por aquí quedan suspendidas.') },
+  buses_and_pedestrians: { label: t('Solo bus'), long: t('Solo autobuses y peatones'), help: t('Los coches no pasan; los autobuses siguen su recorrido.') },
+  entry_limit: { label: t('Acceso limitado'), long: t('Acceso limitado a coches'), help: t('Los coches de fuera solo entran si dentro hay menos del límite (0 = no entra ninguno; los de dentro pueden salir).') },
 };
 const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
 const metres = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(m)} m`);
@@ -176,7 +176,7 @@ export function createRestrictionsTab(ctx) {
         ctx.run((c) => c.removeRestriction(r.id), t('{id} quitada: la calle se reabre', { id: r.id }));
       }, 'ghost danger');
       remove.disabled = !writable;
-      const where = r.area ? t('Zona de {v} de radio', { v: metres(r.area.radius) }) : `${r.ways.length} calle(s)`;
+      const where = r.area ? t('Zona de {v} de radio', { v: metres(r.area.radius) }) : t('{length} calle(s)', { length: r.ways.length });
       activeList.append(el('div', { class: 'ui-item', style: `--accent:${hex(RESTRICTION_COLORS[r.mode] ?? 0xffffff)}` },
         el('div', { class: 'ui-item-head' },
           el('b', { textContent: r.name || r.id }),
