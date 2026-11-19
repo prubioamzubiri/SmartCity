@@ -461,6 +461,33 @@ Each city can change them in its `.env`, as fractions (`0.001` = 0.1 %):
 They can change with the city running (restart it): the downloads keep the faults logged when each row was recorded,
 so the data already recorded stays the same and the new settings only apply to the rows recorded from then on.
 
+## Chatbot
+
+The viewer can show a chat assistant (bottom right). It starts **hidden**: while it is not enabled, `POST /api/chat`
+answers 404 and the viewer shows nothing. With the engine **Sin modelo** (the default) it answers «No sé» to anything.
+
+It is configured from another container on another port (`chat-admin`, `chatadmin/`), protected with a password (user
+`profesor`):
+
+```sh
+# .env: CHAT_ADMIN_KEY (openssl rand -hex 24), CHAT_ADMIN_PASSWORD and optionally CHAT_ADMIN_PORT (8095)
+docker compose --profile chat up -d              # city + configuration page on http://<host>:8095
+docker compose --profile chat --profile ollama up -d   # ... and a local Ollama
+```
+
+The page enables or disables the chatbot, sets its name, the engine (**Sin modelo**, **Ollama** or any
+**OpenAI-compatible API**: OpenAI, LM Studio, vLLM...), the address (as seen from the city: `http://ollama:11434` for
+the Ollama of the compose, `http://host.docker.internal:<port>` for one running on the same machine), the model (it
+lists the available ones and can download one into Ollama), the instructions, whether to give it the current state of
+the city (time, traffic, weather, events), temperature, length and timeout, and lets you try it before saving.
+
+The city stores the configuration (it survives restarts) and calls the model itself, so the students' browsers never
+reach it; the API key never leaves the city. The page talks to the city through the Docker network with
+`CHAT_ADMIN_KEY` (`/api/chat/config`, `/api/chat/test`, `/api/chat/models`, `/api/chat/pull`, header
+`X-Chat-Admin-Key`); without that key in the city, the chatbot cannot be configured. Students can ask 10 questions a
+minute (the last 20 messages of the conversation, 2000 characters each). The page is plain HTTP: on a public server,
+open its port only to you (firewall, VPN or an SSH tunnel: `ssh -L 8095:localhost:8095 <server>`).
+
 ## Checks
 
 ```sh

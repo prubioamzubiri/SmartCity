@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createFaults } from './faults.js';
+import { Chat, ChatError, checkChatConfig } from './chat.js';
 import { FAULT_COLUMNS, BIKE_COLUMNS, BUS_COLUMNS, CITY_COLUMNS, PARKING_COLUMNS, PEDESTRIAN_COLUMNS, TRAFFIC_COLUMNS } from './store.js';
 import { t, getLang, translateWeekday } from '../src/i18n/index.js';
 
@@ -282,8 +283,39 @@ const docsFileFor = (lang) => new URL(lang === 'es' ? '../docs/API.md' : `../doc
 // Listener HTTP de la API. Las lecturas son públicas; las escrituras exigen `Authorization: Bearer <token>`.
 // `rawKey`: clave con la que el profesor (cabecera X-Raw-Key) recibe los datos sin los fallos de los sensores.
 // `faults`: fallos de los sensores (server/faults.js); sin él, los datos salen tal cual.
-export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFile = null, rawKey = '', faults = createFaults({ config: { enabled: false } }) }) {
+// `chatAdminKey`: clave con la que el servicio chat-admin configura el chatbot (sin ella, no se puede configurar).
+export function createApp({
+  runtime, store, token = '', corsOrigin = '*', docsFile = null, rawKey = '', faults = createFaults({ config: { enabled: false } }),
+  chatAdminKey = '', chat = null,
+}) {
   const tokenHash = token ? digest(token) : null;
+  const chatKeyHash = chatAdminKey ? digest(chatAdminKey) : null;
+  const chatbot = chat ?? new Chat({ store, summary: () => citySummary() });
+  const chatAdmin = (req) => {
+    const given = req.headers['x-chat-admin-key'];
+    if (!(chatKeyHash && typeof given === 'string' && timingSafeEqual(digest(given), chatKeyHash))) throw new HttpError(404, 'No encontrado');
+  };
+  // Los errores del chat (y de los modelos) son errores HTTP de la API.
+  const chatCall = async (fn) => {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof ChatError) throw new HttpError(err.status, err.message);
+      throw err;
+    }
+  };
+  // Resumen de la ciudad ahora mismo, para el modelo (si la configuración lo pide).
+  const citySummary = () => {
+    const s = state();
+    const lines = [
+      `Hora simulada: ${s.simTime} (${s.params?.scenario ?? ''}${s.holiday ? `, festivo: ${s.holiday}` : ''})`,
+      `Coches circulando: ${s.cars}; parados: ${s.traffic.stopped}; velocidad media: ${s.traffic.avgKmh} km/h`,
+    ];
+    if (s.weather) lines.push(`Tiempo: ${s.weather.condition}, ${s.weather.temperature_c} °C, lluvia ${s.weather.rain_mm_h} mm/h`);
+    if (s.events.active.length) lines.push(`Eventos en curso: ${s.events.active.map((e) => `${e.name} (${e.venueName})`).join('; ')}`);
+    if (s.restrictions.length) lines.push(`Restricciones activas: ${s.restrictions.length}`);
+    return lines.join('\n');
+  };
   const rawKeyHash = rawKey ? digest(rawKey) : null;
   // ¿Trae la petición la clave de los datos limpios?
   const clean = (req) => {
@@ -311,6 +343,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       startSeconds: runtime.anchor.simSeconds, // segundo simulado en que empezó esta ciudad
       writeProtected: Boolean(tokenHash), // los cambios necesitan token
       restrictions: engine.restrictions.items.map((r) => engine.restrictions.describe(r)),
+      chat: chatbot.publicState(), // si el chatbot está activo (el visor solo lo enseña entonces)
       traffic: { stopped: traffic.stopped, avgKmh: Math.round(traffic.avgKmh * 10) / 10 },
       signalPlan: engine.signals.plan,
       sensors: engine.sensors.sensors.map((s) => ({
@@ -825,6 +858,37 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       runtime.mutate((e) => e.setBusFleet(id, fleet));
       engine.buses.updateAt(engine.simTime, engine.params.scenario, runtime.scale);
       return send(200, { ...busLineJson(engine, index), reserve: engine.buses.reserve(), fleetTotal: engine.buses.fleetTotal });
+    }
+
+    // Chatbot: escondido (404) mientras no esté activo; con el motor «none» responde siempre «No sé».
+    if (pathname === '/api/chat' && method === 'GET') return send(200, chatbot.publicState());
+    if (pathname === '/api/chat' && method === 'POST') {
+      const { messages } = await readJson(req);
+      const client = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket.remoteAddress || '';
+      return send(200, await chatCall(() => chatbot.ask(messages, { client })));
+    }
+    // Configuración del chatbot (servicio chat-admin, con la clave CHAT_ADMIN_KEY).
+    if (pathname.startsWith('/api/chat/')) {
+      chatAdmin(req);
+      if (pathname === '/api/chat/config' && method === 'GET') return send(200, chatbot.adminView());
+      if (pathname === '/api/chat/config' && method === 'PUT') {
+        const body = await readJson(req);
+        return send(200, await chatCall(() => chatbot.update(body)));
+      }
+      if (pathname === '/api/chat/test' && method === 'POST') {
+        const { config, messages } = await readJson(req);
+        return send(200, await chatCall(async () => chatbot.ask(messages, {
+          test: true, config: config ? checkChatConfig(config, chatbot.config) : chatbot.config,
+        })));
+      }
+      if (pathname === '/api/chat/models' && method === 'POST') {
+        const { config } = await readJson(req);
+        return send(200, await chatCall(() => chatbot.models(config ?? {})));
+      }
+      if (pathname === '/api/chat/pull' && method === 'POST') {
+        const { model, config } = await readJson(req);
+        return send(200, await chatCall(() => chatbot.pull(model, config ?? {})));
+      }
     }
 
     throw new HttpError(404, t('No encontrado'));

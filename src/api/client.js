@@ -33,7 +33,7 @@ export class ApiClient {
     this.timeoutMs = timeoutMs;
   }
 
-  async request(path, { method = 'GET', body } = {}) {
+  async request(path, { method = 'GET', body, timeoutMs = this.timeoutMs } = {}) {
     const headers = {};
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (method !== 'GET' && this.token) {
@@ -43,7 +43,7 @@ export class ApiClient {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(this.timeoutMs),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(res.status, payload.error ?? `HTTP ${res.status}`);
@@ -101,6 +101,11 @@ export class ApiClient {
   // Tarifa de mañana de un parking (se aplica a las 0:00): precio base y franjas [{ from, to, price }].
   setParkingTariff(id, price, schedule = []) {
     return this.request(`/api/parking/${encodeURIComponent(id)}`, { method: 'PATCH', body: { price, schedule } });
+  }
+
+  // Pregunta al chatbot de la ciudad: messages = [{ role: 'user' | 'assistant', content }]. Devuelve { reply }.
+  chat(messages) {
+    return this.request('/api/chat', { method: 'POST', body: { messages }, timeoutMs: 620_000 });
   }
 
   setTrackedBuses(ids) {

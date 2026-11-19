@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chatbot SmartCity</title>
+<style>
+  :root { --bg: #f5f6f8; --card: #fff; --text: #1d2330; --muted: #667085; --border: #d8dce3; --accent: #2f6fde; --ok: #1f8a4c; --err: #c0392b; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #11151c; --card: #1a202a; --text: #e6e9ef; --muted: #98a2b3; --border: #2c3442; --accent: #5b8ff0; --ok: #4cc27f; --err: #ef6b5b; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-top: 16px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  label { display: block; margin: 10px 0 4px; font-weight: 600; font-size: 13px; }
+  input[type=text], input[type=url], input[type=password], input[type=number], select, textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit;
+  }
+  textarea { min-height: 110px; resize: vertical; }
+  .row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 140px; }
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 600; margin-top: 12px; }
+  button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  #status { margin-top: 10px; min-height: 20px; font-size: 14px; }
+  .ok { color: var(--ok); } .err { color: var(--err); }
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .badge { padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1px solid var(--border); }
+  .badge.on { color: var(--ok); border-color: var(--ok); }
+  #log { border: 1px solid var(--border); border-radius: 6px; padding: 8px; min-height: 80px; max-height: 320px; overflow-y: auto; background: var(--bg); }
+  .msg { margin: 6px 0; white-space: pre-wrap; } .msg b { color: var(--muted); font-weight: 600; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Chatbot de la ciudad</h1>
+  <p class="muted">Mientras esté desactivado, los alumnos no lo ven. Con el motor «Sin modelo» responde siempre «No sé».</p>
+
+  <section>
+    <div class="switch">
+      <h2>Estado</h2>
+      <span id="badge" class="badge">—</span>
+    </div>
+    <label class="check"><input type="checkbox" id="enabled"> Activado (aparece en el visor de los alumnos)</label>
+    <label for="title">Nombre en el visor</label>
+    <input type="text" id="title" maxlength="40">
+  </section>
+
+  <section>
+    <h2>Motor</h2>
+    <label for="provider">Modelo de lenguaje</label>
+    <select id="provider">
+      <option value="none">Sin modelo (responde «No sé»)</option>
+      <option value="ollama">Ollama</option>
+      <option value="openai">API compatible con OpenAI (OpenAI, LM Studio, vLLM…)</option>
+    </select>
+    <div id="engine">
+      <label for="url">Dirección (vista desde la ciudad)</label>
+      <input type="url" id="url" placeholder="http://ollama:11434">
+      <p class="muted" id="urlHelp"></p>
+      <div id="keyBox">
+        <label for="apiKey">Clave de la API</label>
+        <input type="password" id="apiKey" autocomplete="off">
+      </div>
+      <div class="row">
+        <div>
+          <label for="model">Modelo</label>
+          <input type="text" id="model" list="models" placeholder="llama3.2">
+          <datalist id="models"></datalist>
+        </div>
+        <div style="flex:0"><button class="ghost" id="loadModels" type="button">Ver modelos</button></div>
+        <div style="flex:0" id="pullBox"><button class="ghost" id="pull" type="button">Descargar</button></div>
+      </div>
+      <label for="systemPrompt">Instrucciones del asistente</label>
+      <textarea id="systemPrompt"></textarea>
+      <label class="check"><input type="checkbox" id="includeState"> Darle el estado actual de la ciudad (hora, tráfico, tiempo, eventos)</label>
+      <div class="row">
+        <div><label for="temperature">Temperatura</label><input type="number" id="temperature" min="0" max="2" step="0.1"></div>
+        <div><label for="maxTokens">Longitud máxima (tokens)</label><input type="number" id="maxTokens" min="16" max="8192" step="1"></div>
+        <div><label for="timeoutSeconds">Espera máxima (s)</label><input type="number" id="timeoutSeconds" min="5" max="600" step="1"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="save" type="button">Guardar</button>
+      <button class="ghost" id="reload" type="button">Descartar cambios</button>
+    </div>
+    <div id="status"></div>
+  </section>
+
+  <section>
+    <h2>Probar</h2>
+    <p class="muted">Prueba la configuración del formulario (aunque no esté guardada ni activada). No cuenta para los alumnos.</p>
+    <div id="log"></div>
+    <div class="row" style="margin-top:8px">
+      <input type="text" id="question" placeholder="Escribe una pregunta…">
+      <div style="flex:0"><button id="ask" type="button">Preguntar</button></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const FIELDS = ['enabled', 'title', 'provider', 'url', 'model', 'systemPrompt', 'includeState', 'temperature', 'maxTokens', 'timeoutSeconds'];
+let saved = null;
+let history = [];
+
+function status(text, kind = '') {
+  const el = $('status');
+  el.textContent = text;
+  el.className = kind;
+}
+
+async function call(method, path, body) {
+  const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `Error ${r.status}`);
+  return data;
+}
+
+function fill(c) {
+  saved = c;
+  for (const f of FIELDS) {
+    const el = $(f);
+    if (el.type === 'checkbox') el.checked = c[f]; else el.value = c[f];
+  }
+  $('apiKey').value = '';
+  $('apiKey').placeholder = c.hasApiKey ? '(guardada; escribe otra para cambiarla)' : '';
+  $('badge').textContent = c.enabled ? 'Activado' : 'Escondido';
+  $('badge').className = 'badge' + (c.enabled ? ' on' : '');
+  showProvider();
+}
+
+function form() {
+  const c = {};
+  for (const f of FIELDS) {
+    const el = $(f);
+    c[f] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value;
+  }
+  c.apiKey = $('apiKey').value ? $('apiKey').value : null; // null = conservar la guardada
+  return c;
+}
+
+function showProvider() {
+  const p = $('provider').value;
+  $('engine').hidden = p === 'none';
+  $('keyBox').hidden = p !== 'openai';
+  $('pullBox').hidden = p !== 'ollama';
+  $('urlHelp').textContent = p === 'ollama'
+    ? 'Ollama del docker-compose (perfil ollama): http://ollama:11434. En el propio equipo: http://host.docker.internal:11434.'
+    : 'Por ejemplo https://api.openai.com o http://host.docker.internal:1234 (LM Studio). Sin /v1 al final.';
+}
+
+async function load() {
+  try {
+    fill(await call('GET', '/config'));
+    status('');
+  } catch (err) {
+    status(err.message, 'err');
+  }
+}
+
+$('provider').addEventListener('change', showProvider);
+$('reload').addEventListener('click', load);
+$('save').addEventListener('click', async () => {
+  try {
+    fill(await call('PUT', '/config', form()));
+    status('Guardado. ' + (saved.enabled ? 'Los alumnos ya lo ven en el visor.' : 'Sigue escondido para los alumnos.'), 'ok');
+  } catch (err) {
+    status(err.message, 'err');
+  }
+});
+$('loadModels').addEventListener('click', async () => {
+  status('Buscando modelos…');
+  try {
+    const { models } = await call('POST', '/models', { config: form() });
+    $('models').replaceChildren(...models.map((m) => Object.assign(document.createElement('option'), { value: m })));
+    status(models.length ? `Modelos: ${models.join(', ')}` : 'No hay modelos: descarga uno (p. ej. llama3.2).', models.length ? 'ok' : '');
+  } catch (err) {
+    status(err.message, 'err');
+  }
+});
+$('pull').addEventListener('click', async () => {
+  const model = $('model').value.trim();
+  if (!model) return status('Escribe el nombre del modelo (p. ej. llama3.2) y pulsa Descargar.', 'err');
+  status(`Descargando ${model}… (puede tardar varios minutos)`);
+  $('pull').disabled = true;
+  try {
+    await call('POST', '/pull', { model, config: form() });
+    status(`${model} descargado.`, 'ok');
+  } catch (err) {
+    status(err.message, 'err');
+  } finally {
+    $('pull').disabled = false;
+  }
+});
+
+function addMessage(who, text) {
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.append(Object.assign(document.createElement('b'), { textContent: who + ': ' }), text);
+  $('log').append(div);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+async function ask() {
+  const q = $('question').value.trim();
+  if (!q) return;
+  $('question').value = '';
+  history.push({ role: 'user', content: q });
+  addMessage('Tú', q);
+  $('ask').disabled = true;
+  try {
+    const { reply } = await call('POST', '/test', { config: form(), messages: history });
+    history.push({ role: 'assistant', content: reply });
+    addMessage($('title').value || 'Asistente', reply);
+  } catch (err) {
+    history.pop();
+    addMessage('Error', err.message);
+  } finally {
+    $('ask').disabled = false;
+  }
+}
+$('ask').addEventListener('click', ask);
+$('question').addEventListener('keydown', (e) => { if (e.key === 'Enter') ask(); });
+load();
+</script>
+</body>
+</html>

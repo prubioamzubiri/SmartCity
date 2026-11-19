@@ -9,6 +9,7 @@ import { createRestrictionsTab } from './tabs/restrictions.js';
 import { createBusesTab } from './tabs/buses.js';
 import { createBikesTab } from './tabs/bikes.js';
 import { createParkingsTab } from './tabs/parkings.js';
+import { createChat } from './chat.js';
 import { createSensorsTab } from './tabs/sensors.js';
 import { createDataTab } from './tabs/data.js';
 import { createConnectionTab } from './tabs/connection.js';
@@ -110,6 +111,7 @@ export function createHud(deps) {
     if (s.graphKey !== deps.localGraphKey) connection.setStatus(t('El servidor simula otra ciudad distinta a la del visor: los coches no se dibujan.'), 'error');
     else connection.setStatus(s.caughtUp ? t('Conectado y al día.') : t('Conectado · recuperando {v} h simuladas tras una parada.', { v: Math.round(s.behindSimSeconds / 3600) }), 'ok');
     for (const tab of tabs) tab.onState?.(s);
+    chat.update(s.chat);
     renderPills();
     if (first && !ctx.canWrite()) toast(t('Modo solo lectura: para cambiar la ciudad pon el token en Conexión.'), 'info', 6000);
   });
@@ -118,6 +120,7 @@ export function createHud(deps) {
   });
   sync.on('disconnect', () => {
     state = null;
+    chat.update(null);
     sensors.clear();
     data.onDisconnect();
     restrictionView.update([]);
@@ -126,6 +129,7 @@ export function createHud(deps) {
     renderPills();
   });
 
+  const chat = createChat({ sync });
   shell.restore('overview');
   if (!connection.autoconnect()) shell.show('connection');
   renderPills();

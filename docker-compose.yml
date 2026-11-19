@@ -19,7 +19,11 @@ services:
       SENSOR_MISSING_RATE: ${SENSOR_MISSING_RATE:-}
       SENSOR_COORD_RATE: ${SENSOR_COORD_RATE:-}
       SENSOR_LIVE_RATE: ${SENSOR_LIVE_RATE:-}
+      CHAT_ADMIN_KEY: ${CHAT_ADMIN_KEY:-} # clave con la que chat-admin configura el chatbot (vacía = no se puede configurar)
       DB_FILE: /data/smartcity.db
+    # Para llegar a un Ollama o LM Studio que corre en el propio equipo: http://host.docker.internal:<puerto>
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - sim-data:/data
     stop_grace_period: 30s # deja tiempo para guardar el estado al parar
@@ -58,7 +62,35 @@ services:
       web:
         condition: service_started
 
+  # Configuración del chatbot, en otro puerto y con contraseña (usuario «profesor»). Solo con: --profile chat
+  # El chatbot empieza escondido: los alumnos no lo ven hasta que se activa aquí.
+  chat-admin:
+    profiles: [chat]
+    build:
+      context: .
+      dockerfile: Dockerfile.chat
+    restart: unless-stopped
+    ports:
+      - "${CHAT_ADMIN_PORT:-8095}:8095"
+    environment:
+      CHAT_ADMIN_PASSWORD: ${CHAT_ADMIN_PASSWORD:-} # obligatoria (sin ella, el servicio no arranca)
+      CHAT_ADMIN_KEY: ${CHAT_ADMIN_KEY:-} # obligatoria: la misma que en la ciudad
+      SIM_URL: http://sim:8080
+    depends_on:
+      sim:
+        condition: service_healthy
+
+  # Modelo de lenguaje local para el chatbot (opcional). Solo con: --profile ollama
+  # Después, en la configuración del chatbot: motor Ollama, dirección http://ollama:11434, y descargar un modelo.
+  ollama:
+    profiles: [ollama]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+
 volumes:
   sim-data:
+  ollama-data:
   caddy-data:
   caddy-config:
