@@ -136,19 +136,6 @@ Cada `PUT …/tracked` **sustituye** la lista anterior: enviad todos los ids que
 curl -o trafico.csv "http://localhost:8080/api/traffic.csv?from=2026-01-05T00:00&to=2026-02-01T00:00"
 ```
 
-### Datos con fallos
-
-Como los de una ciudad real, los sensores **fallan de vez en cuando** (rara vez), en los históricos y en la API en vivo:
-
-- **Falta un dato**: la celda del CSV está vacía (en la API, `null`).
-- **Un dato imposible**: negativo o disparatado (`-47` pasajeros, `15230` personas esperando, `-5` bicis...).
-- **Falta una fila entera**: ese sensor no envió nada en ese intervalo (hay un hueco en la serie).
-- **Falta una coordenada** de un sensor (`x` o `z` vacía).
-
-Lo que se guarda en la ciudad no cambia: solo falla lo que os llega. Una misma fila falla siempre igual aunque la
-descarguéis otra vez. Antes de entrenar o decidir con los datos, detectad y tratad estos casos (descartar, interpolar,
-usar el valor anterior...): un gestor que se cree un `15230` puede tomar una decisión absurda.
-
 ---
 
 ## 3. Cambiar la ciudad (necesita token)

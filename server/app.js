@@ -489,7 +489,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
 
     // Registro de los fallos de los sensores (dato real y dato mostrado): solo con la clave de los datos limpios.
     if (method === 'GET' && pathname === '/api/faults.csv') {
-      if (!rawKeyHash || faulty(req)) throw new HttpError(403, 'Solo con la clave de los datos sin fallos (X-Raw-Key)');
+      if (!rawKeyHash || faulty(req)) throw new HttpError(404, 'No encontrado');
       res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="fallos.csv"' });
       await pipeline(Readable.from(csvLines(FAULT_COLUMNS, store.iterate('faults', exportFilters(url)))), res);
       return undefined;

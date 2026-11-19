@@ -84,7 +84,7 @@ test('the server stores the real data, downloads it with faults and logs each fa
   const real = parse(await (await get('/api/city.csv', 'profe')).text());
   const shown = parse(await (await get('/api/city.csv')).text());
   assert.ok(real.length > 150, `${real.length} filas`);
-  assert.equal((await get('/api/faults.csv')).status, 403, 'el registro de fallos solo con la clave');
+  assert.equal((await get('/api/faults.csv')).status, 404, 'el registro de fallos solo con la clave (sin ella, no existe)');
   const log = parse(await (await get('/api/faults.csv', 'profe')).text());
   assert.ok(log.length > 0, 'hay fallos anotados');
   // Lo que se descarga es lo guardado con exactamente los fallos anotados.
