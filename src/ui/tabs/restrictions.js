@@ -3,7 +3,7 @@ import { el } from '../dom.js';
 import { badge, button, card, cardTitle, empty, field, hint, segmented, stepper } from '../widgets.js';
 import { RESTRICTION_COLORS } from '../../traffic/restrictionView.js';
 import { describeWay, MAX_RADIUS } from '../../traffic/restrictions.js';
-import { t } from '../../i18n/index.js';
+import { t, num } from '../../i18n/index.js';
 
 export const MODES = {
   pedestrians_only: { label: t('Cortada'), long: t('Calle cortada: solo peatones'), help: t('No pasan coches ni autobuses. Las líneas de autobús que pasen por aquí quedan suspendidas.') },
@@ -11,7 +11,7 @@ export const MODES = {
   entry_limit: { label: t('Acceso limitado'), long: t('Acceso limitado a coches'), help: t('Los coches de fuera solo entran si dentro hay menos del límite (0 = no entra ninguno; los de dentro pueden salir).') },
 };
 const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
-const metres = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(m)} m`);
+const metres = (m) => (m >= 1000 ? `${num(m / 1000, 1)} km` : `${Math.round(m)} m`);
 const CLASS_NAMES = { motorway: 'autovía', primary: 'principal', secondary: 'secundaria', tertiary: 'terciaria', residential: 'residencial' };
 
 // Restricciones de tráfico: crear (eligiendo zona o calles en el mapa), ver, cambiar y quitar.

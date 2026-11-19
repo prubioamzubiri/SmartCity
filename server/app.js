@@ -49,12 +49,12 @@ function* csvLines(columns, rows, chunkSize = 65536) {
 }
 
 const CSV_EXPORTS = {
-  '/api/traffic.csv': { kind: 'traffic', columns: TRAFFIC_COLUMNS, filename: 'trafico' },
-  '/api/parking.csv': { kind: 'parking', columns: PARKING_COLUMNS, filename: 'ocupacion-parkings' },
-  '/api/pedestrians.csv': { kind: 'pedestrians', columns: PEDESTRIAN_COLUMNS, filename: 'peatones' },
-  '/api/buses.csv': { kind: 'buses', columns: BUS_COLUMNS, filename: 'autobuses' },
-  '/api/bikes.csv': { kind: 'bikes', columns: BIKE_COLUMNS, filename: 'bicicletas' },
-  '/api/city.csv': { kind: 'city', columns: CITY_COLUMNS, filename: 'ciudad' },
+  '/api/traffic.csv': { kind: 'traffic', columns: TRAFFIC_COLUMNS, filename: () => t('trafico') },
+  '/api/parking.csv': { kind: 'parking', columns: PARKING_COLUMNS, filename: () => t('ocupacion-parkings') },
+  '/api/pedestrians.csv': { kind: 'pedestrians', columns: PEDESTRIAN_COLUMNS, filename: () => t('peatones') },
+  '/api/buses.csv': { kind: 'buses', columns: BUS_COLUMNS, filename: () => t('autobuses') },
+  '/api/bikes.csv': { kind: 'bikes', columns: BIKE_COLUMNS, filename: () => t('bicicletas') },
+  '/api/city.csv': { kind: 'city', columns: CITY_COLUMNS, filename: () => t('ciudad') },
 };
 
 const digest = (s) => createHash('sha256').update(s).digest();
@@ -444,7 +444,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       const rows = requestedEvents(url, simTime).map((e) => eventRow(e, simTime));
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="eventos.csv"',
+        'Content-Disposition': 'attachment; filename="' + t('eventos') + '.csv"',
       });
       await pipeline(Readable.from(csvLines(EVENT_COLUMNS, rows)), res);
       return undefined;
@@ -486,7 +486,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       const rows = [...observedRows(url, runtime.engine.simTime)];
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="tiempo.csv"',
+        'Content-Disposition': 'attachment; filename="' + t('tiempo') + '.csv"',
       });
       await pipeline(Readable.from(csvLines(WEATHER_COLUMNS, faulty(req) ? withRowFaults('weather', rows) : rows)), res);
       return undefined;
@@ -495,7 +495,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
     // Registro de los fallos de los sensores (dato real y dato mostrado): solo con la clave de los datos limpios.
     if (method === 'GET' && pathname === '/api/faults.csv') {
       if (!clean(req)) throw new HttpError(404, t('No encontrado'));
-      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="fallos.csv"' });
+      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="' + t('fallos') + '.csv"' });
       await pipeline(Readable.from(csvLines(FAULT_COLUMNS, store.iterate('faults', exportFilters(url)))), res);
       return undefined;
     }
@@ -506,7 +506,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       const rows = clean(req) ? store.iterate(kind, exportFilters(url)) : store.iterateShown(kind, exportFilters(url));
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}.csv"`,
+        'Content-Disposition': `attachment; filename="${filename()}.csv"`,
       });
       await pipeline(Readable.from(csvLines(columns, rows)), res);
       return undefined;
@@ -849,7 +849,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       const status = err instanceof HttpError ? err.status : 500;
       if (status === 500) console.error(err);
       res.writeHead(status, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: status === 500 ? 'Error interno' : err.message }));
+      res.end(JSON.stringify({ error: status === 500 ? t('Error interno') : err.message }));
     }
   };
 }

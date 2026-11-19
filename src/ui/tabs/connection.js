@@ -36,7 +36,7 @@ export function createConnectionTab(ctx) {
     }
     writeStorage(localStorage, CONFIG.server.urlKey, ctx.sync.client.baseUrl);
     writeStorage(sessionStorage, TOKEN_KEY, token.value);
-    status.textContent = 'Conectando…';
+    status.textContent = t('Conectando…');
   }
 
   const node = el('div', {},

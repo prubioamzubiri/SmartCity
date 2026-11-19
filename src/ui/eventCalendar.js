@@ -3,7 +3,7 @@ import { eventCalendar } from '../events/calendar.js';
 import { simDate } from '../traffic/demand.js';
 import { CONFIG } from '../config.js';
 import { holidayCalendar } from '../calendar/holidays.js';
-import { t, locale, dayInitial, monthName } from '../i18n/index.js';
+import { t, locale, dayInitial, monthName, pct } from '../i18n/index.js';
 
 const DAY_MS = 86400000;
 const MAX_DOTS = 4;
@@ -93,7 +93,7 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
       el('div', {
         class: 'status',
         textContent: event.end <= nowSeconds
-          ? t('{v} asistentes · +{v2} % de demanda', { v: people(event.attendance), v2: (event.boost * 100).toFixed(0) })
+          ? t('{v} asistentes · {v2} de demanda', { v: people(event.attendance), v2: pct(`+${(event.boost * 100).toFixed(0)}`) })
           : t('Asistentes: se conocen cuando termina el evento'),
       }),
       el('button', { textContent: t('Ver en el mapa'), onclick: () => focus?.(venue.x, venue.z) }));
@@ -142,7 +142,7 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
     const sections = [];
     if (active.length) {
       sections.push(el('h4', { textContent: t('En curso ahora') }),
-        ...active.map(({ event, intensity }) => el('div', { class: 'status', textContent: t('{v} {name} · {v2} · efecto {v3} %', { v: calendar.types[event.type].icon, name: event.name, v2: calendar.venues[event.venue].name, v3: (intensity * 100).toFixed(0) }) })));
+        ...active.map(({ event, intensity }) => el('div', { class: 'status', textContent: t('{v} {name} · {v2} · efecto {v3}', { v: calendar.types[event.type].icon, name: event.name, v2: calendar.venues[event.venue].name, v3: pct(Math.round(intensity * 100)) }) })));
     }
     if (selectedDay !== null) {
       const d = new Date(CONFIG.sim.baseDate + selectedDay * DAY_MS);

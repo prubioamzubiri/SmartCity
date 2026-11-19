@@ -36,7 +36,7 @@ export function createBikesTab(ctx) {
   const vanList = el('div', { class: 'ui-stack' });
   const vansCard = card(cardTitle(t('Furgonetas')),
     hint(t('Hay {count} furgonetas de {capacity} bicis. La libre más cercana va al origen, carga las que haya (como mucho las pedidas), va al destino y descarga las que quepan. Circulan en línea recta a unos {v} km/h y tardan {v2} min en cargar y otros {v2} en descargar: cada viaje lleva media hora o más. Para que haya bicis en la hora punta, movedlas antes de que el puesto se vacíe.', { count: VANS.count, capacity: VANS.capacity, v: Math.round(VANS.speed * 3.6), v2: VANS.handlingSeconds / 60 })),
-    field(t('Desde'), from), field(t('Hasta'), to),
+    field(t('Origen'), from), field(t('Destino'), to),
     el('div', { class: 'ui-row' }, field(t('Bicis'), howMany), send),
     vanList);
   const pick = (select, id) => {

@@ -2,7 +2,7 @@ import { CONFIG } from '../../config.js';
 import { el } from '../dom.js';
 import { badge, button, card, cardTitle, empty, hint, meter, stat, stepper, toggle } from '../widgets.js';
 import { loadColor } from '../../transit/buses.js';
-import { t, locale } from '../../i18n/index.js';
+import { t, locale, pct } from '../../i18n/index.js';
 
 const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -95,7 +95,7 @@ export function createBusesTab(ctx) {
         const st = b.stats[r.li];
         const occupancy = st.active ? st.passengers / (st.active * CONFIG.transit.capacity) : 0;
         r.load.set(occupancy, hex(loadColor(occupancy)));
-        r.info.textContent = t('{active} en servicio · {v} %{v2}{v3}{v4}', { active: st.active, v: Math.round(occupancy * 100), v2: st.full ? t(' · {full} llenos', { full: st.full }) : '', v3: st.waiting ? t(' · {waiting} esperando', { waiting: st.waiting }) : '', v4: st.leftBehind ? t(' · {leftBehind} en tierra', { leftBehind: st.leftBehind }) : '' });
+        r.info.textContent = t('{active} en servicio · {v}{v2}{v3}{v4}', { active: st.active, v: pct(Math.round(occupancy * 100)), v2: st.full ? t(' · {full} llenos', { full: st.full }) : '', v3: st.waiting ? t(' · {waiting} esperando', { waiting: st.waiting }) : '', v4: st.leftBehind ? t(' · {leftBehind} en tierra', { leftBehind: st.leftBehind }) : '' });
         active += st.active;
         riders += st.passengers;
         full += st.full;

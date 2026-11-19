@@ -1,6 +1,6 @@
 import { el } from './dom.js';
 import { CONDITIONS } from '../weather/weather.js';
-import { t, dayShort } from '../i18n/index.js';
+import { t, dayShort, pct, num } from '../i18n/index.js';
 
 const REFRESH_MS = 15000;
 const STEP_HOURS = 3; // una fila de la tabla cada tantas horas de previsión
@@ -49,13 +49,13 @@ export function createWeatherPanel({ bar, host, sync }) {
         el('td', { textContent: label(f.time) }),
         el('td', { textContent: CONDITIONS[f.condition].icon, title: CONDITIONS[f.condition].label }),
         el('td', { textContent: t('{v} °C', { v: f.temperature_c.toFixed(0) }) }),
-        el('td', { class: f.rain_probability >= 0.5 ? 'rain' : '', textContent: t('💧 {v} %', { v: Math.round(f.rain_probability * 100) }) }));
+        el('td', { class: f.rain_probability >= 0.5 ? 'rain' : '', textContent: `💧 ${pct(Math.round(f.rain_probability * 100))}` }));
       lastDay = day;
       return row;
     }));
     panel.replaceChildren(
       el('div', { class: 'weather-now', textContent: t('Ahora: {v} · {v2}', { v: summary(current), v2: CONDITIONS[current.condition].label }) }),
-      el('div', { class: 'status', textContent: t('Lluvia {v} mm/h · nubes {cloud_pct} %', { v: current.rain_mm_h.toFixed(1), cloud_pct: current.cloud_pct }) }),
+      el('div', { class: 'status', textContent: t('Lluvia {v} mm/h · nubes {cloud_pct}', { v: num(current.rain_mm_h, 1), cloud_pct: pct(current.cloud_pct) }) }),
       el('div', { class: 'status', textContent: t('Previsión a 48 h (hora simulada). Cuanto más lejos, menos fiable.') }),
       table,
       el('div', { class: 'status', textContent: t('El tiempo observado hasta ahora se descarga con «CSV del tiempo» (panel del servidor).') }));

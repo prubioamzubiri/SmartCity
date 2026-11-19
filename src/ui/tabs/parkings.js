@@ -1,7 +1,7 @@
 import { CONFIG } from '../../config.js';
 import { el } from '../dom.js';
 import { badge, button, card, cardTitle, empty, hint, meter, stat } from '../widgets.js';
-import { t, locale } from '../../i18n/index.js';
+import { t, locale, pct } from '../../i18n/index.js';
 
 const legendItem = (color, text) => el('span', {}, el('i', { style: `background:${color}` }), text);
 const P = CONFIG.parking;
@@ -55,7 +55,7 @@ function tariffEditor(ctx, lot) {
 
 // Parkings subterráneos públicos: ocupación simulada y cuáles registra el servidor.
 export function createParkingsTab(ctx) {
-  const stats = { avg: stat(t('Ocupación media')), full: stat(t('Llenos (≥ 95 %)')) };
+  const stats = { avg: stat(t('Ocupación media')), full: stat(t('Llenos (≥ {p})', { p: pct(95) })) };
   const list = el('div', { class: 'ui-stack' });
   const tracked = () => (ctx.state()?.parkings ?? []).filter((p) => p.tracked).map((p) => p.id);
   const setTracked = (ids, ok) => ctx.run((c) => c.setTrackedParkings(ids), ok);
@@ -119,7 +119,7 @@ export function createParkingsTab(ctx) {
       for (const lot of lots) {
         const r = rows.get(lot.id);
         r.load.set(lot.occupancy, lot.occupancy >= 0.95 ? 'var(--danger)' : lot.occupancy >= 0.8 ? 'var(--warn)' : 'var(--ok)');
-        r.pct.textContent = t('{v} % de {capacity} plazas', { v: Math.round(lot.occupancy * 100), capacity: lot.capacity });
+        r.pct.textContent = t('{v} de {capacity} plazas', { v: pct(Math.round(lot.occupancy * 100)), capacity: lot.capacity });
         r.box.checked = lot.tracked;
         r.box.disabled = !writable;
         r.entry.live = lot;
@@ -130,7 +130,7 @@ export function createParkingsTab(ctx) {
         sum += lot.occupancy;
         if (lot.occupancy >= 0.95) full++;
       }
-      stats.avg.set(lots.length ? `${Math.round((100 * sum) / lots.length)} %` : '—');
+      stats.avg.set(lots.length ? pct(Math.round((100 * sum) / lots.length)) : '—');
       stats.full.set(String(full), t('de {length}', { length: lots.length }));
       for (const b of allNone.querySelectorAll('button')) b.disabled = !writable;
       ctx.parking.highlight((id) => lots.some((p) => p.id === id && p.tracked));

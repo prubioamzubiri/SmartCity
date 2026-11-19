@@ -109,4 +109,6 @@ test('the API answers in the language of the service: errors, weekdays in the CS
   assert.equal(await weekday(), 'Monday');
   assert.equal(await docs(), '# SmartCity API to manage the city from an external program');
   assert.equal((await (await fetch(`${base}/api/state`)).json()).lang, 'en');
+  assert.match((await fetch(`${base}/api/city.csv`)).headers.get('content-disposition'), /filename="city\.csv"/);
+  assert.match((await fetch(`${base}/api/events.csv`)).headers.get('content-disposition'), /filename="events\.csv"/);
 });

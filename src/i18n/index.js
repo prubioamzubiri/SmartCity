@@ -26,6 +26,14 @@ export function t(text, vars) {
   return out;
 }
 
+// Números con los decimales del idioma (2,5 / 2.5) y porcentajes como se escriben en cada uno: «25 %» en castellano,
+// «% 25» en euskera (norma de Euskaltzaindia) y «25%» en inglés. `pct` acepta un número o un texto ya formateado (+7).
+export const num = (n, decimals = 0) => Number(n).toLocaleString(locale(), { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+export function pct(n, decimals = 0) {
+  const v = typeof n === 'number' ? num(n, decimals) : String(n);
+  return current === 'eu' ? `% ${v}` : current === 'en' ? `${v}%` : `${v} %`;
+}
+
 // Nombres de días y meses (índices como Date.getUTCDay / getUTCMonth).
 const NAMES = {
   es: {
@@ -37,7 +45,7 @@ const NAMES = {
   eu: {
     days: ['igandea', 'astelehena', 'asteartea', 'asteazkena', 'osteguna', 'ostirala', 'larunbata'],
     short: ['ig', 'al', 'ar', 'az', 'og', 'or', 'lr'],
-    initials: ['I', 'A', 'A', 'A', 'O', 'O', 'L'],
+    initials: ['Ig', 'Al', 'Ar', 'Az', 'Og', 'Or', 'Lr'],
     months: ['urtarrila', 'otsaila', 'martxoa', 'apirila', 'maiatza', 'ekaina', 'uztaila', 'abuztua', 'iraila', 'urria', 'azaroa', 'abendua'],
   },
   en: {

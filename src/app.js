@@ -32,7 +32,7 @@ import { createHud } from './ui/hud.js';
 import { createEventCalendarPanel } from './ui/eventCalendar.js';
 import { EventView } from './events/eventView.js';
 import { createWeatherPanel } from './ui/weatherPanel.js';
-import { t } from './i18n/index.js';
+import { t, pct } from './i18n/index.js';
 
 const loading = document.getElementById('loading');
 
@@ -212,7 +212,7 @@ async function main() {
     const marker = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
     if (bus >= 0) {
       const { line, load, capacity, full, atStop } = buses.describe(bus);
-      label = t('Autobús {line} · {load}/{capacity} pasajeros ({v}%){v2}{v3}', { line, load, capacity, v: Math.round((load / capacity) * 100), v2: full ? t(' · LLENO') : '', v3: atStop ? t(' · en la parada') : '' });
+      label = t('Autobús {line} · {load}/{capacity} pasajeros ({v}){v2}{v3}', { line, load, capacity, v: pct(Math.round((load / capacity) * 100)), v2: full ? t(' · LLENO') : '', v3: atStop ? t(' · en la parada') : '' });
     } else if (bikeStationId) {
       const station = bicycleStations.find((item) => item.id === bikeStationId);
       if (station) label = t('{name} · {v}', { name: station.name, v: station.available === undefined ? t('sin datos del servidor') : t('{available}/{capacity} bicicletas (estimación simulada)', { available: station.available, capacity: station.capacity }) });
@@ -224,7 +224,7 @@ async function main() {
       label = [
         t('Parking subterráneo público{v}', { v: name ? `: ${name}` : '' }),
         fee ? t('de pago') : t('tarifa no indicada'),
-        t('ocupación simulada {v}% ({taken}/{capacity}{v2} plazas)', { v: Math.round(occupancy * 100), taken, capacity, v2: estimatedCapacity ? ' est.' : '' }),
+        t('ocupación simulada {v} ({taken}/{capacity}{v2} plazas)', { v: pct(Math.round(occupancy * 100)), taken, capacity, v2: estimatedCapacity ? ' est.' : '' }),
       ].join(' · ');
     } else if (parkingLayer.visible && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
       const lot = pickParking(hitPoint.x, hitPoint.z);
@@ -235,7 +235,7 @@ async function main() {
         } else {
           const occupancy = lotOccupancy(lot, simNow());
           const places = `${Math.round(occupancy * lot.capacity)}/${lot.capacity}${lot.estimated ? ' est.' : ''}`;
-          label += t(' · ocupación simulada {v}% ({places} plazas)', { v: Math.round(occupancy * 100), places });
+          label += t(' · ocupación simulada {v} ({places} plazas)', { v: pct(Math.round(occupancy * 100)), places });
         }
       }
     }

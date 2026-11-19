@@ -120,8 +120,8 @@ export function createSignalsTab(ctx) {
           ctx.toast(t('Archivo no válido: {message}', { message: err.message }), 'error');
         }
       }),
-      button(t('Plantilla'), () => download('plantilla-semaforos.json', JSON.stringify(TEMPLATE, null, 2)), 'ghost'),
-      button(t('Plan actual'), () => download('plan-semaforos.json', JSON.stringify(signals.plan, null, 2)), 'ghost')));
+      button(t('Plantilla'), () => download(`${t('plantilla-semaforos')}.json`, JSON.stringify(TEMPLATE, null, 2)), 'ghost'),
+      button(t('Plan actual'), () => download(`${t('plan-semaforos')}.json`, JSON.stringify(signals.plan, null, 2)), 'ghost')));
 
   function renderSelected() {
     const s = selected === null ? null : signals.signals.find((x) => x.id === selected);

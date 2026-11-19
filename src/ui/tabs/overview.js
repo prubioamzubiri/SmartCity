@@ -4,7 +4,7 @@ import { card, cardTitle, hint, stat, toggle } from '../widgets.js';
 import { demandFactor, demandNoise, scenarioForTime } from '../../traffic/demand.js';
 import { CONDITIONS } from '../../weather/weather.js';
 import { holidayCalendar } from '../../calendar/holidays.js';
-import { t, locale } from '../../i18n/index.js';
+import { t, locale, pct } from '../../i18n/index.js';
 
 export const SCENARIOS = {
   auto: t('Automático (calendario y festivos)'), weekday: 'Laborable', preholiday: t('Víspera de festivo'),
@@ -51,9 +51,9 @@ export function createOverviewTab(ctx) {
     update(s, time) {
       const fmt = (n) => Math.round(n).toLocaleString(locale());
       stats.cars.set(fmt(s.cars), t('de {v} en hora punta', { v: fmt(s.params.maxCars) }));
-      stats.stopped.set(fmt(s.traffic.stopped), s.cars ? t('{v} % del total', { v: Math.round((100 * s.traffic.stopped) / s.cars) }) : '');
+      stats.stopped.set(fmt(s.traffic.stopped), s.cars ? t('{v} del total', { v: pct(Math.round((100 * s.traffic.stopped) / s.cars)) }) : '');
       stats.speed.set(`${s.traffic.avgKmh.toFixed(0)} km/h`);
-      stats.demand.set(`${Math.round(demandFactor(time, s.params.scenario) * 100)} %`, t('de la hora punta'));
+      stats.demand.set(pct(Math.round(demandFactor(time, s.params.scenario) * 100)), t('de la hora punta'));
       const b = ctx.transit.buses;
       const active = b.stats.reduce((a, st) => a + st.active, 0);
       const riders = b.stats.reduce((a, st) => a + st.passengers, 0);
@@ -62,7 +62,7 @@ export function createOverviewTab(ctx) {
       demand.replaceChildren(
         el('div', {}, el('b', { textContent: t('Coches en hora punta: ') }), fmt(s.params.maxCars)),
         el('div', {}, el('b', { textContent: t('Peatones en hora punta: ') }), fmt(s.params.maxPedestrians)),
-        el('div', {}, el('b', { textContent: t('Hoy: ') }), t('{v}{v2} % sobre un día normal', { v: today >= 1 ? '+' : '−', v2: Math.abs(Math.round((today - 1) * 100)) })));
+        el('div', {}, el('b', { textContent: t('Hoy: ') }), t('{v} sobre un día normal', { v: pct(`${today >= 1 ? '+' : '−'}${Math.abs(Math.round((today - 1) * 100))}`) })));
       stats.walkers.set(fmt(s.pedestrians.expected), s.bikes ? t('{v} en bici', { v: fmt(s.bikes.inUse) }) : '');
       const holiday = CONFIG.holidays.enabled ? holidayCalendar.holidayAt(time) : null;
       const w = s.weather;
@@ -70,7 +70,7 @@ export function createOverviewTab(ctx) {
       day.replaceChildren(
         el('div', {}, el('b', { textContent: t('Escenario: ') }), SCENARIOS[scenarioForTime(time, s.params.scenario)], holiday ? t(' · festivo: {holiday}', { holiday }) : ''),
         el('div', {}, el('b', { textContent: t('Tiempo: ') }), w ? `${CONDITIONS[w.condition].icon} ${CONDITIONS[w.condition].label}, ${w.temperature_c.toFixed(0)} °C` : '—'),
-        el('div', {}, el('b', { textContent: t('Eventos: ') }), ev.length ? t('{v} (+{v2} % de demanda)', { v: ev.map((e) => e.name).join(', '), v2: Math.round(s.events.boost * 100) }) : t('ninguno ahora')),
+        el('div', {}, el('b', { textContent: t('Eventos: ') }), ev.length ? t('{v} ({v2} de demanda)', { v: ev.map((e) => e.name).join(', '), v2: pct(`+${Math.round(s.events.boost * 100)}`) }) : t('ninguno ahora')),
         hint(t('La previsión del tiempo y el calendario de eventos están arriba a la derecha.')),
       );
     },
