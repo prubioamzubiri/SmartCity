@@ -1,16 +1,19 @@
-// Chatbot de la ciudad. Empieza escondido y sin «cerebro»: mientras nadie lo active, no existe para los alumnos, y con
-// el motor `none` responde siempre «No sé». Se configura desde el servicio chat-admin (otro contenedor, otro puerto) con
-// la clave CHAT_ADMIN_KEY. El servidor hace las llamadas al modelo (Ollama o una API compatible con OpenAI), así que los
-// navegadores de los alumnos no necesitan llegar a él. La configuración se guarda en la base de datos de la ciudad.
+// Chatbot de la ciudad. Empieza escondido y sin «cerebro»: hasta que los alumnos lo activan no aparece en el visor, y con
+// el motor `none` responde siempre «No sé». Lo configuran con el token de su ciudad, desde la página chat-admin (otro
+// contenedor, en otro puerto, donde ellos quieran) o desde su programa. La ciudad hace las llamadas al motor (Ollama, una
+// API compatible con OpenAI o un servicio propio de los alumnos), así que los navegadores no necesitan llegar a él.
+// La configuración se guarda en la base de datos de la ciudad.
 
 export const NO_SE = 'No sé';
-export const PROVIDERS = ['none', 'ollama', 'openai'];
+export const PROVIDERS = ['none', 'ollama', 'openai', 'custom'];
 
 export const DEFAULT_CHAT = {
   enabled: false,
   title: 'Asistente',
   provider: 'none',
-  url: 'http://ollama:11434', // Ollama del docker-compose (perfil ollama); para OpenAI, p. ej. https://api.openai.com
+  // Ollama del docker-compose (perfil ollama); para OpenAI, p. ej. https://api.openai.com; para un servicio propio, la URL
+  // completa a la que la ciudad envía cada pregunta.
+  url: 'http://ollama:11434',
   model: '',
   apiKey: '',
   systemPrompt: 'Eres el asistente de la ciudad de Donostia en el simulador SmartCity. Responde en español, breve y claro. Si no sabes algo, di que no lo sabes.',
@@ -165,6 +168,15 @@ export class Chat {
       if (typeof reply !== 'string') throw new ChatError(502, 'Respuesta de Ollama sin mensaje');
       return { reply: reply.trim() || NO_SE };
     }
+    if (config.provider === 'custom') {
+      // Servicio propio: recibe { messages, instructions, city } y responde { reply }.
+      const out = await post(config.url, {
+        messages: conversation, instructions: config.systemPrompt, city: config.includeState ? this.summary() : null,
+      }, { ...opts, headers: config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {} });
+      const reply = out?.reply;
+      if (typeof reply !== 'string') throw new ChatError(502, 'El servicio debe responder { "reply": "texto" }');
+      return { reply: reply.trim() || NO_SE };
+    }
     const out = await post(`${base}/v1/chat/completions`, {
       model: config.model, messages: full, temperature: config.temperature, max_tokens: config.maxTokens,
     }, { ...opts, headers: config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {} });
@@ -176,7 +188,7 @@ export class Chat {
   // Modelos disponibles en el motor configurado (o en el que se está probando).
   async models(input = {}) {
     const config = checkChatConfig({ ...input }, this.config);
-    if (config.provider === 'none') return { models: [] };
+    if (config.provider === 'none' || config.provider === 'custom') return { models: [] };
     const base = trimUrl(config.url);
     if (config.provider === 'ollama') {
       const out = await getJson(`${base}/api/tags`, { fetchImpl: this.fetch });

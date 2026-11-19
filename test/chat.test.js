@@ -73,15 +73,28 @@ test('the chatbot talks to Ollama and to OpenAI-compatible APIs (with the city s
   chat2.update({ apiKey: null, model: 'otro' });
   assert.equal(chat2.config.apiKey, 'secreta', 'null conserva la clave guardada');
 
+  // Servicio propio de los alumnos: recibe la conversación, las instrucciones y (si se pide) el estado de la ciudad.
+  const own = fakeModel({ reply: 'Respuesta de nuestro sistema' });
+  const chat3 = new Chat({ fetchImpl: own.fetchImpl, summary: () => 'Coches circulando: 5' });
+  chat3.update({ enabled: true, provider: 'custom', url: 'http://grupo1:5000/chat', includeState: true, apiKey: 'k' });
+  assert.deepEqual(await chat3.ask(ask), { reply: 'Respuesta de nuestro sistema' });
+  assert.equal(own.calls[0].url, 'http://grupo1:5000/chat');
+  assert.deepEqual(own.calls[0].body.messages, ask);
+  assert.equal(own.calls[0].body.city, 'Coches circulando: 5');
+  assert.equal(own.calls[0].init.headers.Authorization, 'Bearer k');
+  const bad = new Chat({ fetchImpl: fakeModel({ text: 'x' }).fetchImpl });
+  bad.update({ enabled: true, provider: 'custom', url: 'http://grupo1:5000/chat' });
+  await assert.rejects(bad.ask(ask), /reply/);
+
   const down = new Chat({ fetchImpl: async () => { throw Object.assign(new Error('x'), { cause: { code: 'ECONNREFUSED' } }); } });
   down.update({ enabled: true, provider: 'ollama', model: 'm' });
   await assert.rejects(down.ask(ask), (err) => err.status === 502 && /ECONNREFUSED/.test(err.message));
 });
 
-test('API: hidden until chat-admin (with CHAT_ADMIN_KEY) enables it; then the viewer sees it', async (t) => {
+test('API: hidden until the students enable it with their token; then the viewer sees it', async (t) => {
   const store = new Store();
   const runtime = new Runtime({ engine: new SimEngine({ data: { nodes: [0, 0, 400, 0], ways: [[2, 0, 0, 1]], signals: [] }, maxCars: 5 }), store, now: () => 1_000_000, checkpointMs: 1e9 });
-  const server = http.createServer(createApp({ runtime, store, chatAdminKey: 'clave' }));
+  const server = http.createServer(createApp({ runtime, store, token: 'clave' }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   server.keepAliveTimeout = 60_000;
   t.after(() => server.close());
@@ -89,14 +102,14 @@ test('API: hidden until chat-admin (with CHAT_ADMIN_KEY) enables it; then the vi
   const call = async (path, { method = 'GET', body, key } = {}) => {
     const r = await fetch(base + path, {
       method, body: body === undefined ? undefined : JSON.stringify(body),
-      headers: { 'Content-Type': 'application/json', ...(key ? { 'X-Chat-Admin-Key': key } : {}) },
+      headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
     });
     return { status: r.status, body: await r.json() };
   };
   assert.deepEqual((await call('/api/state')).body.chat, { enabled: false, title: 'Asistente' });
   assert.equal((await call('/api/chat', { method: 'POST', body: { messages: ask } })).status, 404, 'escondido');
-  assert.equal((await call('/api/chat/config')).status, 404, 'sin clave no se configura');
-  assert.equal((await call('/api/chat/config', { key: 'otra' })).status, 404);
+  assert.equal((await call('/api/chat/config')).status, 401, 'sin el token de la ciudad no se configura');
+  assert.equal((await call('/api/chat/config', { key: 'otra' })).status, 401);
   // Probar sin activarlo.
   assert.deepEqual((await call('/api/chat/test', { method: 'POST', key: 'clave', body: { messages: ask } })).body, { reply: NO_SE });
   const put = await call('/api/chat/config', { method: 'PUT', key: 'clave', body: { enabled: true, title: 'Txiki' } });
@@ -106,26 +119,31 @@ test('API: hidden until chat-admin (with CHAT_ADMIN_KEY) enables it; then the vi
   assert.equal((await call('/api/chat/config', { method: 'PUT', key: 'clave', body: { provider: 'x' } })).status, 400);
 });
 
-test('chat-admin asks for its password and passes the configuration to the city with the key', async () => {
+test('chat-admin asks for its password (if any) and passes the configuration to the city with its token', async () => {
   const seen = [];
   const fetchImpl = async (url, init) => {
-    seen.push({ url, method: init.method, key: init.headers['X-Chat-Admin-Key'], body: init.body ? String(init.body) : null });
+    seen.push({ url, method: init.method, key: init.headers.Authorization, body: init.body ? String(init.body) : null });
     return new Response(JSON.stringify({ enabled: true }), { status: 200 });
   };
-  const server = http.createServer(createAdmin({ password: 'profe', adminKey: 'clave', simUrl: 'http://sim:8080', fetchImpl }));
+  const server = http.createServer(createAdmin({ password: 'profe', token: 'clave', simUrl: 'http://sim:8080', fetchImpl }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const auth = { Authorization: `Basic ${Buffer.from('profesor:profe').toString('base64')}` };
+  const auth = { Authorization: `Basic ${Buffer.from('admin:profe').toString('base64')}` };
   try {
     assert.equal((await fetch(base + '/')).status, 401);
-    assert.equal((await fetch(base + '/', { headers: { Authorization: `Basic ${Buffer.from('profesor:mal').toString('base64')}` } })).status, 401);
+    assert.equal((await fetch(base + '/', { headers: { Authorization: `Basic ${Buffer.from('admin:mal').toString('base64')}` } })).status, 401);
     const page = await fetch(base + '/', { headers: auth });
     assert.equal(page.status, 200);
     assert.match(await page.text(), /Chatbot de la ciudad/);
     const put = await fetch(base + '/config', { method: 'PUT', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true }) });
     assert.deepEqual(await put.json(), { enabled: true });
-    assert.deepEqual(seen[0], { url: 'http://sim:8080/api/chat/config', method: 'PUT', key: 'clave', body: '{"enabled":true}' });
+    assert.deepEqual(seen[0], { url: 'http://sim:8080/api/chat/config', method: 'PUT', key: 'Bearer clave', body: '{"enabled":true}' });
     assert.equal((await fetch(base + '/otra', { headers: auth })).status, 404);
+    // Sin contraseña, abierta (la arrancan los alumnos en su equipo).
+    const open = http.createServer(createAdmin({ token: 'clave', fetchImpl }));
+    await new Promise((resolve) => open.listen(0, '127.0.0.1', resolve));
+    assert.equal((await fetch(`http://127.0.0.1:${open.address().port}/`)).status, 200);
+    open.close();
   } finally {
     server.close();
   }

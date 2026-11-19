@@ -283,18 +283,13 @@ const docsFileFor = (lang) => new URL(lang === 'es' ? '../docs/API.md' : `../doc
 // Listener HTTP de la API. Las lecturas son públicas; las escrituras exigen `Authorization: Bearer <token>`.
 // `rawKey`: clave con la que el profesor (cabecera X-Raw-Key) recibe los datos sin los fallos de los sensores.
 // `faults`: fallos de los sensores (server/faults.js); sin él, los datos salen tal cual.
-// `chatAdminKey`: clave con la que el servicio chat-admin configura el chatbot (sin ella, no se puede configurar).
+// `chat`: chatbot de la ciudad (server/chat.js); lo configuran los alumnos con su token.
 export function createApp({
   runtime, store, token = '', corsOrigin = '*', docsFile = null, rawKey = '', faults = createFaults({ config: { enabled: false } }),
-  chatAdminKey = '', chat = null,
+  chat = null,
 }) {
   const tokenHash = token ? digest(token) : null;
-  const chatKeyHash = chatAdminKey ? digest(chatAdminKey) : null;
   const chatbot = chat ?? new Chat({ store, summary: () => citySummary() });
-  const chatAdmin = (req) => {
-    const given = req.headers['x-chat-admin-key'];
-    if (!(chatKeyHash && typeof given === 'string' && timingSafeEqual(digest(given), chatKeyHash))) throw new HttpError(404, 'No encontrado');
-  };
   // Los errores del chat (y de los modelos) son errores HTTP de la API.
   const chatCall = async (fn) => {
     try {
@@ -867,9 +862,9 @@ export function createApp({
       const client = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket.remoteAddress || '';
       return send(200, await chatCall(() => chatbot.ask(messages, { client })));
     }
-    // Configuración del chatbot (servicio chat-admin, con la clave CHAT_ADMIN_KEY).
+    // Configuración del chatbot (con el token de la ciudad, como cualquier cambio): la página chat-admin o un programa.
     if (pathname.startsWith('/api/chat/')) {
-      chatAdmin(req);
+      authorize(req);
       if (pathname === '/api/chat/config' && method === 'GET') return send(200, chatbot.adminView());
       if (pathname === '/api/chat/config' && method === 'PUT') {
         const body = await readJson(req);

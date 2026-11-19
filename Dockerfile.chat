@@ -1,7 +1,7 @@
-# Configuración del chatbot de la ciudad (perfil «chat» del docker-compose). Solo Node, sin dependencias.
+# Configuración del chatbot de una ciudad (chatadmin/docker-compose.yml o el perfil «chat» del de la ciudad). Solo Node.
 FROM node:24-slim
 WORKDIR /app
 COPY chatadmin ./chatadmin
-ENV PORT=8095 SIM_URL=http://sim:8080
+ENV PORT=8095 SMARTCITY_URL=http://sim:8080
 EXPOSE 8095
 CMD ["node", "chatadmin/server.js"]

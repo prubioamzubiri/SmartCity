@@ -303,6 +303,35 @@ dan abasto (gente en tierra o esperas muy largas) parte de esa gente coge el coc
 
 ---
 
+### 3.8 Chatbot de la ciudad — `/api/chat`
+
+La ciudad tiene un chatbot que aparece en el visor (abajo a la derecha) **cuando lo activáis**. Al principio está
+escondido y, sin motor, responde siempre «No sé»: el «cerebro» lo ponéis vosotros. Se configura con el token, desde la
+página de configuración (`chatadmin/` del repositorio: un contenedor aparte, en el puerto 8095) o desde vuestro programa:
+
+```sh
+curl -X PUT http://localhost:8080/api/chat/config -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"enabled": true, "title": "Txiki", "provider": "custom", "url": "http://nuestro-servidor:5000/chat", "includeState": true}'
+```
+
+| Campo | Qué es |
+| --- | --- |
+| `enabled` | `true` = aparece en el visor |
+| `title` | nombre en el visor |
+| `provider` | `none` («No sé»), `ollama`, `openai` (cualquier API compatible: OpenAI, LM Studio, vLLM...) o `custom` (vuestro servicio) |
+| `url` | dirección del motor **vista desde la ciudad** (la ciudad es quien lo llama). `custom`: la URL completa |
+| `model`, `apiKey` | modelo y clave (la clave no se devuelve nunca; `null` conserva la guardada) |
+| `systemPrompt` | instrucciones del asistente |
+| `includeState` | añadir el estado actual de la ciudad (hora, tráfico, tiempo, eventos) |
+| `temperature`, `maxTokens`, `timeoutSeconds` | ajustes de la respuesta |
+
+Con `custom`, la ciudad envía a vuestra URL `POST {"messages": [...], "instructions": "...", "city": "..." | null}` y
+espera `{"reply": "texto"}` (con `apiKey`, llega como `Authorization: Bearer`). `GET /api/chat/config` da la
+configuración; `POST /api/chat/test` `{"messages": [...], "config": {...}}` prueba una configuración sin guardarla;
+`POST /api/chat/models` lista los modelos del motor y `POST /api/chat/pull` `{"model": "llama3.2"}` descarga uno en
+Ollama. Cualquiera (el visor) pregunta con `POST /api/chat` `{"messages": [{"role": "user", "content": "..."}]}`
+→ `{"reply": "..."}` (10 preguntas por minuto; `chat.enabled` en `GET /api/state` dice si está activo).
+
 ## Lo que NO se puede hacer (todavía)
 
 El simulador no modela: tarificación por congestión, calidad del aire ni emisiones, ni se pueden

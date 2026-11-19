@@ -1,0 +1,18 @@
+# Página de configuración del chatbot de una ciudad, para arrancarla donde queráis (vuestro equipo, junto a vuestro
+# sistema...). Necesita la dirección y el token de vuestra ciudad:
+#   SMARTCITY_URL=https://grupo1.ejemplo.es SMARTCITY_TOKEN=... docker compose -f chatadmin/docker-compose.yml up -d
+# y se abre en http://localhost:8095 (CHAT_ADMIN_PORT). Si otros pueden llegar a ese puerto, poned CHAT_ADMIN_PASSWORD.
+services:
+  chat-admin:
+    build:
+      context: ..
+      dockerfile: Dockerfile.chat
+    restart: unless-stopped
+    ports:
+      - "${CHAT_ADMIN_PORT:-8095}:8095"
+    environment:
+      SMARTCITY_URL: ${SMARTCITY_URL:?Pon la dirección de vuestra ciudad, p. ej. https://grupo1.ejemplo.es}
+      SMARTCITY_TOKEN: ${SMARTCITY_TOKEN:-}
+      CHAT_ADMIN_PASSWORD: ${CHAT_ADMIN_PASSWORD:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # una ciudad en este mismo equipo: http://host.docker.internal:<puerto>

@@ -1,9 +1,9 @@
-// Configuración del chatbot de una ciudad: un servicio aparte, en su propio puerto y con contraseña (usuario «profesor»).
-// Habla con la ciudad por la red interna de Docker con la clave CHAT_ADMIN_KEY; la ciudad guarda la configuración y es
-// la que llama al modelo. Sin dependencias: solo Node.
-//   CHAT_ADMIN_PASSWORD  contraseña de esta página (obligatoria)
-//   CHAT_ADMIN_KEY       la misma clave que en la ciudad (obligatoria)
-//   SIM_URL              dirección de la ciudad (por defecto http://sim:8080)
+// Configuración del chatbot de una ciudad: un servicio aparte, en su propio puerto, que los alumnos arrancan donde
+// quieran (junto a su sistema, en su equipo...). Habla con su ciudad con su token, como cualquier cambio; la ciudad
+// guarda la configuración y es la que llama al motor. Sin dependencias: solo Node.
+//   SMARTCITY_URL        dirección de la ciudad (por defecto http://sim:8080, la del docker-compose de la ciudad)
+//   SMARTCITY_TOKEN      token de la ciudad (si la ciudad tiene token)
+//   CHAT_ADMIN_PASSWORD  contraseña de esta página (opcional; usuario «admin»)
 //   PORT                 puerto (por defecto 8095)
 import http from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -24,9 +24,10 @@ const ROUTES = {
   'POST /pull': ['POST', '/api/chat/pull'],
 };
 
-export function createAdmin({ password, adminKey, simUrl = 'http://sim:8080', fetchImpl = fetch }) {
-  const passwordHash = digest(password);
+export function createAdmin({ password = '', token = '', simUrl = 'http://sim:8080', fetchImpl = fetch }) {
+  const passwordHash = password ? digest(password) : null;
   const authorized = (req) => {
+    if (!passwordHash) return true;
     const match = /^Basic (.+)$/.exec(req.headers.authorization ?? '');
     if (!match) return false;
     const decoded = Buffer.from(match[1], 'base64').toString('utf8');
@@ -41,7 +42,7 @@ export function createAdmin({ password, adminKey, simUrl = 'http://sim:8080', fe
   return async (req, res) => {
     if (!authorized(req)) {
       res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Chatbot SmartCity", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Hace falta la contraseña (usuario: profesor)');
+      res.end('Hace falta la contraseña (usuario: admin)');
       return;
     }
     const url = new URL(req.url, 'http://localhost');
@@ -61,13 +62,14 @@ export function createAdmin({ password, adminKey, simUrl = 'http://sim:8080', fe
       const timeout = url.pathname === '/pull' ? 3_600_000 : 620_000;
       const r = await fetchImpl(simUrl.replace(/\/$/, '') + target, {
         method,
-        headers: { 'Content-Type': 'application/json', 'X-Chat-Admin-Key': adminKey },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: method === 'GET' ? undefined : Buffer.concat(chunks),
         signal: AbortSignal.timeout(timeout),
       });
       const text = await r.text();
+      if (r.status === 401) return json(res, 502, { error: 'La ciudad no acepta el token: revisa SMARTCITY_TOKEN' });
       if (r.status === 404 && url.pathname === '/config') {
-        return json(res, 502, { error: 'La ciudad no acepta la clave: pon la misma CHAT_ADMIN_KEY en la ciudad y en este servicio' });
+        return json(res, 502, { error: `${simUrl} no tiene chatbot: ¿es la dirección de la ciudad (sin /api) y está actualizada?` });
       }
       res.writeHead(r.status, { 'Content-Type': 'application/json' });
       res.end(text);
@@ -79,14 +81,9 @@ export function createAdmin({ password, adminKey, simUrl = 'http://sim:8080', fe
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const env = process.env;
-  for (const name of ['CHAT_ADMIN_PASSWORD', 'CHAT_ADMIN_KEY']) {
-    if (!env[name]) {
-      console.error(`Define ${name}: sin ella no se puede configurar el chatbot.`);
-      process.exit(1);
-    }
-  }
   const port = Number(env.PORT ?? 8095);
-  const simUrl = env.SIM_URL ?? 'http://sim:8080';
-  http.createServer(createAdmin({ password: env.CHAT_ADMIN_PASSWORD, adminKey: env.CHAT_ADMIN_KEY, simUrl }))
+  const simUrl = env.SMARTCITY_URL || 'http://sim:8080';
+  if (!env.CHAT_ADMIN_PASSWORD) console.log('CHAT_ADMIN_PASSWORD no definido: cualquiera que llegue a este puerto puede configurar el chatbot');
+  http.createServer(createAdmin({ password: env.CHAT_ADMIN_PASSWORD ?? '', token: env.SMARTCITY_TOKEN ?? '', simUrl }))
     .listen(port, () => console.log(`Configuración del chatbot en http://localhost:${port} (ciudad: ${simUrl})`));
 }

@@ -77,7 +77,6 @@ if (CONFIG.faults.enabled && !env.RAW_DATA_KEY) {
 }
 const server = http.createServer(createApp({
   runtime, store, token: env.SMARTCITY_TOKEN, corsOrigin: env.CORS_ORIGIN ?? '*', rawKey: env.RAW_DATA_KEY ?? '', faults,
-  chatAdminKey: env.CHAT_ADMIN_KEY ?? '',
 }));
 server.listen(port, () => log(`API en http://localhost:${port} · idioma ${lang} · escala ×${runtime.scale.toFixed(2)} · ${JSON.stringify(runtime.status())}`));
 

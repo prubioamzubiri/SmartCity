@@ -39,14 +39,14 @@
 <body>
 <main>
   <h1>Chatbot de la ciudad</h1>
-  <p class="muted">Mientras esté desactivado, los alumnos no lo ven. Con el motor «Sin modelo» responde siempre «No sé».</p>
+  <p class="muted">Mientras esté desactivado no aparece en el visor de la ciudad. Con el motor «Sin modelo» responde siempre «No sé».</p>
 
   <section>
     <div class="switch">
       <h2>Estado</h2>
       <span id="badge" class="badge">—</span>
     </div>
-    <label class="check"><input type="checkbox" id="enabled"> Activado (aparece en el visor de los alumnos)</label>
+    <label class="check"><input type="checkbox" id="enabled"> Activado (aparece en el visor de la ciudad)</label>
     <label for="title">Nombre en el visor</label>
     <input type="text" id="title" maxlength="40">
   </section>
@@ -58,13 +58,14 @@
       <option value="none">Sin modelo (responde «No sé»)</option>
       <option value="ollama">Ollama</option>
       <option value="openai">API compatible con OpenAI (OpenAI, LM Studio, vLLM…)</option>
+      <option value="custom">Servicio propio (vuestro programa)</option>
     </select>
     <div id="engine">
       <label for="url">Dirección (vista desde la ciudad)</label>
       <input type="url" id="url" placeholder="http://ollama:11434">
       <p class="muted" id="urlHelp"></p>
       <div id="keyBox">
-        <label for="apiKey">Clave de la API</label>
+        <label for="apiKey">Clave (opcional)</label>
         <input type="password" id="apiKey" autocomplete="off">
       </div>
       <div class="row">
@@ -94,7 +95,7 @@
 
   <section>
     <h2>Probar</h2>
-    <p class="muted">Prueba la configuración del formulario (aunque no esté guardada ni activada). No cuenta para los alumnos.</p>
+    <p class="muted">Prueba la configuración del formulario aunque no esté guardada ni activada.</p>
     <div id="log"></div>
     <div class="row" style="margin-top:8px">
       <input type="text" id="question" placeholder="Escribe una pregunta…">
@@ -147,11 +148,15 @@ function form() {
 function showProvider() {
   const p = $('provider').value;
   $('engine').hidden = p === 'none';
-  $('keyBox').hidden = p !== 'openai';
+  $('keyBox').hidden = p !== 'openai' && p !== 'custom';
   $('pullBox').hidden = p !== 'ollama';
-  $('urlHelp').textContent = p === 'ollama'
-    ? 'Ollama del docker-compose (perfil ollama): http://ollama:11434. En el propio equipo: http://host.docker.internal:11434.'
-    : 'Por ejemplo https://api.openai.com o http://host.docker.internal:1234 (LM Studio). Sin /v1 al final.';
+  $('loadModels').parentElement.hidden = p === 'custom';
+  $('model').parentElement.hidden = p === 'custom';
+  $('urlHelp').textContent = {
+    ollama: 'La ciudad es quien llama: usa una dirección a la que llegue la ciudad (http://ollama:11434 con el perfil ollama de su docker-compose).',
+    openai: 'Por ejemplo https://api.openai.com o la de vuestro LM Studio / vLLM, accesible desde la ciudad. Sin /v1 al final.',
+    custom: 'URL completa de vuestro servicio, accesible desde la ciudad. Recibe POST { messages, instructions, city } y responde { "reply": "texto" }. La clave, si la ponéis, llega como Authorization: Bearer.',
+  }[p] ?? '';
 }
 
 async function load() {
@@ -168,7 +173,7 @@ $('reload').addEventListener('click', load);
 $('save').addEventListener('click', async () => {
   try {
     fill(await call('PUT', '/config', form()));
-    status('Guardado. ' + (saved.enabled ? 'Los alumnos ya lo ven en el visor.' : 'Sigue escondido para los alumnos.'), 'ok');
+    status('Guardado. ' + (saved.enabled ? 'Ya aparece en el visor de la ciudad.' : 'Sigue escondido en el visor.'), 'ok');
   } catch (err) {
     status(err.message, 'err');
   }
