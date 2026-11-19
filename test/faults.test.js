@@ -8,7 +8,7 @@ import { Store } from '../server/store.js';
 import { Runtime } from '../server/runtime.js';
 import { createApp } from '../server/app.js';
 
-const often = { enabled: true, valueRate: 0.05, missingRowRate: 0.02, coordRate: 0.05 };
+const often = { enabled: true, valueRate: 0.05, missingRowRate: 0.02, coordRate: 0.05, liveRate: 0.05 };
 const rows = Array.from({ length: 4000 }, (_, i) => ({
   timestamp: `2026-01-05T${String(Math.floor(i / 12) % 24).padStart(2, '0')}:${String((i % 12) * 5).padStart(2, '0')}:00`,
   weekday: 'lunes', sensor_id: `S${Math.floor(i / 288)}`, sensor_name: 'x', x: 10.5, z: -3.5, count: 12, count_fwd: 7, count_bwd: 5, avg_speed_kmh: 31.2,
@@ -42,7 +42,7 @@ test('sensor faults: rare, deterministic, and only on measured values or coordin
 });
 
 test('live API faults touch measurements, never the manager settings', () => {
-  const f = createFaults({ seed: 3, config: { ...often, valueRate: 0.5, coordRate: 0.5 } });
+  const f = createFaults({ seed: 3, config: { ...often, liveRate: 0.5 } });
   const body = {
     buses: { lines: Array.from({ length: 30 }, (_, i) => ({ id: `L${i}`, fleet: 8, target: 8, passengers: 40, waiting: 12 })) },
     sensors: Array.from({ length: 30 }, (_, i) => ({ id: `S${i}`, x: 1, z: 2, current: 5 })),

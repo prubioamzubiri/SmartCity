@@ -93,7 +93,7 @@ export function createFaults({ seed = CONFIG.sim.seed, config = CONFIG.faults } 
       }
       if (!node || typeof node !== 'object') return;
       const id = node.id ?? owner;
-      if (LIVE_COORDS.has(where) && node.id !== undefined && unit(key('live', path, id, minute, 'coords')) < config.coordRate) {
+      if (LIVE_COORDS.has(where) && node.id !== undefined && unit(key('live', path, id, minute, 'coords')) < config.liveRate) {
         node[unit(key('live', path, id, minute, 'axis')) < 0.5 ? 'x' : 'z'] = null;
       }
       for (const [k, v] of Object.entries(node)) {
@@ -101,7 +101,7 @@ export function createFaults({ seed = CONFIG.sim.seed, config = CONFIG.faults } 
           walk(v, k, `${id}/${k}`);
         } else if (typeof v === 'number' && LIVE_FIELDS.has(k)) {
           const u = unit(key('live', path, id, k, minute));
-          if (u < config.valueRate) {
+          if (u < config.liveRate) {
             const how = unit(key('live', path, id, k, minute, 'how'));
             node[k] = how < 0.4 ? null : absurd(v, (how - 0.4) / 0.6);
           }

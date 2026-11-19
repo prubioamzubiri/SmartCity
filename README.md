@@ -428,8 +428,9 @@ always fails the same way). Every fault of the stored records is logged with the
 
 Requests with the header `X-Raw-Key: <RAW_DATA_KEY>` get the data without faults and can download the log
 (`GET /api/faults.csv`). The teacher's metric and evaluator use it; without `RAW_DATA_KEY`, everybody (also the
-metric) gets the faults. Rates: `valueRate` 0.1 % of the rows (or live values), `missingRowRate` 0.05 % and
-`coordRate` 0.1 %; `CONFIG.faults.enabled = false` turns them off.
+metric) gets the faults. Rates: `valueRate` 0.1 % of the rows, `missingRowRate` 0.05 % and `coordRate` 0.1 % in
+the downloads; `liveRate` 0.01 % of the live values (a manager reads hundreds of them every few seconds).
+`CONFIG.faults.enabled = false` turns them off.
 
 ## Checks
 
