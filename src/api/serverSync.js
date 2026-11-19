@@ -1,5 +1,6 @@
 import { CONFIG } from '../config.js';
 import { ApiClient } from './client.js';
+import { t } from '../i18n/index.js';
 
 // Única fuente de verdad del visor: consulta el estado del servidor y extrapola su reloj entre consultas.
 export class ServerSync {
@@ -25,7 +26,7 @@ export class ServerSync {
   connect(baseUrl, token = '') {
     this.disconnect();
     const client = this.createClient({ baseUrl, token });
-    if (!client.baseUrl) throw new Error('Introduce la URL del servidor');
+    if (!client.baseUrl) throw new Error(t('Introduce la URL del servidor'));
     this.client = client;
     this.poll('state', () => client.state(), (s) => this.receive(s));
     this.poll('cars', () => client.cars(), (c) => this.emit('cars', c));
@@ -74,7 +75,7 @@ export class ServerSync {
   // Ejecuta un cambio en el servidor y vuelve a leer su estado (también si falla, para no mostrar un valor falso).
   async act(fn) {
     const client = this.client;
-    if (!client) throw new Error('Sin conexión con el servidor');
+    if (!client) throw new Error(t('Sin conexión con el servidor'));
     try {
       return await fn(client);
     } finally {

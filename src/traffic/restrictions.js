@@ -1,9 +1,10 @@
 import { CONFIG } from '../config.js';
+import { t } from '../i18n/index.js';
 
 export const RESTRICTION_MODES = {
   pedestrians_only: 'Calle cortada: solo peatones (ni coches ni autobuses)',
-  buses_and_pedestrians: 'Solo autobuses y peatones (los coches no pasan)',
-  entry_limit: 'Zona de acceso restringido: los coches de fuera solo entran si hay menos de `limit` dentro',
+  buses_and_pedestrians: t('Solo autobuses y peatones (los coches no pasan)'),
+  entry_limit: t('Zona de acceso restringido: los coches de fuera solo entran si hay menos de `limit` dentro'),
 };
 
 export const MAX_RESTRICTIONS = 100;
@@ -92,34 +93,34 @@ export class Restrictions {
 
   // Valida la definición y la devuelve normalizada; lanza RestrictionError si no es válida.
   normalize({ mode, area, ways, limit, name }) {
-    if (!Object.hasOwn(RESTRICTION_MODES, mode)) throw new RestrictionError(`mode debe ser uno de: ${Object.keys(RESTRICTION_MODES).join(', ')}`);
-    if ((area === undefined) === (ways === undefined)) throw new RestrictionError('Indica la zona (x, z, radius) o las calles (ways), pero no ambas');
+    if (!Object.hasOwn(RESTRICTION_MODES, mode)) throw new RestrictionError(t('mode debe ser uno de: {v}', { v: Object.keys(RESTRICTION_MODES).join(', ') }));
+    if ((area === undefined) === (ways === undefined)) throw new RestrictionError(t('Indica la zona (x, z, radius) o las calles (ways), pero no ambas'));
     const out = { mode, name: typeof name === 'string' ? name.slice(0, 60) : '' };
     if (area !== undefined) {
       const { x, z, radius } = area;
-      if (![x, z, radius].every(Number.isFinite)) throw new RestrictionError('La zona necesita x, z y radius numéricos');
-      if (radius < 1 || radius > MAX_RADIUS) throw new RestrictionError(`radius debe estar entre 1 y ${MAX_RADIUS} metros`);
+      if (![x, z, radius].every(Number.isFinite)) throw new RestrictionError(t('La zona necesita x, z y radius numéricos'));
+      if (radius < 1 || radius > MAX_RADIUS) throw new RestrictionError(t('radius debe estar entre 1 y {MAX_RADIUS} metros', { MAX_RADIUS }));
       out.area = { x, z, radius };
     } else {
-      if (!Array.isArray(ways) || !ways.length || ways.length > MAX_WAYS) throw new RestrictionError(`ways debe ser una lista de 1 a ${MAX_WAYS} calles`);
-      if (!ways.every((w) => Number.isInteger(w) && w >= 0 && w < this.graph.wayCount)) throw new RestrictionError('ways contiene calles que no existen');
+      if (!Array.isArray(ways) || !ways.length || ways.length > MAX_WAYS) throw new RestrictionError(t('ways debe ser una lista de 1 a {MAX_WAYS} calles', { MAX_WAYS }));
+      if (!ways.every((w) => Number.isInteger(w) && w >= 0 && w < this.graph.wayCount)) throw new RestrictionError(t('ways contiene calles que no existen'));
       out.ways = [...new Set(ways)];
     }
     if (mode === 'entry_limit') {
       const value = limit ?? 0;
-      if (!Number.isInteger(value) || value < 0 || value > CONFIG.cars.max) throw new RestrictionError(`limit debe ser un entero entre 0 y ${CONFIG.cars.max}`);
+      if (!Number.isInteger(value) || value < 0 || value > CONFIG.cars.max) throw new RestrictionError(t('limit debe ser un entero entre 0 y {max}', { max: CONFIG.cars.max }));
       out.limit = value;
     } else if (limit !== undefined) {
-      throw new RestrictionError('limit solo se usa con mode entry_limit');
+      throw new RestrictionError(t('limit solo se usa con mode entry_limit'));
     }
     return out;
   }
 
   add(definition) {
-    if (this.items.length >= MAX_RESTRICTIONS) throw new RestrictionError(`Máximo ${MAX_RESTRICTIONS} restricciones a la vez`);
+    if (this.items.length >= MAX_RESTRICTIONS) throw new RestrictionError(t('Máximo {MAX_RESTRICTIONS} restricciones a la vez', { MAX_RESTRICTIONS }));
     const item = this.normalize(definition);
     item.edges = this.edgesOf(item);
-    if (!item.edges.length) throw new RestrictionError('No hay calles en esa zona');
+    if (!item.edges.length) throw new RestrictionError(t('No hay calles en esa zona'));
     item.n = this.nextId++;
     item.id = `R${item.n}`;
     item.since = this.getSimTime();

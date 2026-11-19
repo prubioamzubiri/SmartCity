@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { CONFIG } from '../config.js';
 import { demandFactor } from '../traffic/demand.js';
 import { occupancyAt, undergroundLots, undergroundOccupancy as undergroundOccupancyAt } from './undergroundLots.js';
+import { t, locale } from '../i18n/index.js';
 
 const COLORS = { area: 0x2f6fdd, underground: 0x7a4fd6, street: 0x4fc3f7, space: 0xffffff };
 const STREET_WIDTH = 2.2;
@@ -160,7 +161,7 @@ export function trackableLots(group) {
     const { id, name, capacity, estimatedCapacity, bias } = sprite.userData;
     if (seen.has(id)) continue;
     seen.add(id);
-    lots.push({ id, name: name || `Parking subterráneo (${id.slice(1).replace('_', ', ')})`, capacity, estimatedCapacity, bias });
+    lots.push({ id, name: name || t('Parking subterráneo ({v})', { v: id.slice(1).replace('_', ', ') }), capacity, estimatedCapacity, bias });
   }
   return lots;
 }
@@ -235,7 +236,7 @@ export function createParking(data) {
   return group;
 }
 
-export const PARKING_TYPE_LABEL = ['en superficie', 'en altura', 'subterráneo'];
+export const PARKING_TYPE_LABEL = [t('en superficie'), t('en altura'), 'subterráneo'];
 
 // Devuelve el parking que contiene el punto (x, z), o null.
 export function createParkingPicker(data) {
@@ -291,7 +292,7 @@ export function setPriceLabels(group, priceOf, basePrice) {
       if (label) label.visible = false;
       continue;
     }
-    const text = `${Number(price).toLocaleString('es-ES', { maximumFractionDigits: 2 })} €`;
+    const text = `${Number(price).toLocaleString(locale(), { maximumFractionDigits: 2 })} €`;
     const color = price > basePrice + 1e-9 ? '#ff8a80' : price < basePrice - 1e-9 ? '#9cff9c' : '#ffffff';
     if (!label) {
       label = new THREE.Sprite(new THREE.SpriteMaterial({ depthWrite: false }));

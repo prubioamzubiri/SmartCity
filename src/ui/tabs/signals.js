@@ -1,12 +1,13 @@
 import { CONFIG } from '../../config.js';
 import { el } from '../dom.js';
 import { badge, button, card, cardTitle, empty, field, hint, segmented, stepper } from '../widgets.js';
+import { t } from '../../i18n/index.js';
 
 const MODES = [
-  { value: 'normal', label: 'Normal', title: 'Ciclo de verde, ámbar y rojo' },
-  { value: 'off', label: 'Apagado', title: 'Cruce sin regular: los coches ceden el paso; los peatones cruzan cuando hay hueco' },
-  { value: 'flashing', label: 'Ámbar', title: 'Ámbar intermitente: cruce sin regular con prioridad para los peatones' },
-  { value: 'all_red', label: 'Rojo', title: 'Todo en rojo: todos se detienen' },
+  { value: 'normal', label: t('Normal'), title: t('Ciclo de verde, ámbar y rojo') },
+  { value: 'off', label: t('Apagado'), title: t('Cruce sin regular: los coches ceden el paso; los peatones cruzan cuando hay hueco') },
+  { value: 'flashing', label: t('Ámbar'), title: t('Ámbar intermitente: cruce sin regular con prioridad para los peatones') },
+  { value: 'all_red', label: t('Rojo'), title: t('Todo en rojo: todos se detienen') },
 ];
 const MODE_LABEL = Object.fromEntries(MODES.map((m) => [m.value, m.label]));
 
@@ -44,83 +45,83 @@ export function createSignalsTab(ctx) {
   const selLinks = el('span', { class: 'ui-links' });
   const selBadges = el('div', { class: 'ui-badges' });
   const send = (settings, ok) => ctx.run((c) => c.setSignal(selected, settings), ok);
-  const mode = segmented(MODES, (m) => send({ mode: m === 'normal' ? null : m }, `Semáforo ${selected}: ${MODE_LABEL[m]}`), { ariaLabel: 'Modo del semáforo' });
-  const timing = (key, label, min, max) => stepper({ min, max, label, onChange: (v) => send({ [key]: v }, `Semáforo ${selected}: ${label.toLowerCase()} ${v} s`) });
+  const mode = segmented(MODES, (m) => send({ mode: m === 'normal' ? null : m }, t('Semáforo {selected}: {v}', { selected, v: MODE_LABEL[m] })), { ariaLabel: t('Modo del semáforo') });
+  const timing = (key, label, min, max) => stepper({ min, max, label, onChange: (v) => send({ [key]: v }, t('Semáforo {selected}: {toLowerCase} {v} s', { selected, toLowerCase: label.toLowerCase(), v })) });
   const greenA = timing('greenA', 'Verde este-oeste', 5, 180);
   const greenB = timing('greenB', 'Verde norte-sur', 5, 180);
   const yellow = timing('yellow', 'Ámbar', ...CONFIG.signals.yellowRange);
   const timings = el('div', { class: 'ui-grid3' },
-    field('Verde E-O (s)', greenA.node), field('Verde N-S (s)', greenB.node), field('Ámbar (s)', yellow.node));
-  const scheduleNote = hint('');
-  const resetButton = button('Volver al plan general', () => send({ reset: true }, `Semáforo ${selected}: plan general`), 'ghost');
+    field(t('Verde E-O (s)'), greenA.node), field(t('Verde N-S (s)'), greenB.node), field(t('Ámbar (s)'), yellow.node));
+  const scheduleNote = hint(t(''));
+  const resetButton = button(t('Volver al plan general'), () => send({ reset: true }, t('Semáforo {selected}: plan general', { selected })), 'ghost');
   const editor = el('div', {},
-    field('Modo', mode.node), timings, scheduleNote, el('div', { class: 'ui-row' }, resetButton));
-  const selEmpty = empty('Haz clic en un semáforo del mapa (los puntos de colores en los cruces) o elige uno de la lista.');
-  const selCard = card(cardTitle('Semáforo seleccionado', selLinks), selTitle, selBadges, selEmpty, editor);
+    field(t('Modo'), mode.node), timings, scheduleNote, el('div', { class: 'ui-row' }, resetButton));
+  const selEmpty = empty(t('Haz clic en un semáforo del mapa (los puntos de colores en los cruces) o elige uno de la lista.'));
+  const selCard = card(cardTitle(t('Semáforo seleccionado'), selLinks), selTitle, selBadges, selEmpty, editor);
 
   // --- Plan general (todos los que no tienen ajustes propios) ---
   const sendPlan = (plan, ok) => ctx.run((c) => c.setSignalPlan(plan), ok);
   const general = (patch, ok) => sendPlan({ default: { ...signals.plan.default, ...patch }, signals: signals.plan.signals }, ok);
-  const defMode = segmented(MODES, (m) => general({ mode: m === 'normal' ? undefined : m }, `Todos los semáforos: ${MODE_LABEL[m]}`), { ariaLabel: 'Modo general' });
-  const defGreen = stepper({ min: 5, max: 180, label: 'Verde general', onChange: (v) => general({ green: v }, `Verde general: ${v} s`) });
-  const defYellow = stepper({ min: CONFIG.signals.yellowRange[0], max: CONFIG.signals.yellowRange[1], label: 'Ámbar general', onChange: (v) => general({ yellow: v }, `Ámbar general: ${v} s`) });
+  const defMode = segmented(MODES, (m) => general({ mode: m === 'normal' ? undefined : m }, t('Todos los semáforos: {v}', { v: MODE_LABEL[m] })), { ariaLabel: 'Modo general' });
+  const defGreen = stepper({ min: 5, max: 180, label: t('Verde general'), onChange: (v) => general({ green: v }, `Verde general: ${v} s`) });
+  const defYellow = stepper({ min: CONFIG.signals.yellowRange[0], max: CONFIG.signals.yellowRange[1], label: t('Ámbar general'), onChange: (v) => general({ yellow: v }, t('Ámbar general: {v} s', { v })) });
   const overridesInfo = el('span', { class: 'ui-muted' });
-  const clearAll = button('Quitar todos los ajustes propios', () => sendPlan({ default: signals.plan.default, signals: {} }, 'Todos los semáforos siguen el plan general'), 'ghost danger');
-  const generalCard = card(cardTitle('Todos los semáforos'),
-    hint('Se aplica a los semáforos sin ajustes propios.'),
-    field('Modo', defMode.node),
-    el('div', { class: 'ui-grid2' }, field('Verde (s)', defGreen.node), field('Ámbar (s)', defYellow.node)),
+  const clearAll = button(t('Quitar todos los ajustes propios'), () => sendPlan({ default: signals.plan.default, signals: {} }, t('Todos los semáforos siguen el plan general')), 'ghost danger');
+  const generalCard = card(cardTitle(t('Todos los semáforos')),
+    hint(t('Se aplica a los semáforos sin ajustes propios.')),
+    field(t('Modo'), defMode.node),
+    el('div', { class: 'ui-grid2' }, field(t('Verde (s)'), defGreen.node), field(t('Ámbar (s)'), defYellow.node)),
     el('div', { class: 'ui-row' }, overridesInfo, clearAll));
 
   // --- Lista ---
-  const search = el('input', { type: 'search', placeholder: 'Buscar por número…', oninput: () => renderList() });
+  const search = el('input', { type: 'search', placeholder: t('Buscar por número…'), oninput: () => renderList() });
   const onlyOwn = el('input', { type: 'checkbox', onchange: () => renderList() });
   const list = el('div', { class: 'ui-list' });
-  const listCard = card(cardTitle('Lista de semáforos'),
-    el('div', { class: 'ui-row' }, search, el('label', { class: 'ui-check' }, onlyOwn, ' Solo con ajustes propios')), list);
+  const listCard = card(cardTitle(t('Lista de semáforos')),
+    el('div', { class: 'ui-row' }, search, el('label', { class: 'ui-check' }, onlyOwn, t(' Solo con ajustes propios'))), list);
 
   function renderList() {
     const q = search.value.trim();
     const rows = active().filter((s) => (!q || String(s.id).includes(q)) && (!onlyOwn.checked || signals.plan.signals[s.id]));
     list.replaceChildren(...rows.slice(0, 200).map((s) => {
       const own = signals.plan.signals[s.id];
-      const t = signals.timing(s, ctx.simNow());
+      const tm = signals.timing(s, ctx.simNow());
       const m = signals.modeOf(s);
       return el('button', { type: 'button', class: `ui-list-row${s.id === selected ? ' selected' : ''}`, onclick: () => select(s.id, true) },
-        el('span', { textContent: `Semáforo ${s.id}` }),
-        m !== 'normal' ? badge(MODE_LABEL[m], m === 'all_red' ? 'danger' : 'warn') : el('span', { class: 'ui-muted', textContent: `${t.gA}/${t.gB}/${t.y} s` }),
-        own ? badge('propio', 'info') : '');
+        el('span', { textContent: t('Semáforo {id}', { id: s.id }) }),
+        m !== 'normal' ? badge(MODE_LABEL[m], m === 'all_red' ? 'danger' : 'warn') : el('span', { class: 'ui-muted', textContent: t('{gA}/{gB}/{y} s', { gA: tm.gA, gB: tm.gB, y: tm.y }) }),
+        own ? badge(t('propio'), 'info') : '');
     }));
-    if (!rows.length) list.append(empty('Ningún semáforo coincide.'));
-    else if (rows.length > 200) list.append(hint(`Se muestran 200 de ${rows.length}: busca por número para encontrar otros.`));
+    if (!rows.length) list.append(empty(t('Ningún semáforo coincide.')));
+    else if (rows.length > 200) list.append(hint(t('Se muestran 200 de {length}: busca por número para encontrar otros.', { length: rows.length })));
   }
 
   // --- Plan en JSON ---
-  const planUrl = el('input', { type: 'url', placeholder: 'https://…/plan.json' });
+  const planUrl = el('input', { type: 'url', placeholder: t('https://…/plan.json') });
   const advanced = el('details', { class: 'ui-card ui-details' },
-    el('summary', { textContent: 'Avanzado: plan completo en JSON' }),
-    hint('Un plan con horarios (p. ej. más verde en hora punta) se escribe en JSON. Descarga la plantilla, edítala y cárgala.'),
-    field('Cargar desde una URL', el('div', { class: 'ui-row' }, planUrl, button('Cargar', async () => {
+    el('summary', { textContent: t('Avanzado: plan completo en JSON') }),
+    hint(t('Un plan con horarios (p. ej. más verde en hora punta) se escribe en JSON. Descarga la plantilla, edítala y cárgala.')),
+    field(t('Cargar desde una URL'), el('div', { class: 'ui-row' }, planUrl, button(t('Cargar'), async () => {
       try {
         const res = await fetch(planUrl.value);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await sendPlan(await res.json(), 'Plan cargado');
       } catch (err) {
-        ctx.toast(`No se pudo cargar: ${err.message}`, 'error');
+        ctx.toast(t('No se pudo cargar: {message}', { message: err.message }), 'error');
       }
     }))),
     el('div', { class: 'ui-row' },
-      button('Cargar archivo', async () => {
+      button(t('Cargar archivo'), async () => {
         const text = await pickFile();
         if (text === null) return;
         try {
-          await sendPlan(JSON.parse(text), 'Plan cargado desde el archivo');
+          await sendPlan(JSON.parse(text), t('Plan cargado desde el archivo'));
         } catch (err) {
-          ctx.toast(`Archivo no válido: ${err.message}`, 'error');
+          ctx.toast(t('Archivo no válido: {message}', { message: err.message }), 'error');
         }
       }),
-      button('Plantilla', () => download('plantilla-semaforos.json', JSON.stringify(TEMPLATE, null, 2)), 'ghost'),
-      button('Plan actual', () => download('plan-semaforos.json', JSON.stringify(signals.plan, null, 2)), 'ghost')));
+      button(t('Plantilla'), () => download('plantilla-semaforos.json', JSON.stringify(TEMPLATE, null, 2)), 'ghost'),
+      button(t('Plan actual'), () => download('plan-semaforos.json', JSON.stringify(signals.plan, null, 2)), 'ghost')));
 
   function renderSelected() {
     const s = selected === null ? null : signals.signals.find((x) => x.id === selected);
@@ -128,22 +129,22 @@ export function createSignalsTab(ctx) {
     editor.hidden = selTitle.hidden = selBadges.hidden = !s;
     selLinks.replaceChildren();
     if (!s) return;
-    selTitle.textContent = `Semáforo ${s.id}`;
+    selTitle.textContent = t('Semáforo {id}', { id: s.id });
     selTitle.className = 'ui-big';
     selLinks.append(
-      el('button', { type: 'button', class: 'ui-link', textContent: 'Ver en el mapa', onclick: () => ctx.focusSignal(s) }),
-      el('a', { class: 'ui-link', textContent: 'OSM', href: `https://www.openstreetmap.org/node/${s.id}`, target: '_blank', rel: 'noopener noreferrer' }));
+      el('button', { type: 'button', class: 'ui-link', textContent: t('Ver en el mapa'), onclick: () => ctx.focusSignal(s) }),
+      el('a', { class: 'ui-link', textContent: t('OSM'), href: `https://www.openstreetmap.org/node/${s.id}`, target: '_blank', rel: 'noopener noreferrer' }));
     const own = signals.plan.signals[s.id];
     const m = signals.modeOf(s);
     mode.set(m);
-    const t = signals.timing(s, ctx.simNow());
-    greenA.set(t.gA);
-    greenB.set(t.gB);
-    yellow.set(t.y);
+    const tm = signals.timing(s, ctx.simNow());
+    greenA.set(tm.gA);
+    greenB.set(tm.gB);
+    yellow.set(tm.y);
     timings.hidden = m !== 'normal';
-    selBadges.replaceChildren(own ? badge('Con ajustes propios', 'info') : badge('Sigue el plan general'), badge(`Ciclo ${t.gA + t.gB + 2 * t.y} s`));
+    selBadges.replaceChildren(own ? badge(t('Con ajustes propios'), 'info') : badge(t('Sigue el plan general')), badge(t('Ciclo {v} s', { v: tm.gA + tm.gB + 2 * tm.y })));
     const rules = own?.schedule?.length ?? 0;
-    scheduleNote.textContent = rules ? `Tiene ${rules} regla(s) por horario: los tiempos mostrados son los de ahora. Para editarlas usa el plan en JSON.` : '';
+    scheduleNote.textContent = rules ? t('Tiene {rules} regla(s) por horario: los tiempos mostrados son los de ahora. Para editarlas usa el plan en JSON.', { rules }) : '';
     scheduleNote.hidden = !rules;
     resetButton.hidden = !own;
   }
@@ -177,7 +178,7 @@ export function createSignalsTab(ctx) {
       defGreen.set(d.green);
       defYellow.set(d.yellow);
       const n = Object.keys(signals.plan.signals).length;
-      overridesInfo.textContent = n ? `${n} con ajustes propios` : 'Ninguno con ajustes propios';
+      overridesInfo.textContent = n ? t('{n} con ajustes propios', { n }) : t('Ninguno con ajustes propios');
       clearAll.hidden = !n;
       renderSelected();
       renderList();

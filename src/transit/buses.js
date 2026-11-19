@@ -2,6 +2,7 @@ import { CONFIG } from '../config.js';
 import { transitDemand } from '../traffic/demand.js';
 import { eventCalendar } from '../events/calendar.js';
 import { locate } from './lines.js';
+import { t } from '../i18n/index.js';
 
 const T = CONFIG.transit;
 
@@ -104,11 +105,11 @@ export class Buses {
   setFleet(li, count, { limit = true, now = null } = {}) {
     const line = this.lines[li];
     if (!line || !Number.isInteger(count) || count < T.minFleet || count > T.maxFleet) {
-      throw new RangeError(`La flota debe ser un entero entre ${T.minFleet} y ${T.maxFleet}`);
+      throw new RangeError(t('La flota debe ser un entero entre {minFleet} y {maxFleet}', { minFleet: T.minFleet, maxFleet: T.maxFleet }));
     }
     const committed = this.committed(li);
     if (limit && count - committed > this.reserve()) {
-      throw new FleetError(`No hay autobuses suficientes: quedan ${this.reserve()} en reserva (flota total ${this.fleetTotal}). Quita autobuses de otra línea primero`);
+      throw new FleetError(t('No hay autobuses suficientes: quedan {reserve} en reserva (flota total {fleetTotal}). Quita autobuses de otra línea primero', { reserve: this.reserve(), fleetTotal: this.fleetTotal }));
     }
     if (!limit || now === null || !(T.deployMinutes > 0)) {
       this.pending[li] = [];

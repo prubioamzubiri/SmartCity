@@ -57,6 +57,19 @@ test('the real API guide renders without leftover markdown', () => {
   assert.match(page, /<h1 id="api-de-smartcity[^"]*">/);
 });
 
+test('the guides in Basque and English render too and document the same API as the Spanish one', () => {
+  const endpoints = (md) => [...new Set(md.match(/(GET|POST|PUT|PATCH|DELETE) \/api\/[\w./-]*/g))].sort();
+  const es = fs.readFileSync(new URL('../docs/API.md', import.meta.url), 'utf8');
+  for (const lang of ['eu', 'en']) {
+    const markdown = fs.readFileSync(new URL(`../docs/API.${lang}.md`, import.meta.url), 'utf8');
+    const page = renderDocsPage(markdown);
+    assert.equal((page.match(/<table>/g) ?? []).length, (markdown.match(/^\| --- /gm) ?? []).length, lang);
+    assert.ok(!page.includes('```') && !page.includes('| --- |'), lang);
+    assert.deepEqual(endpoints(markdown), endpoints(es), `${lang}: los mismos endpoints`);
+    assert.equal((markdown.match(/^#+ /gm) ?? []).length, (es.match(/^#+ /gm) ?? []).length, `${lang}: los mismos apartados`);
+  }
+});
+
 async function serve(t, options = {}) {
   const engine = new SimEngine({ data: { nodes: [-250, -250, 250, -250, 250, 250, -250, 250], ways: [[4, 0, 0, 1, 2, 3, 0]], signals: [] }, maxCars: 5 });
   const store = new Store();

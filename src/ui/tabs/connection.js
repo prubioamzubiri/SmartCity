@@ -1,6 +1,7 @@
 import { CONFIG } from '../../config.js';
 import { el } from '../dom.js';
 import { button, card, cardTitle, field, hint } from '../widgets.js';
+import { t } from '../../i18n/index.js';
 
 const readStorage = (storage, key) => {
   try {
@@ -21,9 +22,9 @@ const TOKEN_KEY = 'smartcity.server.token';
 
 // Conexión con el servidor de simulación: dirección y token (necesario para cambiar la ciudad).
 export function createConnectionTab(ctx) {
-  const url = el('input', { type: 'url', placeholder: 'https://mi-ciudad.example.com', value: readStorage(localStorage, CONFIG.server.urlKey) || CONFIG.server.url });
+  const url = el('input', { type: 'url', placeholder: t('https://mi-ciudad.example.com'), value: readStorage(localStorage, CONFIG.server.urlKey) || CONFIG.server.url });
   // El token solo se guarda en la sesión del navegador (se borra al cerrar la pestaña).
-  const token = el('input', { type: 'password', autocomplete: 'off', placeholder: 'Solo si el servidor lo pide', value: readStorage(sessionStorage, TOKEN_KEY) });
+  const token = el('input', { type: 'password', autocomplete: 'off', placeholder: t('Solo si el servidor lo pide'), value: readStorage(sessionStorage, TOKEN_KEY) });
   const status = el('div', { class: 'ui-status' });
 
   function connect() {
@@ -39,15 +40,15 @@ export function createConnectionTab(ctx) {
   }
 
   const node = el('div', {},
-    card(cardTitle('Servidor'),
-      hint('El visor muestra lo que simula el servidor, que sigue funcionando aunque cierres la web (una semana real = un año simulado).'),
-      field('Dirección', url),
-      field('Token', token, 'Lo da el profesor. Sin él puedes mirar, pero no cambiar nada. Se olvida al cerrar la pestaña.'),
-      el('div', { class: 'ui-row' }, button('Conectar', connect, 'primary'), button('Desconectar', () => ctx.sync.disconnect(), 'ghost')),
+    card(cardTitle(t('Servidor')),
+      hint(t('El visor muestra lo que simula el servidor, que sigue funcionando aunque cierres la web (una semana real = un año simulado).')),
+      field(t('Dirección'), url),
+      field(t('Token'), token, t('Lo da el profesor. Sin él puedes mirar, pero no cambiar nada. Se olvida al cerrar la pestaña.')),
+      el('div', { class: 'ui-row' }, button(t('Conectar'), connect, 'primary'), button(t('Desconectar'), () => ctx.sync.disconnect(), 'ghost')),
       status),
-    card(cardTitle('Ayuda'),
-      hint('¿Qué puedo cambiar? Restricciones de calles, semáforos, autobuses por línea, anclajes de bicis y qué se registra. Todo también desde un programa con la API.'),
-      button('Abrir la guía de la API', () => ctx.openDocs(), 'ghost')));
+    card(cardTitle(t('Ayuda')),
+      hint(t('¿Qué puedo cambiar? Restricciones de calles, semáforos, autobuses por línea, anclajes de bicis y qué se registra. Todo también desde un programa con la API.')),
+      button(t('Abrir la guía de la API'), () => ctx.openDocs(), 'ghost')));
 
   return {
     node,

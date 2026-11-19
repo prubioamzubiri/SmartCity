@@ -62,6 +62,7 @@ SMARTCITY_TOKEN=change-me npm run serve   # http://localhost:8080
 | `SMARTCITY_TOKEN` | – | Optional bearer token for writes. Without it, anyone can modify the city |
 | `CORS_ORIGIN` | `*` | Allowed browser origin (e.g. the GitHub Pages URL) |
 | `CHECKPOINT_SECONDS` | `30` | Checkpoint interval |
+| `SMARTCITY_LANG` | `es` | Language of the service: `es` (Spanish), `eu` (Basque) or `en` (English). See README, «Languages» |
 
 ## API
 

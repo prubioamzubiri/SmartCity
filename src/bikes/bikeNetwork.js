@@ -1,6 +1,7 @@
 import { CONFIG } from '../config.js';
 import { bikeDemand, scenarioForTime, simDate } from '../traffic/demand.js';
 import { createRng } from '../core/random.js';
+import { t } from '../i18n/index.js';
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MAX_RECORDS = 200000;
@@ -85,9 +86,9 @@ export class BikeNetwork {
     const V = CONFIG.bicycles.vans;
     const a = this.index.get(from);
     const b = this.index.get(to);
-    if (a === undefined || b === undefined) throw new Error('Estación desconocida');
-    if (a === b) throw new Error('El origen y el destino deben ser distintos');
-    if (!Number.isInteger(bikes) || bikes < 1 || bikes > V.capacity) throw new Error(`bikes debe ser un entero entre 1 y ${V.capacity}`);
+    if (a === undefined || b === undefined) throw new Error(t('Estación desconocida'));
+    if (a === b) throw new Error(t('El origen y el destino deben ser distintos'));
+    if (!Number.isInteger(bikes) || bikes < 1 || bikes > V.capacity) throw new Error(t('bikes debe ser un entero entre 1 y {capacity}', { capacity: V.capacity }));
     const free = this.vans.filter((v) => !v.job);
     if (!free.length) return null;
     const A = this.stationList[a];
@@ -152,13 +153,13 @@ export class BikeNetwork {
 
   // Programa un cambio de anclajes que se aplica `capacityDelaySeconds` después de `now`; `null` cancela el pendiente.
   scheduleCapacity(id, capacity, now) {
-    if (!this.index.has(id)) throw new Error(`Estación desconocida: ${id}`);
+    if (!this.index.has(id)) throw new Error(t('Estación desconocida: {id}', { id }));
     if (capacity === null) {
       this.changes.delete(id);
       return;
     }
     if (!Number.isInteger(capacity) || capacity < 1 || capacity > CONFIG.bicycles.maxCapacity) {
-      throw new Error(`La capacidad debe ser un entero entre 1 y ${CONFIG.bicycles.maxCapacity}`);
+      throw new Error(t('La capacidad debe ser un entero entre 1 y {maxCapacity}', { maxCapacity: CONFIG.bicycles.maxCapacity }));
     }
     if (capacity === this.stationList[this.index.get(id)].capacity) this.changes.delete(id);
     else this.changes.set(id, { capacity, effectiveAt: now + CONFIG.bicycles.capacityDelaySeconds });

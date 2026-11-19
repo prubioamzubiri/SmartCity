@@ -1,6 +1,7 @@
 import { CONFIG } from '../config.js';
 import { createRng } from '../core/random.js';
 import { simDate } from '../traffic/demand.js';
+import { t } from '../i18n/index.js';
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MAX_RECORDS = 200000;
@@ -67,7 +68,7 @@ export class PedestrianSensors {
     const sensor = { id: id ?? `P${this.nextId++}`, name: name || '', x: hit.x, z: hit.z, edges, crossings, total };
     // Atracción de la calle del sensor (suma de sus tramos) y de los pasos que cuenta.
     sensor.weight = edges.reduce((n, e) => n + this.pedestrians.weightOf(e), 0);
-    if (!sensor.name) sensor.name = `Peatones ${sensor.id.slice(1)}`;
+    if (!sensor.name) sensor.name = t('Peatones {n}', { n: sensor.id.slice(1) });
     this.sensors.push(sensor);
     this.emit();
     return sensor;

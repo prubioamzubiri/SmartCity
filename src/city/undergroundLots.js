@@ -1,4 +1,5 @@
 import { demandFactor } from '../traffic/demand.js';
+import { t } from '../i18n/index.js';
 
 export const DEFAULT_UNDERGROUND_CAPACITY = 150;
 
@@ -32,7 +33,7 @@ export function trackableUndergroundLots(list) {
       id: lot.id,
       x: lot.x,
       z: lot.z,
-      name: lot.name || `Parking subterráneo (${lot.id.slice(1).replace('_', ', ')})`,
+      name: lot.name || t('Parking subterráneo ({v})', { v: lot.id.slice(1).replace('_', ', ') }),
       capacity: lot.capacity,
       estimatedCapacity: lot.estimatedCapacity,
       bias: lot.bias,

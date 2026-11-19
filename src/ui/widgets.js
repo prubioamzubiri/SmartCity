@@ -1,4 +1,5 @@
 import { el } from './dom.js';
+import { t } from '../i18n/index.js';
 
 // Piezas de interfaz del panel lateral. Todas devuelven nodos DOM; el estilo está en style.css (prefijo `ui-`).
 
@@ -10,7 +11,7 @@ export const hint = (text) => el('p', { class: 'ui-hint', textContent: text });
 
 // Indicador grande: valor y etiqueta. Devuelve { node, set(value, sub?) }.
 export function stat(label) {
-  const value = el('div', { class: 'ui-stat-value', textContent: '—' });
+  const value = el('div', { class: 'ui-stat-value', textContent: t('—') });
   const sub = el('div', { class: 'ui-stat-sub' });
   const node = el('div', { class: 'ui-stat' }, value, el('div', { class: 'ui-stat-label', textContent: label }), sub);
   return {
@@ -52,8 +53,8 @@ export function stepper({ min, max, step = 1, value = min, onChange, label = '' 
     input.value = next;
     onChange(next);
   };
-  const minus = el('button', { type: 'button', textContent: '−', title: 'Menos', onclick: () => commit(Number(input.value) - step) });
-  const plus = el('button', { type: 'button', textContent: '+', title: 'Más', onclick: () => commit(Number(input.value) + step) });
+  const minus = el('button', { type: 'button', textContent: t('−'), title: t('Menos'), onclick: () => commit(Number(input.value) - step) });
+  const plus = el('button', { type: 'button', textContent: t('+'), title: t('Más'), onclick: () => commit(Number(input.value) + step) });
   input.addEventListener('change', () => commit(Number(input.value) || min));
   const node = el('div', { class: 'ui-stepper' }, minus, input, plus);
   return {

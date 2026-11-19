@@ -1,15 +1,16 @@
 import { CONFIG } from '../config.js';
+import { t } from '../i18n/index.js';
 
 const HOUR = 3600;
 const MINUTE = 60;
 const DAY_HOURS = 24;
 
 export const CONDITIONS = {
-  sunny: { label: 'Soleado', icon: '☀️' },
-  partly_cloudy: { label: 'Parcialmente nublado', icon: '⛅' },
-  cloudy: { label: 'Nublado', icon: '☁️' },
-  rain: { label: 'Lluvia', icon: '🌧️' },
-  heavy_rain: { label: 'Lluvia fuerte', icon: '⛈️' },
+  sunny: { label: t('Soleado'), icon: '☀️' },
+  partly_cloudy: { label: t('Parcialmente nublado'), icon: '⛅' },
+  cloudy: { label: t('Nublado'), icon: '☁️' },
+  rain: { label: t('Lluvia'), icon: '🌧️' },
+  heavy_rain: { label: t('Lluvia fuerte'), icon: '⛈️' },
 };
 
 // Desviación típica de la suma de ruidos de `latent` (medida sobre varios años): la normaliza a 1.

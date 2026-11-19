@@ -1,3 +1,4 @@
+import { t } from './i18n/index.js';
 export const CONFIG = {
   dataUrl: `${import.meta.env?.BASE_URL ?? '/'}data/city.json`,
   municipalDataUrl: `${import.meta.env?.BASE_URL ?? '/'}data/municipal.json`,
@@ -15,12 +16,12 @@ export const CONFIG = {
   holidays: {
     enabled: true,
     fixed: [
-      [1, 1, 'Año Nuevo'], [1, 6, 'Epifanía del Señor'], [1, 20, 'San Sebastián'], [3, 19, 'San José'],
-      [5, 1, 'Día del Trabajo'], [7, 25, 'Santiago Apóstol'], [7, 31, 'San Ignacio de Loyola'], [8, 15, 'Asunción de la Virgen'],
-      [10, 12, 'Fiesta Nacional de España'], [11, 1, 'Todos los Santos'], [12, 6, 'Día de la Constitución'],
-      [12, 8, 'Inmaculada Concepción'], [12, 25, 'Navidad'],
+      [1, 1, t('Año Nuevo')], [1, 6, t('Epifanía del Señor')], [1, 20, t('San Sebastián')], [3, 19, t('San José')],
+      [5, 1, t('Día del Trabajo')], [7, 25, t('Santiago Apóstol')], [7, 31, t('San Ignacio de Loyola')], [8, 15, t('Asunción de la Virgen')],
+      [10, 12, t('Fiesta Nacional de España')], [11, 1, t('Todos los Santos')], [12, 6, t('Día de la Constitución')],
+      [12, 8, t('Inmaculada Concepción')], [12, 25, t('Navidad')],
     ],
-    easter: [[-3, 'Jueves Santo'], [-2, 'Viernes Santo'], [1, 'Lunes de Pascua']],
+    easter: [[-3, t('Jueves Santo')], [-2, t('Viernes Santo')], [1, t('Lunes de Pascua')]],
   },
 
   traffic: {

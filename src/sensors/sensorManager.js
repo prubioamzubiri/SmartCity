@@ -1,5 +1,6 @@
 import { CONFIG } from '../config.js';
 import { simDate } from '../traffic/demand.js';
+import { t } from '../i18n/index.js';
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
@@ -58,7 +59,7 @@ export class SensorManager {
       bucket: bucket ?? { fwd: 0, bwd: 0, speedSum: 0 },
       total: total ?? 0,
     };
-    if (!sensor.name) sensor.name = `Sensor ${sensor.id.slice(1)}`;
+    if (!sensor.name) sensor.name = t('Sensor {n}', { n: sensor.id.slice(1) });
     this.view?.add(sensor);
     this.sensors.push(sensor);
     if (!defer) this.refresh();
