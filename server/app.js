@@ -282,12 +282,13 @@ const DOCS_FILE = new URL('../docs/API.md', import.meta.url);
 export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFile = DOCS_FILE, rawKey = '', faults = createFaults({ config: { enabled: false } }) }) {
   const tokenHash = token ? digest(token) : null;
   const rawKeyHash = rawKey ? digest(rawKey) : null;
-  // ¿Esta petición recibe los datos con fallos? Sí, salvo que traiga la clave de los datos limpios.
-  const faulty = (req) => {
-    if (!faults.enabled) return false;
+  // ¿Trae la petición la clave de los datos limpios?
+  const clean = (req) => {
     const given = req.headers['x-raw-key'];
-    return !(rawKeyHash && typeof given === 'string' && timingSafeEqual(digest(given), rawKeyHash));
+    return Boolean(rawKeyHash && typeof given === 'string' && timingSafeEqual(digest(given), rawKeyHash));
   };
+  // Fallos que se calculan al responder (API en vivo y tiempo): solo con los fallos activados.
+  const faulty = (req) => faults.enabled && !clean(req);
 
   const authorize = (req) => {
     if (!tokenHash) return;
@@ -489,7 +490,7 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
 
     // Registro de los fallos de los sensores (dato real y dato mostrado): solo con la clave de los datos limpios.
     if (method === 'GET' && pathname === '/api/faults.csv') {
-      if (!rawKeyHash || faulty(req)) throw new HttpError(404, 'No encontrado');
+      if (!clean(req)) throw new HttpError(404, 'No encontrado');
       res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="fallos.csv"' });
       await pipeline(Readable.from(csvLines(FAULT_COLUMNS, store.iterate('faults', exportFilters(url)))), res);
       return undefined;
@@ -497,8 +498,8 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
 
     if (method === 'GET' && CSV_EXPORTS[pathname]) {
       const { kind, columns, filename } = CSV_EXPORTS[pathname];
-      const stored = store.iterate(kind, exportFilters(url));
-      const rows = faulty(req) ? withRowFaults(kind, stored) : stored;
+      // Los históricos salen con los fallos que se anotaron al grabarlos (aunque luego cambien las frecuencias).
+      const rows = clean(req) ? store.iterate(kind, exportFilters(url)) : store.iterateShown(kind, exportFilters(url));
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="${filename}.csv"`,

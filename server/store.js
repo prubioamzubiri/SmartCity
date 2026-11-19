@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS fault_records (
   timestamp TEXT NOT NULL, kind TEXT NOT NULL, entity_id TEXT, column_name TEXT NOT NULL, dato_real, dato_mostrado
 );
 CREATE INDEX IF NOT EXISTS fault_time ON fault_records (timestamp);
+CREATE INDEX IF NOT EXISTS fault_kind_time ON fault_records (kind, timestamp);
 `;
 
 // Registro de los fallos de los sensores: por cada dato que se descarga mal, el real y el que se muestra.
@@ -188,6 +189,42 @@ export class Store {
       if (rows.length < batch) return;
       rows = next.all(...args, lastTs, lastRowId, batch);
     }
+  }
+
+  // Como `iterate`, pero con los fallos anotados al grabar cada fila (lo que ven los alumnos). Así, cambiar las
+  // frecuencias de los fallos no cambia los datos ya grabados: lo descargado y el registro siempre coinciden.
+  *iterateShown(kind, filters = {}, batch = 2000) {
+    const { idColumn } = TABLES[kind];
+    const query = this.db.prepare(
+      'SELECT timestamp, entity_id, column_name, dato_mostrado FROM fault_records WHERE kind = ? AND timestamp >= ? AND timestamp <= ?',
+    );
+    const keyOf = (timestamp, entity) => `${timestamp}|${entity ?? ''}`;
+    let rows = [];
+    const shown = function* () {
+      const faults = new Map();
+      for (const f of query.all(kind, rows[0].timestamp, rows[rows.length - 1].timestamp)) {
+        const k = keyOf(f.timestamp, f.entity_id);
+        if (!faults.has(k)) faults.set(k, []);
+        faults.get(k).push(f);
+      }
+      for (const row of rows) {
+        const own = faults.get(keyOf(row.timestamp, idColumn ? row[idColumn] : null));
+        if (!own) {
+          yield row;
+          continue;
+        }
+        if (own.some((f) => f.column_name === '*')) continue; // la fila no llegó
+        const out = { ...row };
+        for (const f of own) out[f.column_name] = f.dato_mostrado;
+        yield out;
+      }
+      rows = [];
+    };
+    for (const row of this.iterate(kind, filters, batch)) {
+      rows.push(row);
+      if (rows.length >= batch) yield* shown();
+    }
+    if (rows.length) yield* shown();
   }
 
   count(kind) {

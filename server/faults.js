@@ -56,6 +56,34 @@ export function absurd(value, u) {
   return round(Math.max(1000 + u * 9000, Math.abs(v) * (20 + u * 180)));
 }
 
+// Ajustes de los fallos desde el entorno (el .env de cada ciudad). Las frecuencias son tantos por uno (0.001 = 0,1 %).
+// Se pueden cambiar con la ciudad en marcha: solo cuentan para los datos que se graben desde entonces.
+//   SENSOR_FAULTS        on / off
+//   SENSOR_FAULT_RATE    filas de un histórico con un dato que falta o es imposible
+//   SENSOR_MISSING_RATE  filas que no llegan
+//   SENSOR_COORD_RATE    filas de un sensor sin una de sus coordenadas
+//   SENSOR_LIVE_RATE     datos de la API en vivo que fallan
+const ENV_RATES = {
+  SENSOR_FAULT_RATE: 'valueRate', SENSOR_MISSING_RATE: 'missingRowRate', SENSOR_COORD_RATE: 'coordRate', SENSOR_LIVE_RATE: 'liveRate',
+};
+export function applyFaultEnv(env = process.env, config = CONFIG.faults) {
+  const applied = {};
+  if (env.SENSOR_FAULTS) {
+    const value = env.SENSOR_FAULTS.trim().toLowerCase();
+    if (!['on', 'off', 'true', 'false', '1', '0'].includes(value)) throw new Error(`SENSOR_FAULTS debe ser on u off: ${env.SENSOR_FAULTS}`);
+    config.enabled = ['on', 'true', '1'].includes(value);
+    applied.enabled = config.enabled;
+  }
+  for (const [name, key] of Object.entries(ENV_RATES)) {
+    if (!env[name]) continue;
+    const rate = Number(env[name]);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 0.5) throw new Error(`${name} debe ser un tanto por uno entre 0 y 0.5 (0.001 = 0,1 %): ${env[name]}`);
+    config[key] = rate;
+    applied[key] = rate;
+  }
+  return applied;
+}
+
 export function createFaults({ seed = CONFIG.sim.seed, config = CONFIG.faults } = {}) {
   const on = Boolean(config?.enabled);
   const key = (...parts) => `${seed}|${parts.join('|')}`;

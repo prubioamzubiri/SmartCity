@@ -13,6 +13,11 @@ services:
       MAX_CARS: ${MAX_CARS:-} # coches en hora punta (vacío = 3400). Los alumnos no lo pueden cambiar
       MAX_PEDESTRIANS: ${MAX_PEDESTRIANS:-} # peatones en hora punta (vacío = 12000)
       RAW_DATA_KEY: ${RAW_DATA_KEY:-} # clave del profesor para los datos sin fallos de los sensores (X-Raw-Key)
+      SENSOR_FAULTS: ${SENSOR_FAULTS:-} # on / off (vacío = config.js)
+      SENSOR_FAULT_RATE: ${SENSOR_FAULT_RATE:-}
+      SENSOR_MISSING_RATE: ${SENSOR_MISSING_RATE:-}
+      SENSOR_COORD_RATE: ${SENSOR_COORD_RATE:-}
+      SENSOR_LIVE_RATE: ${SENSOR_LIVE_RATE:-}
       DB_FILE: /data/smartcity.db
     volumes:
       - sim-data:/data

@@ -100,4 +100,29 @@ test('the server stores the real data, downloads it with faults and logs each fa
   }
   const differing = real.filter((r) => byTime.has(r.timestamp) && JSON.stringify(r) !== JSON.stringify(byTime.get(r.timestamp))).length;
   assert.equal(differing + log.filter((f) => f.column_name === '*').length, new Set(log.map((f) => f.timestamp)).size);
+
+  // Sin fallos desde ahora (SENSOR_FAULTS=off con la ciudad en marcha): lo ya grabado se sigue descargando igual y lo
+  // nuevo llega limpio.
+  const before = await (await get('/api/city.csv')).text();
+  CONFIG.faults.valueRate = 0;
+  CONFIG.faults.missingRowRate = 0;
+  wall += 10 * 60 * 1000;
+  while (!runtime.tick()) { /* recuperación */ }
+  runtime.checkpoint();
+  const after = await (await get('/api/city.csv')).text();
+  assert.ok(after.startsWith(before.trim()), 'lo ya grabado no cambia');
+  const newRows = parse(after).filter((r) => r.timestamp > real[real.length - 1].timestamp);
+  const newReal = parse(await (await get('/api/city.csv', 'profe')).text()).filter((r) => r.timestamp > real[real.length - 1].timestamp);
+  assert.ok(newRows.length > 50);
+  assert.deepEqual(newRows, newReal, 'lo nuevo, sin fallos');
+});
+
+test('sensor faults can be set from the environment', async () => {
+  const { applyFaultEnv } = await import('../server/faults.js');
+  const config = { enabled: true, valueRate: 0.001, missingRowRate: 0.0005, coordRate: 0.001, liveRate: 0.0001 };
+  assert.deepEqual(applyFaultEnv({ SENSOR_FAULTS: 'off', SENSOR_FAULT_RATE: '0.01', SENSOR_LIVE_RATE: '0' }, config), { enabled: false, valueRate: 0.01, liveRate: 0 });
+  assert.deepEqual(config, { enabled: false, valueRate: 0.01, missingRowRate: 0.0005, coordRate: 0.001, liveRate: 0 });
+  assert.deepEqual(applyFaultEnv({}, config), {});
+  assert.throws(() => applyFaultEnv({ SENSOR_FAULTS: 'quizá' }, config), /on u off/);
+  assert.throws(() => applyFaultEnv({ SENSOR_COORD_RATE: '2' }, config), /entre 0 y 0.5/);
 });

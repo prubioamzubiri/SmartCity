@@ -430,7 +430,18 @@ Requests with the header `X-Raw-Key: <RAW_DATA_KEY>` get the data without faults
 (`GET /api/faults.csv`). The teacher's metric and evaluator use it; without `RAW_DATA_KEY`, everybody (also the
 metric) gets the faults. Rates: `valueRate` 0.1 % of the rows, `missingRowRate` 0.05 % and `coordRate` 0.1 % in
 the downloads; `liveRate` 0.01 % of the live values (a manager reads hundreds of them every few seconds).
-`CONFIG.faults.enabled = false` turns them off.
+Each city can change them in its `.env`, as fractions (`0.001` = 0.1 %):
+
+| Variable | Default | |
+| --- | --- | --- |
+| `SENSOR_FAULTS` | `on` | `off` turns the faults off |
+| `SENSOR_FAULT_RATE` | `0.001` | rows of the downloads with a missing or impossible value |
+| `SENSOR_MISSING_RATE` | `0.0005` | rows that never arrive |
+| `SENSOR_COORD_RATE` | `0.001` | rows of a sensor without its `x` or `z` |
+| `SENSOR_LIVE_RATE` | `0.0001` | values of the live API |
+
+They can change with the city running (restart it): the downloads keep the faults logged when each row was recorded,
+so the data already recorded stays the same and the new settings only apply to the rows recorded from then on.
 
 ## Checks
 
