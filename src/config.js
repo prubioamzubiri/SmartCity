@@ -126,8 +126,11 @@ export const CONFIG = {
   },
 
   cars: {
-    max: 3000,
-    initialMax: 2500,
+    max: 4500, // tope de coches a la vez (también con los eventos)
+    // Coches en hora punta por defecto (MAX_CARS). Como los coches eligen ruta con el tráfico de ahora y esquivan los
+    // atascos, hacen falta más que con rutas fijas para que la ciudad se sature en punta como una real: con 2500 iba tan
+    // holgada que los semáforos apenas importaban (el mejor reparto del verde ganaba un 0-5 %; con 3400, un 5-15 %).
+    initialMax: 3400,
     radius: 2.2,
     length: 5,
     minGap: 2,

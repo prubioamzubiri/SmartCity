@@ -128,7 +128,7 @@ simulated minutes, so cars avoid the jams. A car stopped for 120 s gives up and 
 `city.csv` records the trips of each interval: `trips_done`, `trip_min`, `delay_min` (compared with
 the same trip without traffic or closures) and `trips_lost`.
 
-The traffic demand (how many cars are out) is set by the server (`MAX_CARS`) and varies a little at
+The traffic demand (how many cars are out) is set by the server (`MAX_CARS`, 3,400 cars at the peak by default) and varies a little at
 random each day and hour: it cannot be changed, it has to be predicted. What the city manager does
 changes it only indirectly: closed streets and expensive parkings make some people leave the car,
 and a bad bus service puts them in it.
