@@ -386,6 +386,12 @@ export const CONFIG = {
   },
 
   // URL de la API del servidor de simulación (VITE_API_URL en la compilación o la que se escriba en el panel).
+  // Datos con fallos, como los de sensores reales (ver server/faults.js). Tantos por uno: filas de un histórico (o datos
+  // de la API en vivo) con un valor que falta o es imposible (-47 pasajeros, 15230 esperando), filas que no llegan y
+  // sensores sin una de sus coordenadas. Quien envía la cabecera X-Raw-Key con la clave RAW_DATA_KEY del servidor (el
+  // profesor: la métrica y el evaluador) recibe los datos sin fallos.
+  faults: { enabled: true, valueRate: 0.001, missingRowRate: 0.0005, coordRate: 0.001 },
+
   server: {
     url: import.meta.env?.VITE_API_URL ?? '',
     urlKey: 'smartcity.server.url',

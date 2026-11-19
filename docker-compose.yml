@@ -12,6 +12,7 @@ services:
       SCENARIO_SEED: ${SCENARIO_SEED:-} # semilla de esta ciudad (tráfico, tiempo, eventos, demanda). Solo al crear la base de datos
       MAX_CARS: ${MAX_CARS:-} # coches en hora punta (vacío = 3400). Los alumnos no lo pueden cambiar
       MAX_PEDESTRIANS: ${MAX_PEDESTRIANS:-} # peatones en hora punta (vacío = 12000)
+      RAW_DATA_KEY: ${RAW_DATA_KEY:-} # clave del profesor para los datos sin fallos de los sensores (X-Raw-Key)
       DB_FILE: /data/smartcity.db
     volumes:
       - sim-data:/data

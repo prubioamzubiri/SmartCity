@@ -417,6 +417,20 @@ and take the bus, the bike or walk (all at twice the price: 7.5 % fewer cars, at
 to an event look at the parkings around the venue (30 % of them leave the car at twice the price, at
 most half). High prices count as a cost for the citizens (`parking_premium` in `city.csv`).
 
+## Sensor faults
+
+Like real sensors, the data rarely comes out wrong (`server/faults.js`, `CONFIG.faults`): a value missing or impossible
+(`-47` passengers, `15230` people waiting, `-5` bikes), a whole row missing, or a sensor without its `x` or `z`. It
+happens in the CSV downloads and in the live API (only to measurements, never to the manager's settings), so the
+students have to clean their data. The stored records stay correct, and the faults are deterministic (the same row
+always fails the same way). Every fault of the stored records is logged with the real and the shown value
+(`fault_records`: `kind`, `entity_id`, `column_name`, `dato_real`, `dato_mostrado`).
+
+Requests with the header `X-Raw-Key: <RAW_DATA_KEY>` get the data without faults and can download the log
+(`GET /api/faults.csv`). The teacher's metric and evaluator use it; without `RAW_DATA_KEY`, everybody (also the
+metric) gets the faults. Rates: `valueRate` 0.1 % of the rows (or live values), `missingRowRate` 0.05 % and
+`coordRate` 0.1 %; `CONFIG.faults.enabled = false` turns them off.
+
 ## Checks
 
 ```sh
