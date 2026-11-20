@@ -49,7 +49,9 @@ export function createDataTab(ctx) {
     card(cardTitle(t('Descargar CSV')), grid),
     card(cardTitle(t('Desde un programa')),
       hint(t('Todo lo que se hace en este panel se puede hacer también desde un programa con la API: leer el estado, descargar los históricos y cambiar la ciudad.')),
-      el('button', { type: 'button', class: 'ui-button', textContent: t('Abrir la guía de la API'), onclick: () => ctx.openDocs() })));
+      el('div', { class: 'ui-row' },
+        el('button', { type: 'button', class: 'ui-button', textContent: t('Abrir la guía de la API'), onclick: () => ctx.openDocs() }),
+        el('button', { type: 'button', class: 'ui-button', textContent: t('Explorador de la API'), onclick: () => ctx.openDocs('explorer') }))));
 
   return {
     node,

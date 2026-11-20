@@ -52,11 +52,11 @@ export function createHud(deps) {
         return false;
       }
     },
-    openDocs() {
+    openDocs(page = 'docs') {
       try {
         const client = sync.client ?? sync.createClient({ baseUrl: connection.url(), token: '' });
         if (!client.baseUrl) throw new Error(t('Pon la dirección del servidor en Conexión'));
-        window.open(client.docsUrl(), '_blank', 'noopener');
+        window.open(client.docsUrl(page), '_blank', 'noopener');
       } catch (err) {
         toast(err.message, 'error');
       }

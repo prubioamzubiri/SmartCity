@@ -16,6 +16,7 @@ adibide bat, funtzionatzen duena, [`examples/gestor.py`](https://github.com/prub
 | Idazketak (`POST`, `PUT`, `PATCH`, `DELETE`) | `Authorization: Bearer <SMARTCITY_TOKEN>` goiburua, zerbitzariak tokena badu (`.env` fitxategian). Tokenik gabe, edonork idatz dezake |
 | Formatua | JSON (`Content-Type: application/json`). Erroreak: `{"error": "mezua"}`, 400 (datu baliogabeak), 401 (tokena), 403 (ekintza blokeatua), 404, 413 edo 422 kodeekin |
 | Gida hau | Ikustailean: **Konexioa** fitxa edo **Datuak → Ireki APIaren gida**. Zerbitzarian: `GET /api/docs` (web orria) eta `GET /api/docs.md` (Markdown) |
+| Arakatzailea | `GET /api/explorer`: funtzio guztiak haien parametroekin, adibide bat, deitzeko kodea (curl, Python, JavaScript) eta probatzeko botoi bat. `GET /api/openapi.json`: OpenAPI zehaztapena (Swagger UI, Postman…) |
 
 ### Denbora simulatua
 

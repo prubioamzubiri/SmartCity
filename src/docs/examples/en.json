@@ -1,0 +1,881 @@
+{
+ "POST /api/restrictions": {
+  "id": "R1",
+  "mode": "buses_and_pedestrians",
+  "name": "Zona peatonal",
+  "area": {
+   "x": 97.18952990924295,
+   "z": 187.97579999995475,
+   "radius": 60
+  },
+  "ways": null,
+  "limit": null,
+  "since": 25568.25,
+  "edges": 22,
+  "length": 459,
+  "cars": 0,
+  "suspendedLines": []
+ },
+ "POST /api/sensors": {
+  "id": "S1",
+  "name": "Boulevard",
+  "x": 105.54641114780485,
+  "z": 188.62671307764307
+ },
+ "POST /api/pedestrian-sensors": {
+  "id": "P1",
+  "name": "Plaza",
+  "x": 105.54641114780485,
+  "z": 188.62671307764307
+ },
+ "GET /api/state": {
+  "scale": 52.142857142857146,
+  "simSeconds": 25632.5,
+  "simTime": "2026-01-05T07:07:12",
+  "behindSimSeconds": 7,
+  "caughtUp": true,
+  "cars": 3228,
+  "graphKey": "46527:63570",
+  "params": {
+   "maxCars": 3400,
+   "maxPedestrians": 12000,
+   "scenario": "auto"
+  },
+  "lang": "en",
+  "seed": 20260105,
+  "startSeconds": 25200,
+  "writeProtected": false,
+  "restrictions": [
+   {
+    "id": "R1",
+    "mode": "buses_and_pedestrians",
+    "name": "Zona peatonal",
+    "area": {
+     "x": 97.18952990924295,
+     "z": 187.97579999995475,
+     "radius": 60
+    },
+    "ways": null,
+    "limit": null,
+    "since": 25568.25,
+    "edges": 22,
+    "length": 459,
+    "cars": 0,
+    "suspendedLines": []
+   }
+  ],
+  "traffic": {
+   "stopped": 732,
+   "avgKmh": 25.6
+  },
+  "signalPlan": {
+   "default": {
+    "green": 20,
+    "yellow": 3
+   },
+   "signals": {}
+  },
+  "sensors": [
+   {
+    "id": "S1",
+    "name": "Boulevard",
+    "x": 105.5,
+    "z": 188.6,
+    "total": 0,
+    "current": 0
+   }
+  ],
+  "parkings": [
+   {
+    "id": "U-76_534",
+    "name": "Underground car park (-76, 534)",
+    "capacity": 150,
+    "tracked": false,
+    "occupancy": 0.727,
+    "price": 2,
+    "today": {
+     "price": 2,
+     "schedule": []
+    },
+    "tomorrow": null
+   },
+   {
+    "id": "U-125_53",
+    "name": "Parking San Martín",
+    "capacity": 150,
+    "tracked": false,
+    "occupancy": 0.888,
+    "price": 2,
+    "today": {
+     "price": 2,
+     "schedule": []
+    },
+    "tomorrow": null
+   }
+  ],
+  "weather": {
+   "time": "2026-01-05T07:07:12",
+   "temperature_c": 10.6,
+   "rain_mm_h": 0,
+   "cloud_pct": 99,
+   "condition": "cloudy"
+  },
+  "holiday": null,
+  "events": {
+   "boost": 0,
+   "active": []
+  },
+  "pedestrians": {
+   "expected": 9370,
+   "meanWaitSeconds": 7.3,
+   "waitingAtSignals": 96
+  },
+  "pedestrianSensors": [
+   {
+    "id": "P1",
+    "name": "Plaza",
+    "x": 105.5,
+    "z": 188.6,
+    "total": 0,
+    "current": 3
+   }
+  ],
+  "buses": {
+   "fleetTotal": 87,
+   "reserve": 8,
+   "extraDemand": 1.011,
+   "today": {
+    "busHours": 10.5,
+    "includedHours": 10.5,
+    "overtimeHours": 0
+   },
+   "lines": [
+    {
+     "id": "L1",
+     "color": 15079755,
+     "stops": 24,
+     "fleet": 7,
+     "minFleet": 1,
+     "maxFleet": 30,
+     "pending": [],
+     "suspended": false,
+     "tracked": false
+    },
+    {
+     "id": "L2",
+     "color": 3978315,
+     "stops": 16,
+     "fleet": 4,
+     "minFleet": 1,
+     "maxFleet": 30,
+     "pending": [],
+     "suspended": false,
+     "tracked": false
+    }
+   ]
+  },
+  "bikes": {
+   "inUse": 32,
+   "vans": [
+    {
+     "id": "F1",
+     "x": 0,
+     "z": 0,
+     "busy": false,
+     "job": null
+    },
+    {
+     "id": "F2",
+     "x": 0,
+     "z": 0,
+     "busy": false,
+     "job": null
+    }
+   ],
+   "moved": 0,
+   "stations": [
+    {
+     "id": "municipal/0",
+     "name": "Udaletxea",
+     "x": -422.6,
+     "z": -348.8,
+     "capacity": 12,
+     "available": 6,
+     "tracked": false,
+     "estimated": true,
+     "pending": null
+    },
+    {
+     "id": "municipal/1",
+     "name": "Andia",
+     "x": -110.5,
+     "z": -246,
+     "capacity": 12,
+     "available": 7,
+     "tracked": false,
+     "estimated": true,
+     "pending": null
+    }
+   ]
+  },
+  "records": {
+   "traffic": 0,
+   "parking": 0,
+   "pedestrians": 0,
+   "buses": 0,
+   "bikes": 0,
+   "city": 2
+  }
+ },
+ "GET /api/point": {
+  "simSeconds": 25632.5,
+  "time": "2026-01-05T07:07:12",
+  "point": {
+   "x": 97.2,
+   "z": 188
+  },
+  "radius": 200,
+  "cars": {
+   "count": 20,
+   "stopped": 10,
+   "avgKmh": 16.8
+  },
+  "pedestrians": {
+   "count": 77
+  },
+  "buses": {
+   "count": 3,
+   "passengers": 138
+  },
+  "signals": [
+   {
+    "id": 13965274528,
+    "x": 143.7,
+    "z": 98.2,
+    "active": true,
+    "mode": "normal",
+    "state": {
+     "ew": "red",
+     "ns": "green"
+    },
+    "timing": {
+     "greenEw": 20,
+     "greenNs": 20,
+     "yellow": 3,
+     "cycle": 46
+    },
+    "override": null,
+    "approaching": {
+     "ew": 0,
+     "ns": 5
+    },
+    "queue": {
+     "ew": 0,
+     "ns": 0
+    }
+   }
+  ]
+ },
+ "GET /api/cars": {
+  "graphKey": "46527:63570",
+  "simSeconds": 25644.5,
+  "activeCount": 3230,
+  "edge": "N4EAAK5PAAC9kgAAKXoAALlwAADQkQAAf18AALh/…",
+  "pos": "3HErQZ5uDkDr3/0/+jGhQNn9DEI88cc+OMO/QfnV…",
+  "speed": "yodBQO7NOkHN829AAAAAAN0pUkHe0C5BRh0oQZ1x…"
+ },
+ "GET /api/health": {
+  "ok": true
+ },
+ "GET /api/roads": {
+  "point": {
+   "x": 97.2,
+   "z": 188
+  },
+  "radius": 100,
+  "roads": [
+   {
+    "way": 2325,
+    "class": "tertiary",
+    "oneway": true,
+    "length": 391,
+    "edges": 20,
+    "from": {
+     "x": 107.7,
+     "z": 160.8
+    },
+    "to": {
+     "x": 75.4,
+     "z": 550.5
+    },
+    "cars": 0,
+    "distance": 8
+   },
+   {
+    "way": 2352,
+    "class": "residential",
+    "oneway": true,
+    "length": 62,
+    "edges": 3,
+    "from": {
+     "x": 107.7,
+     "z": 160.8
+    },
+    "to": {
+     "x": 52.4,
+     "z": 189.2
+    },
+    "cars": 0,
+    "distance": 19
+   }
+  ]
+ },
+ "GET /api/roads/{way}": {
+  "way": 2325,
+  "class": "tertiary",
+  "oneway": true,
+  "length": 391,
+  "edges": 20,
+  "from": {
+   "x": 107.7,
+   "z": 160.8
+  },
+  "to": {
+   "x": 75.4,
+   "z": 550.5
+  },
+  "cars": 0
+ },
+ "GET /api/signals": {
+  "simSeconds": 25644.5,
+  "modes": [
+   "normal",
+   "off"
+  ],
+  "signals": [
+   {
+    "id": 12343807780,
+    "x": -1968.3,
+    "z": 1508.1,
+    "active": true,
+    "mode": "normal",
+    "state": {
+     "ew": "red",
+     "ns": "green"
+    },
+    "timing": {
+     "greenEw": 20,
+     "greenNs": 20,
+     "yellow": 3,
+     "cycle": 46
+    },
+    "override": null,
+    "approaching": {
+     "ew": 0,
+     "ns": 0
+    },
+    "queue": {
+     "ew": 0,
+     "ns": 0
+    }
+   },
+   {
+    "id": 3372109580,
+    "x": -2007,
+    "z": 1554.5,
+    "active": true,
+    "mode": "normal",
+    "state": {
+     "ew": "green",
+     "ns": "red"
+    },
+    "timing": {
+     "greenEw": 20,
+     "greenNs": 20,
+     "yellow": 3,
+     "cycle": 46
+    },
+    "override": null,
+    "approaching": {
+     "ew": 9,
+     "ns": 13
+    },
+    "queue": {
+     "ew": 7,
+     "ns": 12
+    }
+   }
+  ]
+ },
+ "GET /api/signals/{id}": {
+  "id": 13965274528,
+  "x": 143.7,
+  "z": 98.2,
+  "active": true,
+  "mode": "normal",
+  "state": {
+   "ew": "red",
+   "ns": "green"
+  },
+  "timing": {
+   "greenEw": 20,
+   "greenNs": 20,
+   "yellow": 3,
+   "cycle": 46
+  },
+  "override": null,
+  "approaching": {
+   "ew": 0,
+   "ns": 2
+  },
+  "queue": {
+   "ew": 0,
+   "ns": 0
+  }
+ },
+ "PATCH /api/signals/{id}": {
+  "id": 13965274528,
+  "x": 143.7,
+  "z": 98.2,
+  "active": true,
+  "mode": "normal",
+  "state": {
+   "ew": "red",
+   "ns": "green"
+  },
+  "timing": {
+   "greenEw": 45,
+   "greenNs": 15,
+   "yellow": 3,
+   "cycle": 66
+  },
+  "override": {
+   "mode": "normal",
+   "greenA": 45,
+   "greenB": 15
+  },
+  "approaching": {
+   "ew": 0,
+   "ns": 2
+  },
+  "queue": {
+   "ew": 0,
+   "ns": 0
+  }
+ },
+ "PUT /api/signals/plan": {
+  "default": {
+   "green": 30,
+   "yellow": 3
+  },
+  "signals": {}
+ },
+ "GET /api/restrictions": {
+  "simSeconds": 25653.5,
+  "modes": {
+   "pedestrians_only": "Street closed: pedestrians only (no cars or buses)",
+   "buses_and_pedestrians": "Buses and pedestrians only (cars cannot pass)",
+   "entry_limit": "Restricted-access zone: outside cars onl…"
+  },
+  "restrictions": [
+   {
+    "id": "R1",
+    "mode": "buses_and_pedestrians",
+    "name": "Zona peatonal",
+    "area": {
+     "x": 97.18952990924295,
+     "z": 187.97579999995475,
+     "radius": 60
+    },
+    "ways": null,
+    "limit": null,
+    "since": 25568.25,
+    "edges": 22,
+    "length": 459,
+    "cars": 0,
+    "suspendedLines": []
+   }
+  ]
+ },
+ "GET /api/restrictions/{id}": {
+  "id": "R1",
+  "mode": "buses_and_pedestrians",
+  "name": "Zona peatonal",
+  "area": {
+   "x": 97.18952990924295,
+   "z": 187.97579999995475,
+   "radius": 60
+  },
+  "ways": null,
+  "limit": null,
+  "since": 25568.25,
+  "edges": 22,
+  "length": 459,
+  "cars": 0,
+  "suspendedLines": []
+ },
+ "PATCH /api/restrictions/{id}": {
+  "id": "R1",
+  "mode": "entry_limit",
+  "name": "Zona peatonal",
+  "area": {
+   "x": 97.18952990924295,
+   "z": 187.97579999995475,
+   "radius": 60
+  },
+  "ways": null,
+  "limit": 10,
+  "since": 25568.25,
+  "edges": 22,
+  "length": 459,
+  "cars": 0,
+  "suspendedLines": []
+ },
+ "DELETE /api/restrictions/{id}": {
+  "ok": true
+ },
+ "GET /api/buses": {
+  "graphKey": "46527:63570",
+  "simSeconds": 25686.25,
+  "fleetTotal": 87,
+  "reserve": 8,
+  "deployMinutes": 40,
+  "today": {
+   "busHours": 11.9,
+   "includedHours": 11.9,
+   "overtimeHours": 0
+  },
+  "lines": [
+   {
+    "id": "L1",
+    "stops": 24,
+    "fleet": 7,
+    "target": 7,
+    "pending": [],
+    "minFleet": 1,
+    "maxFleet": 30,
+    "capacity": 80,
+    "suspended": false,
+    "tracked": false,
+    "active": 7,
+    "passengers": 273,
+    "full": 0,
+    "waiting": 148,
+    "leftBehind": 0,
+    "unserved": 0
+   },
+   {
+    "id": "L2",
+    "stops": 16,
+    "fleet": 4,
+    "target": 4,
+    "pending": [],
+    "minFleet": 1,
+    "maxFleet": 30,
+    "capacity": 80,
+    "suspended": false,
+    "tracked": false,
+    "active": 4,
+    "passengers": 144,
+    "full": 0,
+    "waiting": 92,
+    "leftBehind": 0,
+    "unserved": 0
+   }
+  ]
+ },
+ "GET /api/buses/{line}": {
+  "id": "L1",
+  "stops": [
+   {
+    "index": 0,
+    "x": -2037,
+    "z": -85,
+    "turnaround": false
+   },
+   {
+    "index": 1,
+    "x": -1937,
+    "z": 416,
+    "turnaround": false
+   }
+  ],
+  "fleet": 7,
+  "target": 7,
+  "pending": [],
+  "minFleet": 1,
+  "maxFleet": 30,
+  "capacity": 80,
+  "suspended": false,
+  "tracked": false,
+  "active": 7,
+  "passengers": 273,
+  "full": 0,
+  "waiting": 148,
+  "leftBehind": 0,
+  "unserved": 0
+ },
+ "PATCH /api/buses/{line}": {
+  "id": "L1",
+  "stops": 24,
+  "fleet": 7,
+  "target": 12,
+  "pending": [
+   {
+    "count": 5,
+    "readyAt": "2026-01-05T07:48:06"
+   }
+  ],
+  "minFleet": 1,
+  "maxFleet": 30,
+  "capacity": 80,
+  "suspended": false,
+  "tracked": false,
+  "active": 7,
+  "passengers": 273,
+  "full": 0,
+  "waiting": 148,
+  "leftBehind": 0,
+  "unserved": 0,
+  "reserve": 3,
+  "fleetTotal": 87
+ },
+ "PUT /api/buses/tracked": {
+  "tracked": [
+   "L1",
+   "L2"
+  ]
+ },
+ "GET /api/bikes": {
+  "inUse": 32,
+  "vans": [
+   {
+    "id": "F1",
+    "x": 0,
+    "z": 0,
+    "busy": false,
+    "job": null
+   },
+   {
+    "id": "F2",
+    "x": 0,
+    "z": 0,
+    "busy": false,
+    "job": null
+   }
+  ],
+  "moved": 0,
+  "stations": [
+   {
+    "id": "municipal/0",
+    "name": "Udaletxea",
+    "x": -422.6,
+    "z": -348.8,
+    "capacity": 12,
+    "available": 6,
+    "tracked": false,
+    "estimated": true,
+    "pending": null
+   },
+   {
+    "id": "municipal/1",
+    "name": "Andia",
+    "x": -110.5,
+    "z": -246,
+    "capacity": 12,
+    "available": 7,
+    "tracked": false,
+    "estimated": true,
+    "pending": null
+   }
+  ]
+ },
+ "PUT /api/bikes/capacity": {
+  "inUse": 32,
+  "vans": [
+   {
+    "id": "F1",
+    "x": 0,
+    "z": 0,
+    "busy": false,
+    "job": null
+   },
+   {
+    "id": "F2",
+    "x": 0,
+    "z": 0,
+    "busy": false,
+    "job": null
+   }
+  ],
+  "moved": 0,
+  "stations": [
+   {
+    "id": "municipal/0",
+    "name": "Udaletxea",
+    "x": -422.6,
+    "z": -348.8,
+    "capacity": 12,
+    "available": 6,
+    "tracked": false,
+    "estimated": true,
+    "pending": {
+     "capacity": 20,
+     "effectiveAt": 2617702
+    }
+   },
+   {
+    "id": "municipal/1",
+    "name": "Andia",
+    "x": -110.5,
+    "z": -246,
+    "capacity": 12,
+    "available": 7,
+    "tracked": false,
+    "estimated": true,
+    "pending": null
+   }
+  ]
+ },
+ "POST /api/bikes/moves": {
+  "van": "F1",
+  "from": "municipal/3",
+  "to": "municipal/17",
+  "bikes": 15,
+  "loadAt": "2026-01-05T07:27:08",
+  "unloadAt": "2026-01-05T07:43:37"
+ },
+ "PUT /api/bikes/tracked": {
+  "tracked": [
+   "municipal/0",
+   "municipal/1"
+  ]
+ },
+ "PATCH /api/parking/{id}": {
+  "id": "U-125_53",
+  "today": {
+   "price": 2,
+   "schedule": []
+  },
+  "tomorrow": {
+   "price": 2,
+   "schedule": [
+    {
+     "from": "17:00",
+     "to": "22:00",
+     "price": 4
+    }
+   ]
+  },
+  "effectiveAt": "2026-01-06T00:00:00",
+  "occupancy": 0.8897292391643955
+ },
+ "PUT /api/parking/tracked": {
+  "tracked": [
+   "U-125_53"
+  ]
+ },
+ "PATCH /api/sensors/{id}": {
+  "ok": true
+ },
+ "DELETE /api/sensors/{id}": {
+  "ok": true
+ },
+ "PATCH /api/pedestrian-sensors/{id}": {
+  "ok": true
+ },
+ "DELETE /api/pedestrian-sensors/{id}": {
+  "ok": true
+ },
+ "GET /api/pedestrians": {
+  "graphKey": "46527:63570",
+  "simSeconds": 25730.75,
+  "activeCount": 8949,
+  "x": "NqIxxZMMjcSrGPlE2AhiRG8CKsOPINnCATwUxESc…",
+  "z": "buHCREQnPEX+anhFLuaERMkba8MbhSpDhZiqQ5k3…",
+  "heading": "RXfzP6NBxL+8364/QByKv5PxAkAO942/HD2EPjh4…"
+ },
+ "GET /api/weather": {
+  "simSeconds": 25730.75,
+  "current": {
+   "time": "2026-01-05T07:08:50",
+   "temperature_c": 10.6,
+   "rain_mm_h": 0,
+   "cloud_pct": 99,
+   "condition": "cloudy"
+  },
+  "conditions": {
+   "sunny": "Sunny",
+   "partly_cloudy": "Partly cloudy",
+   "cloudy": "Cloudy",
+   "rain": "Rain",
+   "heavy_rain": "Heavy rain"
+  },
+  "forecast": [
+   {
+    "time": "2026-01-05T08:00:00",
+    "lead_h": 1,
+    "temperature_c": 11.3,
+    "rain_probability": 0,
+    "rain_mm_h": 0,
+    "cloud_pct": 100,
+    "condition": "cloudy"
+   },
+   {
+    "time": "2026-01-05T09:00:00",
+    "lead_h": 2,
+    "temperature_c": 11.6,
+    "rain_probability": 0.01,
+    "rain_mm_h": 0,
+    "cloud_pct": 100,
+    "condition": "cloudy"
+   }
+  ]
+ },
+ "GET /api/events": {
+  "simSeconds": 25730.75,
+  "events": [
+   {
+    "id": "2026-001",
+    "type": "fiesta",
+    "name": "Three Kings Parade",
+    "series": null,
+    "venue": "boulevard",
+    "venueName": "Boulevard",
+    "x": -275,
+    "z": -475,
+    "start": "2026-01-05T18:00:00",
+    "end": "2026-01-05T20:30:00",
+    "attendance": null,
+    "extraDemand": null
+   },
+   {
+    "id": "2026-002",
+    "type": "basketball",
+    "name": "Gipuzkoa Basket · home game",
+    "series": null,
+    "venue": "illunbe",
+    "venueName": "Donostia Arena 2016",
+    "x": 1579,
+    "z": 1791,
+    "start": "2026-01-11T12:30:00",
+    "end": "2026-01-11T14:30:00",
+    "attendance": null,
+    "extraDemand": null
+   }
+  ]
+ },
+ "GET /api/holidays": {
+  "simSeconds": 25730.75,
+  "holidays": [
+   {
+    "date": "2026-01-06",
+    "name": "Epiphany"
+   },
+   {
+    "date": "2026-01-20",
+    "name": "Saint Sebastian's Day"
+   }
+  ]
+ }
+}

@@ -16,6 +16,7 @@ Everything here exists and is tested (`test/management.test.js`, `test/server.te
 | Writes (`POST`, `PUT`, `PATCH`, `DELETE`) | Header `Authorization: Bearer <SMARTCITY_TOKEN>` if the server has a token (in `.env`). Without a token, anyone can write |
 | Format | JSON (`Content-Type: application/json`). Errors: `{"error": "message"}` with 400 (invalid data), 401 (token), 403 (blocked action), 404, 413 or 422 |
 | This guide | In the viewer: **Connection** tab or **Data → Open the API guide**. On the server: `GET /api/docs` (web page) and `GET /api/docs.md` (Markdown) |
+| Explorer | `GET /api/explorer`: every function with its parameters, an example, the code to call it (curl, Python, JavaScript) and a button to try it. `GET /api/openapi.json`: the OpenAPI specification (Swagger UI, Postman…) |
 
 ### Simulated time
 

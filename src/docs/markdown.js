@@ -1,4 +1,6 @@
 import { getLang, t } from '../i18n/index.js';
+import { apiReference } from './apiReference.js';
+import { docsNav, NAV_STYLE } from './explorer.js';
 const escapeHtml = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // Solo enlaces web o anclas internas: nada de `javascript:` ni rutas del repositorio que aquí no existen.
@@ -110,8 +112,10 @@ const PAGE_STYLE = `
 export function renderDocsPage(markdown, title = t('API de SmartCity')) {
   return `<!doctype html>
 <html lang="${getLang()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)}</title><style>${PAGE_STYLE}</style></head>
-<body><main>
+<title>${escapeHtml(title)}</title><style>${NAV_STYLE}${PAGE_STYLE}</style></head>
+<body>
+${docsNav(getLang(), 'guide', apiReference(getLang()).ui)}
+<main>
 ${markdownToHtml(markdown)}
 </main></body></html>
 `;

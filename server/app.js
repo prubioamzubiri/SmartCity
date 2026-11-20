@@ -5,6 +5,8 @@ import { holidayCalendar } from '../src/calendar/holidays.js';
 import { simDate } from '../src/traffic/demand.js';
 import { latLonToXZ } from '../src/city/projection.js';
 import { renderDocsPage } from '../src/docs/markdown.js';
+import { renderExplorerPage } from '../src/docs/explorer.js';
+import { openApi } from '../src/docs/apiReference.js';
 import { SIGNAL_MODES } from '../src/traffic/signals.js';
 import { RESTRICTION_MODES, RestrictionError, MAX_RADIUS, describeWay, roadsNear } from '../src/traffic/restrictions.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -60,7 +62,7 @@ const CSV_EXPORTS = {
 const digest = (s) => createHash('sha256').update(s).digest();
 
 // Respuestas sin fallos de sensores: posiciones para dibujar, documentación y calendario.
-const NO_FAULTS = new Set(['/api/cars', '/api/pedestrians', '/api/health', '/api/docs', '/api/docs.md', '/api/events', '/api/holidays']);
+const NO_FAULTS = new Set(['/api/cars', '/api/pedestrians', '/api/health', '/api/docs', '/api/docs.md', '/api/explorer', '/api/openapi.json', '/api/events', '/api/holidays']);
 
 async function readJson(req) {
   let size = 0;
@@ -276,6 +278,19 @@ function simSecondsOf(value) {
   return (Date.parse(full) - CONFIG.sim.baseDate) / 1000;
 }
 
+// Ejemplos de respuesta del explorador (src/docs/examples/<idioma>.json), leídos una vez por idioma.
+const examplesCache = new Map();
+function apiExamples(lang) {
+  if (!examplesCache.has(lang)) {
+    try {
+      examplesCache.set(lang, JSON.parse(readFileSync(new URL(`../src/docs/examples/${lang}.json`, import.meta.url), 'utf8')));
+    } catch {
+      examplesCache.set(lang, {});
+    }
+  }
+  return examplesCache.get(lang);
+}
+
 // Guía de la API en el idioma del servicio (docs/API.md en castellano, API.eu.md, API.en.md).
 const docsFileFor = (lang) => new URL(lang === 'es' ? '../docs/API.md' : `../docs/API.${lang}.md`, import.meta.url);
 
@@ -393,6 +408,17 @@ export function createApp({ runtime, store, token = '', corsOrigin = '*', docsFi
       res.end(page ? renderDocsPage(markdown) : markdown);
       return undefined;
     }
+    // Explorador de la API (como un Swagger UI) y su especificación OpenAPI.
+    if (method === 'GET' && pathname === '/api/explorer') {
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'",
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.end(renderExplorerPage(getLang(), apiExamples(getLang())));
+      return undefined;
+    }
+    if (method === 'GET' && pathname === '/api/openapi.json') return send(200, openApi(getLang()));
     if (method === 'GET' && pathname === '/api/state') return send(200, state());
     if (method === 'GET' && pathname === '/api/cars') {
       const { engine } = runtime;

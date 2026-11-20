@@ -48,7 +48,9 @@ export function createConnectionTab(ctx) {
       status),
     card(cardTitle(t('Ayuda')),
       hint(t('¿Qué puedo cambiar? Restricciones de calles, semáforos, autobuses por línea, anclajes de bicis y qué se registra. Todo también desde un programa con la API.')),
-      button(t('Abrir la guía de la API'), () => ctx.openDocs(), 'ghost')));
+      el('div', { class: 'ui-row' },
+        button(t('Abrir la guía de la API'), () => ctx.openDocs(), 'ghost'),
+        button(t('Explorador de la API'), () => ctx.openDocs('explorer'), 'ghost'))));
 
   return {
     node,
