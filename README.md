@@ -262,6 +262,24 @@ curl -o parkings.csv "http://localhost/api/parking.csv"
 Variables de entorno principales (`SMARTCITY_TOKEN`, `DB_FILE`, `PORT`,
 `CHECKPOINT_SECONDS`, `CORS_ORIGIN`): ver [DEPLOYMENT.md](DEPLOYMENT.md).
 
+## Languages
+
+The service can run in Spanish, Basque or English: set `SMARTCITY_LANG` in `.env` to `es` (default), `eu` or `en`.
+Docker Compose passes it to the simulator and to the viewer. It changes:
+
+- the **viewer** (tabs, messages, calendar, weather, map tooltips): the web container serves `/config.json` with the
+  language (`deploy/nginx.conf.template`) and the viewer reads it before loading the rest. Without that file (`npm run
+  dev`, GitHub Pages) it uses `VITE_LANG` at build time or `es`; `?lang=eu` in the address overrides it;
+- the **API messages** (errors) and the names the simulator makes up (events, holidays, unnamed car parks and stations,
+  default sensor names), and the `weekday` column of the CSV downloads;
+- the **API guide** served at `/api/docs`: `docs/API.md` (Spanish), `docs/API.eu.md` and `docs/API.en.md`.
+
+The data stays the same in every language: JSON fields, CSV columns and codes are not translated, and the records are
+stored in Spanish (the `weekday` column is translated on the way out), so a city can change language with a restart.
+Translations live in `src/i18n/` (`t('Texto en castellano')` looks it up in `eu.js` and `en.js`, falling back to
+Spanish); `test/i18n.test.js` fails if a text of the code has no Basque or English translation. The Basque texts are a
+first translation and should be reviewed by a native speaker.
+
 ## Traffic scenarios
 
 The server picks the demand profile of each day from the simulated UTC date and the holiday calendar of

@@ -17,6 +17,13 @@ server {
     add_header Cache-Control "no-cache";
   }
 
+  # Idioma del visor (SMARTCITY_LANG del .env); la imagen de nginx sustituye la variable al arrancar.
+  location = /config.json {
+    default_type application/json;
+    add_header Cache-Control "no-cache";
+    return 200 '{"lang":"${SMARTCITY_LANG}"}';
+  }
+
   location / {
     add_header Cache-Control "no-cache";
     try_files $uri $uri/ /index.html;

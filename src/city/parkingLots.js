@@ -1,5 +1,6 @@
 import { CONFIG } from '../config.js';
 import { demandFactor } from '../traffic/demand.js';
+import { t } from '../i18n/index.js';
 
 // Parkings subterráneos con estado: coches que llegan, se quedan un rato y se van. Cada parking tiene un precio (€/h)
 // que fija el gestor. Quien va a aparcar elige entre los parkings de su zona (a menos de `nearMeters`) según el
@@ -36,24 +37,24 @@ export class ParkingLots {
   setPrice(id, price, schedule = []) {
     const P = CONFIG.parking;
     const i = this.index.get(id);
-    if (i === undefined) throw new Error(`Parking desconocido: ${id}`);
+    if (i === undefined) throw new Error(t('Parking desconocido: {id}', { id }));
     const check = (p) => {
-      if (!Number.isFinite(p) || p < P.minPrice || p > P.maxPrice) throw new Error(`El precio debe estar entre ${P.minPrice} y ${P.maxPrice} €/h`);
+      if (!Number.isFinite(p) || p < P.minPrice || p > P.maxPrice) throw new Error(t('El precio debe estar entre {minPrice} y {maxPrice} €/h', { minPrice: P.minPrice, maxPrice: P.maxPrice }));
       return Math.round(p * 100) / 100;
     };
     const hour = (text) => {
       const m = /^(\d{1,2}):(\d{2})$/.exec(String(text ?? ''));
       const h = m ? Number(m[1]) + Number(m[2]) / 60 : NaN;
-      if (!(h >= 0 && h <= 24)) throw new Error(`Hora no válida: ${text} (formato HH:MM)`);
+      if (!(h >= 0 && h <= 24)) throw new Error(t('Hora no válida: {text} (formato HH:MM)', { text }));
       return h;
     };
-    if (!Array.isArray(schedule) || schedule.length > P.maxBands) throw new Error(`schedule debe ser una lista de como mucho ${P.maxBands} franjas`);
+    if (!Array.isArray(schedule) || schedule.length > P.maxBands) throw new Error(t('schedule debe ser una lista de como mucho {maxBands} franjas', { maxBands: P.maxBands }));
     const tariff = {
       price: check(price === null || price === undefined ? P.basePrice : price),
       schedule: schedule.map((b) => {
         const from = hour(b.from);
         const to = hour(b.to);
-        if (!(to > from)) throw new Error('Cada franja debe acabar después de empezar (el mismo día)');
+        if (!(to > from)) throw new Error(t('Cada franja debe acabar después de empezar (el mismo día)'));
         return { from, to, price: check(b.price) };
       }),
     };

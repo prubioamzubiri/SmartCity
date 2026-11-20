@@ -1,14 +1,15 @@
 import { el } from '../dom.js';
 import { button, card, cardTitle, empty, hint } from '../widgets.js';
+import { t, locale } from '../../i18n/index.js';
 
 // Sensores virtuales: de tráfico (coches que pasan) y de peatones. Se colocan con un clic en una calle.
 export function createSensorsTab(ctx) {
   let selected = null; // { kind: 'traffic' | 'pedestrian', id }
 
   function group(kind, { title, mode, view, add, rename, remove, emptyText, help }) {
-    const place = button('', () => ctx.setMode(ctx.getMode() === mode ? 'navigate' : mode), 'primary');
+    const place = button(t(''), () => ctx.setMode(ctx.getMode() === mode ? 'navigate' : mode), 'primary');
     const list = el('div', { class: 'ui-stack' });
-    const records = hint('');
+    const records = hint(t(''));
     const rows = new Map();
     let key = null;
     const node = card(cardTitle(title), hint(help), place, list, records);
@@ -25,25 +26,25 @@ export function createSensorsTab(ctx) {
         list.replaceChildren();
         if (!sensors.length) list.append(empty(emptyText));
         for (const s of sensors) {
-          const name = el('input', { type: 'text', value: s.name, maxLength: 60, disabled: !writable, 'aria-label': 'Nombre del sensor', onchange: () => ctx.run((c) => rename(c, s.id, name.value), 'Nombre guardado') });
+          const name = el('input', { type: 'text', value: s.name, maxLength: 60, disabled: !writable, 'aria-label': t('Nombre del sensor'), onchange: () => ctx.run((c) => rename(c, s.id, name.value), t('Nombre guardado')) });
           const count = el('span', { class: 'ui-count' });
-          const del = el('button', { type: 'button', class: 'ui-icon-button', textContent: '✕', disabled: !writable, title: 'Borrar (su histórico se conserva)', onclick: (ev) => {
+          const del = el('button', { type: 'button', class: 'ui-icon-button', textContent: t('✕'), disabled: !writable, title: t('Borrar (su histórico se conserva)'), onclick: (ev) => {
             ev.stopPropagation();
-            ctx.run((c) => remove(c, s.id), `Sensor ${s.id} borrado`);
+            ctx.run((c) => remove(c, s.id), t('Sensor {id} borrado', { id: s.id }));
           } });
           const row = el('div', { class: 'ui-list-row sensor', onclick: () => select(kind, s.id) }, name, count, del);
           rows.set(s.id, { row, count });
           list.append(row);
         }
       }
-      for (const s of sensors) rows.get(s.id).count.textContent = `${s.current} ahora · ${s.total} en total`;
+      for (const s of sensors) rows.get(s.id).count.textContent = t('{current} ahora · {total} en total', { current: s.current, total: s.total });
       for (const [id, r] of rows) r.row.classList.toggle('selected', selected?.kind === kind && selected.id === id);
       place.disabled = !writable;
     }
 
     function tick() {
       const active = ctx.getMode() === mode;
-      place.textContent = active ? 'Haz clic en una calle para colocarlo… (Esc para terminar)' : `Colocar ${kind === 'traffic' ? 'sensor de tráfico' : 'sensor de peatones'}`;
+      place.textContent = active ? t('Haz clic en una calle para colocarlo… (Esc para terminar)') : (kind === 'traffic' ? t('Colocar sensor de tráfico') : t('Colocar sensor de peatones'));
       place.classList.toggle('active', active);
     }
 
@@ -51,16 +52,16 @@ export function createSensorsTab(ctx) {
   }
 
   const traffic = group('traffic', {
-    title: 'Sensores de tráfico', mode: 'sensor', view: ctx.server.view,
+    title: t('Sensores de tráfico'), mode: 'sensor', view: ctx.server.view,
     add: (c, x, z) => c.addSensor(x, z), rename: (c, id, n) => c.renameSensor(id, n), remove: (c, id) => c.removeSensor(id),
-    emptyText: 'Sin sensores de tráfico todavía.',
-    help: 'Cuentan los coches que pasan en cada sentido y su velocidad, cada 5 min simulados (CSV de tráfico).',
+    emptyText: t('Sin sensores de tráfico todavía.'),
+    help: t('Cuentan los coches que pasan en cada sentido y su velocidad, cada 5 min simulados (CSV de tráfico).'),
   });
   const walkers = group('pedestrian', {
-    title: 'Sensores de peatones', mode: 'pedsensor', view: ctx.pedestrianSensors.view,
+    title: t('Sensores de peatones'), mode: 'pedsensor', view: ctx.pedestrianSensors.view,
     add: (c, x, z) => c.addPedestrianSensor(x, z), rename: (c, id, n) => c.renamePedestrianSensor(id, n), remove: (c, id) => c.removePedestrianSensor(id),
-    emptyText: 'Sin sensores de peatones todavía.',
-    help: 'Cuentan los peatones que pasan andando o cruzando, cada 5 min simulados (CSV de peatones).',
+    emptyText: t('Sin sensores de peatones todavía.'),
+    help: t('Cuentan los peatones que pasan andando o cruzando, cada 5 min simulados (CSV de peatones).'),
   });
 
   function select(kind, id) {
@@ -75,17 +76,17 @@ export function createSensorsTab(ctx) {
   }
 
   return {
-    node: el('div', {}, traffic.node, walkers.node, hint('Esc: dejar de colocar · Supr: borrar el sensor seleccionado. El histórico de un sensor borrado se conserva.')),
+    node: el('div', {}, traffic.node, walkers.node, hint(t('Esc: dejar de colocar · Supr: borrar el sensor seleccionado. El histórico de un sensor borrado se conserva.'))),
     selectTraffic: (id) => select('traffic', id),
     selectPedestrian: (id) => select('pedestrian', id),
     removeSelected() {
       if (!selected) return;
       const g = selected.kind === 'traffic' ? traffic : walkers;
-      ctx.run((c) => g.remove(c, selected.id), `Sensor ${selected.id} borrado`);
+      ctx.run((c) => g.remove(c, selected.id), t('Sensor {id} borrado', { id: selected.id }));
     },
     place(mode, x, z) {
       const g = mode === 'sensor' ? traffic : walkers;
-      ctx.run((c) => g.add(c, x, z), 'Sensor colocado');
+      ctx.run((c) => g.add(c, x, z), t('Sensor colocado'));
     },
     clear() {
       for (const g of [traffic, walkers]) for (const id of [...g.view.markers.keys()]) g.view.remove(id);
@@ -93,8 +94,8 @@ export function createSensorsTab(ctx) {
     onState(s) {
       traffic.render(s.sensors, ctx.canWrite());
       walkers.render(s.pedestrianSensors, ctx.canWrite());
-      traffic.records.textContent = `Filas guardadas en el servidor: ${s.records.traffic.toLocaleString('es-ES')}`;
-      walkers.records.textContent = `Filas guardadas en el servidor: ${s.records.pedestrians.toLocaleString('es-ES')}`;
+      traffic.records.textContent = t('Filas guardadas en el servidor: {v}', { v: s.records.traffic.toLocaleString(locale()) });
+      walkers.records.textContent = t('Filas guardadas en el servidor: {v}', { v: s.records.pedestrians.toLocaleString(locale()) });
     },
     update() {
       traffic.tick();

@@ -3,9 +3,8 @@ import { eventCalendar } from '../events/calendar.js';
 import { simDate } from '../traffic/demand.js';
 import { CONFIG } from '../config.js';
 import { holidayCalendar } from '../calendar/holidays.js';
+import { t, locale, dayInitial, monthName, pct } from '../i18n/index.js';
 
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const DAY_MS = 86400000;
 const MAX_DOTS = 4;
 
@@ -15,13 +14,13 @@ const clock = (seconds) => {
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 };
 const dayOf = (seconds) => Math.floor(seconds / 86400);
-const people = (n) => n.toLocaleString('es-ES');
+const people = (n) => n.toLocaleString(locale());
 
 export const DAY_KINDS = {
-  weekday: 'Laborable',
-  preholiday: 'Víspera de festivo: más viajes por la tarde y más gente de ocio por la noche.',
-  weekend: 'Fin de semana (o festivo sin laborable al día siguiente): más movimiento de ocio y compras.',
-  sunday: 'Domingo o festivo con laborable al día siguiente: por la tarde, poco movimiento (cada uno en casa).',
+  weekday: t('Laborable'),
+  preholiday: t('Víspera de festivo: más viajes por la tarde y más gente de ocio por la noche.'),
+  weekend: t('Fin de semana (o festivo sin laborable al día siguiente): más movimiento de ocio y compras.'),
+  sunday: t('Domingo o festivo con laborable al día siguiente: por la tarde, poco movimiento (cada uno en casa).'),
 };
 
 // Las 42 casillas (semanas de lunes a domingo) del mes: `day` es el índice de día simulado, como en el calendario de eventos.
@@ -45,7 +44,7 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
 
   const panel = el('div', { class: 'event-panel' });
   panel.hidden = true;
-  const toggle = el('button', { class: 'event-toggle', textContent: '📅 Calendario de eventos' });
+  const toggle = el('button', { class: 'event-toggle', textContent: t('📅 Calendario de eventos') });
   toggle.setAttribute('aria-expanded', 'false');
   toggle.addEventListener('click', () => {
     open = !open;
@@ -68,7 +67,7 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
     const url = csvUrl?.({ from: first(view.year, view.month), to: first(next.getUTCFullYear(), next.getUTCMonth()) });
     if (url) el('a', { href: url, download: '' }).click();
   };
-  const exportButton = el('button', { class: 'event-export', textContent: '⬇ CSV de este mes', onclick: exportMonth });
+  const exportButton = el('button', { class: 'event-export', textContent: t('⬇ CSV de este mes'), onclick: exportMonth });
 
   const ensureView = () => {
     if (view) return;
@@ -88,16 +87,16 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
     const venue = calendar.venues[event.venue];
     return el('div', { class: 'event-item' },
       el('div', { class: 'event-title' },
-        el('span', { class: 'event-icon', textContent: type.icon, title: type.label }),
+        el('span', { class: 'event-icon', textContent: type.icon, title: t(type.label) }),
         el('strong', { textContent: event.name })),
-      el('div', { class: 'status', textContent: `${clock(event.start)}–${clock(event.end)} · ${venue.name}` }),
+      el('div', { class: 'status', textContent: t('{v}–{v2} · {name}', { v: clock(event.start), v2: clock(event.end), name: venue.name }) }),
       el('div', {
         class: 'status',
         textContent: event.end <= nowSeconds
-          ? `${people(event.attendance)} asistentes · +${(event.boost * 100).toFixed(0)} % de demanda`
-          : 'Asistentes: se conocen cuando termina el evento',
+          ? t('{v} asistentes · {v2} de demanda', { v: people(event.attendance), v2: pct(`+${(event.boost * 100).toFixed(0)}`) })
+          : t('Asistentes: se conocen cuando termina el evento'),
       }),
-      el('button', { textContent: 'Ver en el mapa', onclick: () => focus?.(venue.x, venue.z) }));
+      el('button', { textContent: t('Ver en el mapa'), onclick: () => focus?.(venue.x, venue.z) }));
   }
 
   function render(force = false) {
@@ -123,14 +122,14 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
     }
 
     const holidayOf = (day) => (CONFIG.holidays.enabled ? holidays.holidayAt(day * 86400 + 43200) : null);
-    const grid = el('div', { class: 'event-grid' }, ...WEEKDAYS.map((w) => el('div', { class: 'event-weekday', textContent: w })));
+    const grid = el('div', { class: 'event-grid' }, ...[1, 2, 3, 4, 5, 6, 0].map((i) => el('div', { class: 'event-weekday', textContent: dayInitial(i) })));
     for (const cell of cells) {
       const events = byDay.get(cell.day) ?? [];
       const types = [...new Set(events.map((e) => e.type))].slice(0, MAX_DOTS);
       const holiday = holidayOf(cell.day);
       const button = el('button', {
         class: `event-day${cell.inMonth ? '' : ' outside'}${cell.day === today ? ' today' : ''}${cell.day === selectedDay ? ' selected' : ''}${holiday ? ' holiday' : ''}`,
-        title: [holiday ? `Festivo: ${holiday}` : '', ...events.map((e) => e.name)].filter(Boolean).join('\n'),
+        title: [holiday ? t('Festivo: {holiday}', { holiday }) : '', ...events.map((e) => e.name)].filter(Boolean).join('\n'),
         onclick: () => {
           selectedDay = cell.day;
           render(true);
@@ -142,31 +141,31 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
 
     const sections = [];
     if (active.length) {
-      sections.push(el('h4', { textContent: 'En curso ahora' }),
-        ...active.map(({ event, intensity }) => el('div', { class: 'status', textContent: `${calendar.types[event.type].icon} ${event.name} · ${calendar.venues[event.venue].name} · efecto ${(intensity * 100).toFixed(0)} %` })));
+      sections.push(el('h4', { textContent: t('En curso ahora') }),
+        ...active.map(({ event, intensity }) => el('div', { class: 'status', textContent: t('{v} {name} · {v2} · efecto {v3}', { v: calendar.types[event.type].icon, name: event.name, v2: calendar.venues[event.venue].name, v3: pct(Math.round(intensity * 100)) }) })));
     }
     if (selectedDay !== null) {
       const d = new Date(CONFIG.sim.baseDate + selectedDay * DAY_MS);
-      sections.push(el('h4', { textContent: `${d.getUTCDate()} de ${MONTHS[d.getUTCMonth()]}` }));
+      sections.push(el('h4', { textContent: t('{day} de {month}', { day: d.getUTCDate(), month: monthName(d.getUTCMonth()) }) }));
       if (CONFIG.holidays.enabled) {
         const holiday = holidayOf(selectedDay);
-        if (holiday) sections.push(el('div', { class: 'event-holiday', textContent: `🔴 Festivo: ${holiday}` }));
+        if (holiday) sections.push(el('div', { class: 'event-holiday', textContent: t('🔴 Festivo: {holiday}', { holiday }) }));
         sections.push(el('div', { class: 'status', textContent: DAY_KINDS[holidays.kindAt(selectedDay * 86400 + 43200)] }));
       }
-      sections.push(...(dayEvents.length ? dayEvents.map(eventItem) : [el('div', { class: 'status', textContent: 'Sin eventos este día.' })]));
+      sections.push(...(dayEvents.length ? dayEvents.map(eventItem) : [el('div', { class: 'status', textContent: t('Sin eventos este día.') })]));
     }
 
-    const legend = el('div', { class: 'legend' }, ...Object.values(calendar.types).map((t) =>
-      el('span', {}, el('i', { style: `background:${t.color}` }), `${t.icon} ${t.label}`)),
-    ...(CONFIG.holidays.enabled ? [el('span', {}, el('i', { class: 'holiday-key' }), '🔴 Festivo')] : []));
+    const legend = el('div', { class: 'legend' }, ...Object.values(calendar.types).map((type) =>
+      el('span', {}, el('i', { style: `background:${type.color}` }), `${type.icon} ${t(type.label)}`)),
+    ...(CONFIG.holidays.enabled ? [el('span', {}, el('i', { class: 'holiday-key' }), t('🔴 Festivo'))] : []));
 
     panel.replaceChildren(
       el('div', { class: 'event-head' },
-        el('button', { textContent: '◀', title: 'Mes anterior', onclick: () => shift(-1) }),
-        el('strong', { textContent: `${MONTHS[view.month]} ${view.year}` }),
-        el('button', { textContent: '▶', title: 'Mes siguiente', onclick: () => shift(1) }),
+        el('button', { textContent: t('◀'), title: t('Mes anterior'), onclick: () => shift(-1) }),
+        el('strong', { textContent: t('{month} de {year}', { month: monthName(view.month), year: view.year }) }),
+        el('button', { textContent: t('▶'), title: t('Mes siguiente'), onclick: () => shift(1) }),
         el('button', {
-          textContent: 'Hoy',
+          textContent: t('Hoy'),
           onclick: () => {
             view = null;
             ensureView();
@@ -174,10 +173,10 @@ export function createEventCalendarPanel({ bar, host, focus, csvUrl, calendar = 
           },
         })),
       grid, legend, el('div', { class: 'event-detail' }, ...sections),
-      el('div', { class: 'status', textContent: 'Exporta los eventos del mes; la asistencia queda vacía hasta que el evento termina.' }),
+      el('div', { class: 'status', textContent: t('Exporta los eventos del mes; la asistencia queda vacía hasta que el evento termina.') }),
       exportButton,
       el('a', {
-        class: 'event-docs', textContent: '📖 Documentación de la API (eventos y datos)',
+        class: 'event-docs', textContent: t('📖 Documentación de la API (eventos y datos)'),
         href: CONFIG.events.docsUrl, target: '_blank', rel: 'noopener noreferrer',
       }));
   }

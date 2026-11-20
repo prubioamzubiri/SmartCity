@@ -1,5 +1,6 @@
 import { CONFIG } from '../config.js';
 import { createRng } from '../core/random.js';
+import { t } from '../i18n/index.js';
 
 const HOUR = 3600;
 const DAY = 86400;
@@ -39,8 +40,8 @@ function pickWeighted(rng, weights) {
 }
 
 const PROTEST_TOPICS = [
-  'por la vivienda', 'por las pensiones', 'por la sanidad pública', 'por el clima', 'contra la subida de precios',
-  'por la educación pública', 'por la movilidad sostenible', 'por los derechos laborales',
+  t('por la vivienda'), t('por las pensiones'), t('por la sanidad pública'), t('por el clima'), t('contra la subida de precios'),
+  t('por la educación pública'), t('por la movilidad sostenible'), t('por los derechos laborales'),
 ];
 const CONCERT_MONTHS = [0.3, 0.3, 0.5, 0.7, 1, 1.5, 2, 1.5, 1, 0.8, 0.6, 0.4];
 // Conciertos al año: sede, cuántos, mínimo de asistentes y margen sobre el mínimo.
@@ -81,18 +82,18 @@ export function createEventCalendar(config = CONFIG.events, baseDate = CONFIG.si
     const atMs = (ms, h) => (ms - baseDate) / 1000 + h * HOUR; // `ms` es medianoche UTC de un día
 
     // Fiestas fijas
-    add('fiesta', 'Cabalgata de Reyes', 'boulevard', at(0, 5, 18), 30000, { hours: 2.5 });
-    add('fiesta', 'Tamborrada · izado de bandera', 'constitucion', at(0, 19, 23, 30), 20000, { hours: 1.5, series: 'tamborrada' });
-    add('fiesta', 'Tamborrada infantil', 'constitucion', at(0, 20, 12), 12000, { hours: 2, series: 'tamborrada' });
-    add('fiesta', 'Tamborrada', 'constitucion', at(0, 20, 18), 20000, { hours: 5, series: 'tamborrada' });
-    add('fiesta', 'Feria de Santo Tomás', 'constitucion', at(11, 21, 10), 30000, { hours: 10 });
+    add('fiesta', t('Cabalgata de Reyes'), 'boulevard', at(0, 5, 18), 30000, { hours: 2.5 });
+    add('fiesta', t('Tamborrada · izado de bandera'), 'constitucion', at(0, 19, 23, 30), 20000, { hours: 1.5, series: 'tamborrada' });
+    add('fiesta', t('Tamborrada infantil'), 'constitucion', at(0, 20, 12), 12000, { hours: 2, series: 'tamborrada' });
+    add('fiesta', t('Tamborrada'), 'constitucion', at(0, 20, 18), 20000, { hours: 5, series: 'tamborrada' });
+    add('fiesta', t('Feria de Santo Tomás'), 'constitucion', at(11, 21, 10), 30000, { hours: 10 });
 
     // Semana Grande: ocho días desde el sábado anterior al 15 de agosto, con fuegos artificiales casi todas las noches
     const grandWeek = onOrBefore(Date.UTC(year, 7, 14), SATURDAY);
     for (let k = 0; k < 8; k++) {
       const day = grandWeek + k * DAY_MS;
-      add('fiesta', 'Semana Grande', 'alderdi', atMs(day, 12), 25000, { hours: 8, series: 'semana-grande' });
-      if (k >= 1 && k <= 6) add('fiesta', 'Concurso de fuegos artificiales', 'concha', atMs(day, 23), 70000, { hours: 1, series: 'semana-grande' });
+      add('fiesta', t('Semana Grande'), 'alderdi', atMs(day, 12), 25000, { hours: 8, series: 'semana-grande' });
+      if (k >= 1 && k <= 6) add('fiesta', t('Concurso de fuegos artificiales'), 'concha', atMs(day, 23), 70000, { hours: 1, series: 'semana-grande' });
     }
 
     // Jazzaldia: de miércoles a domingo, terminando el último domingo de julio
@@ -106,7 +107,7 @@ export function createEventCalendar(config = CONFIG.events, baseDate = CONFIG.si
     const filmStart = onOrAfter(Date.UTC(year, 8, 18), FRIDAY);
     const filmRng = rngFor(2);
     for (let k = 0; k < 9; k++) {
-      const name = k === 0 ? 'Festival de Cine · gala inaugural' : k === 8 ? 'Festival de Cine · gala de clausura' : 'Festival de Cine';
+      const name = k === 0 ? t('Festival de Cine · gala inaugural') : k === 8 ? t('Festival de Cine · gala de clausura') : t('Festival de Cine');
       const attendance = k === 0 || k === 8 ? 9000 : 5000 + filmRng() * 2000;
       add('film', name, 'kursaal', atMs(filmStart + k * DAY_MS, 16), attendance, { series: 'festival-cine' });
     }
@@ -120,7 +121,7 @@ export function createEventCalendar(config = CONFIG.events, baseDate = CONFIG.si
     for (const base of matchDays) {
       const weekday = pick(footballRng, [SATURDAY, SATURDAY, SUNDAY, SUNDAY, FRIDAY, MONDAY]);
       const times = weekday === SATURDAY ? [16, 18.5, 21] : weekday === SUNDAY ? [14, 16.25, 18.5, 21] : [21];
-      add('football', 'Real Sociedad · partido en casa', 'anoeta', atMs(snapToWeekday(base, weekday), pick(footballRng, times)), 30000 + footballRng() * 8000);
+      add('football', t('Real Sociedad · partido en casa'), 'anoeta', atMs(snapToWeekday(base, weekday), pick(footballRng, times)), 30000 + footballRng() * 8000);
     }
 
     // Baloncesto: partidos en casa del Gipuzkoa Basket
@@ -131,7 +132,7 @@ export function createEventCalendar(config = CONFIG.events, baseDate = CONFIG.si
     ];
     for (const base of gameDays) {
       const weekday = pick(basketRng, [SATURDAY, SUNDAY, SUNDAY]);
-      add('basketball', 'Gipuzkoa Basket · partido en casa', 'illunbe', atMs(snapToWeekday(base, weekday), pick(basketRng, [12.5, 18, 20])), 5000 + basketRng() * 4000);
+      add('basketball', t('Gipuzkoa Basket · partido en casa'), 'illunbe', atMs(snapToWeekday(base, weekday), pick(basketRng, [12.5, 18, 20])), 5000 + basketRng() * 4000);
     }
 
     // Conciertos: más en verano; los de Anoeta, en junio y julio
@@ -141,18 +142,18 @@ export function createEventCalendar(config = CONFIG.events, baseDate = CONFIG.si
         const month = venue === 'anoeta' ? 5 + Math.floor(concertRng() * 2) : pickWeighted(concertRng, CONCERT_MONTHS);
         const weekday = pick(concertRng, [FRIDAY, FRIDAY, SATURDAY, SATURDAY, SATURDAY, 4]);
         const day = snapToWeekday(Date.UTC(year, month, 1 + Math.floor(concertRng() * 27)), weekday);
-        add('concert', `Concierto · ${venues[venue].name}`, venue, atMs(day, venue === 'anoeta' ? 21.5 : 21), minimum + concertRng() * margin);
+        add('concert', t('Concierto · {venue}', { venue: venues[venue].name }), venue, atMs(day, venue === 'anoeta' ? 21.5 : 21), minimum + concertRng() * margin);
       }
     }
 
     // Manifestaciones: dos fijas y otras repartidas por el año
     const protestRng = rngFor(6);
-    add('protest', 'Manifestación 8M · Día de la Mujer', 'boulevard', at(2, 8, 19), 15000);
-    add('protest', 'Manifestación 1 de Mayo', 'boulevard', at(4, 1, 12), 9000);
+    add('protest', t('Manifestación 8M · Día de la Mujer'), 'boulevard', at(2, 8, 19), 15000);
+    add('protest', t('Manifestación 1 de Mayo'), 'boulevard', at(4, 1, 12), 9000);
     for (let k = 0; k < 22; k++) {
       const saturday = protestRng() < 0.5;
       const day = snapToWeekday(Date.UTC(year, 0, 1 + Math.floor(protestRng() * 360)), saturday ? SATURDAY : pick(protestRng, [2, 3, 4]));
-      add('protest', `Manifestación ${pick(protestRng, PROTEST_TOPICS)}`, pick(protestRng, ['boulevard', 'alderdi', 'constitucion']),
+      add('protest', t('Manifestación {v}', { v: pick(protestRng, PROTEST_TOPICS) }), pick(protestRng, ['boulevard', 'alderdi', 'constitucion']),
         atMs(day, saturday ? 12 : 19), 500 + protestRng() ** 2 * 7000);
     }
 

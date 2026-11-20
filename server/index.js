@@ -1,4 +1,5 @@
-// Primero el escenario: fija las semillas antes de que se carguen el motor, el tiempo y los eventos.
+// Primero el idioma y el escenario: fijan el idioma y las semillas antes de que se carguen el motor, el tiempo y los eventos.
+import { lang } from './lang.js';
 import { scenario } from './scenario.js';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -77,7 +78,7 @@ if (CONFIG.faults.enabled && !env.RAW_DATA_KEY) {
 const server = http.createServer(createApp({
   runtime, store, token: env.SMARTCITY_TOKEN, corsOrigin: env.CORS_ORIGIN ?? '*', rawKey: env.RAW_DATA_KEY ?? '', faults,
 }));
-server.listen(port, () => log(`API en http://localhost:${port} · escala ×${runtime.scale.toFixed(2)} · ${JSON.stringify(runtime.status())}`));
+server.listen(port, () => log(`API en http://localhost:${port} · idioma ${lang} · escala ×${runtime.scale.toFixed(2)} · ${JSON.stringify(runtime.status())}`));
 
 const loop = runtime.start();
 

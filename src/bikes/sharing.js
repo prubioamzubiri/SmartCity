@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 const DEFAULT_CAPACITY = 12;
 
 export function municipalBikeStations(stations = []) {
@@ -6,7 +7,7 @@ export function municipalBikeStations(stations = []) {
     .map((station) => ({
       id: `municipal/${station.id}`,
       source: 'municipal',
-      name: station.name || `Estación Dbizi ${station.id}`,
+      name: station.name || t('Estación Dbizi {id}', { id: station.id }),
       x: station.x,
       z: station.z,
       capacity: DEFAULT_CAPACITY,

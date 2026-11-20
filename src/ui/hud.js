@@ -12,15 +12,14 @@ import { createParkingsTab } from './tabs/parkings.js';
 import { createSensorsTab } from './tabs/sensors.js';
 import { createDataTab } from './tabs/data.js';
 import { createConnectionTab } from './tabs/connection.js';
+import { t, longDate } from '../i18n/index.js';
 
-const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
 // Mensaje de error comprensible para un fallo de la API.
 function explain(err) {
-  if (err.status === 401) return 'El servidor pide un token válido para cambiar la ciudad: ponlo en Conexión.';
+  if (err.status === 401) return t('El servidor pide un token válido para cambiar la ciudad: ponlo en Conexión.');
   if (err.status === 403) return err.message;
-  if (err.name === 'TimeoutError' || err instanceof TypeError) return 'Sin conexión con el servidor.';
+  if (err.name === 'TimeoutError' || err instanceof TypeError) return t('Sin conexión con el servidor.');
   return err.message;
 }
 
@@ -56,7 +55,7 @@ export function createHud(deps) {
     openDocs() {
       try {
         const client = sync.client ?? sync.createClient({ baseUrl: connection.url(), token: '' });
-        if (!client.baseUrl) throw new Error('Pon la dirección del servidor en Conexión');
+        if (!client.baseUrl) throw new Error(t('Pon la dirección del servidor en Conexión'));
         window.open(client.docsUrl(), '_blank', 'noopener');
       } catch (err) {
         toast(err.message, 'error');
@@ -68,7 +67,7 @@ export function createHud(deps) {
   const clock = el('div', { class: 'ui-clock' });
   const clockSub = el('div', { class: 'ui-clock-sub' });
   const pills = el('div', { class: 'ui-pills' });
-  shell.header.append(el('div', { class: 'ui-brand', textContent: 'SmartCity Donostia' }), clock, clockSub, pills);
+  shell.header.append(el('div', { class: 'ui-brand', textContent: t('SmartCity Donostia') }), clock, clockSub, pills);
 
   const overview = createOverviewTab(ctx);
   const signalsTab = createSignalsTab(ctx);
@@ -81,22 +80,22 @@ export function createHud(deps) {
   const connection = createConnectionTab(ctx);
   const tabs = [overview, signalsTab, restrictions, buses, bikesTab, parkings, sensors, data];
 
-  shell.addTab('overview', { icon: '🏙️', label: 'Resumen', node: overview.node });
-  shell.addTab('signals', { icon: '🚦', label: 'Semáforos', node: signalsTab.node });
-  shell.addTab('restrictions', { icon: '🚧', label: 'Restricciones', short: 'Cortes', node: restrictions.node, onShow: () => restrictions.refresh() });
-  shell.addTab('buses', { icon: '🚌', label: 'Autobuses', node: buses.node });
-  shell.addTab('bikes', { icon: '🚲', label: 'Bicis', node: bikesTab.node });
-  shell.addTab('parkings', { icon: '🅿️', label: 'Parkings', node: parkings.node });
-  shell.addTab('sensors', { icon: '📍', label: 'Sensores', node: sensors.node });
-  shell.addTab('data', { icon: '📥', label: 'Datos', node: data.node });
-  shell.addTab('connection', { icon: '🔌', label: 'Conexión', node: connection.node });
+  shell.addTab('overview', { icon: '🏙️', label: t('Resumen'), node: overview.node });
+  shell.addTab('signals', { icon: '🚦', label: t('Semáforos'), node: signalsTab.node });
+  shell.addTab('restrictions', { icon: '🚧', label: t('Restricciones'), short: t('Cortes'), node: restrictions.node, onShow: () => restrictions.refresh() });
+  shell.addTab('buses', { icon: '🚌', label: t('Autobuses'), node: buses.node });
+  shell.addTab('bikes', { icon: '🚲', label: t('Bicis'), node: bikesTab.node });
+  shell.addTab('parkings', { icon: '🅿️', label: t('Parkings'), node: parkings.node });
+  shell.addTab('sensors', { icon: '📍', label: t('Sensores'), node: sensors.node });
+  shell.addTab('data', { icon: '📥', label: t('Datos'), node: data.node });
+  shell.addTab('connection', { icon: '🔌', label: t('Conexión'), node: connection.node });
 
   function renderPills() {
     const items = [];
-    if (!state) items.push(['Sin conexión', 'danger']);
+    if (!state) items.push([t('Sin conexión'), 'danger']);
     else {
-      items.push(state.caughtUp ? ['Conectado', 'ok'] : [`Recuperando ${Math.round(state.behindSimSeconds / 3600)} h`, 'warn']);
-      if (!ctx.canWrite()) items.push(['Solo lectura', 'warn']);
+      items.push(state.caughtUp ? [t('Conectado'), 'ok'] : [t('Recuperando {v} h', { v: Math.round(state.behindSimSeconds / 3600) }), 'warn']);
+      if (!ctx.canWrite()) items.push([t('Solo lectura'), 'warn']);
     }
     pills.replaceChildren(...items.map(([text, kind]) => el('span', { class: `ui-pill ${kind}`, textContent: text })));
     shell.flag('connection', !state || !ctx.canWrite(), state ? 'warn' : 'danger');
@@ -108,14 +107,14 @@ export function createHud(deps) {
     // La semilla de la ciudad decide la variación de la demanda: el visor usa la del servidor (peatones incluidos).
     if (Number.isInteger(s.seed)) CONFIG.sim.seed = s.seed;
     signals.setPlan(s.signalPlan);
-    if (s.graphKey !== deps.localGraphKey) connection.setStatus('El servidor simula otra ciudad distinta a la del visor: los coches no se dibujan.', 'error');
-    else connection.setStatus(s.caughtUp ? 'Conectado y al día.' : `Conectado · recuperando ${Math.round(s.behindSimSeconds / 3600)} h simuladas tras una parada.`, 'ok');
+    if (s.graphKey !== deps.localGraphKey) connection.setStatus(t('El servidor simula otra ciudad distinta a la del visor: los coches no se dibujan.'), 'error');
+    else connection.setStatus(s.caughtUp ? t('Conectado y al día.') : t('Conectado · recuperando {v} h simuladas tras una parada.', { v: Math.round(s.behindSimSeconds / 3600) }), 'ok');
     for (const tab of tabs) tab.onState?.(s);
     renderPills();
-    if (first && !ctx.canWrite()) toast('Modo solo lectura: para cambiar la ciudad pon el token en Conexión.', 'info', 6000);
+    if (first && !ctx.canWrite()) toast(t('Modo solo lectura: para cambiar la ciudad pon el token en Conexión.'), 'info', 6000);
   });
   sync.on('error', (err) => {
-    connection.setStatus(`Sin conexión: ${err.message}`, 'error');
+    connection.setStatus(t('Sin conexión: {message}', { message: err.message }), 'error');
   });
   sync.on('disconnect', () => {
     state = null;
@@ -123,7 +122,7 @@ export function createHud(deps) {
     data.onDisconnect();
     restrictionView.update([]);
     if (['sensor', 'pedsensor', 'restriction'].includes(getMode())) ctx.setMode('navigate');
-    connection.setStatus('Desconectado.');
+    connection.setStatus(t('Desconectado.'));
     renderPills();
   });
 
@@ -156,18 +155,18 @@ export function createHud(deps) {
       last = now;
       sensors.update();
       buses.update();
-      const t = sync.simTime();
-      if (t === null || !state) {
+      const simNow = sync.simTime();
+      if (simNow === null || !state) {
         clock.textContent = '--:--';
-        clockSub.textContent = 'Sin conexión con el servidor';
+        clockSub.textContent = t('Sin conexión con el servidor');
         return;
       }
-      const d = simDate(t);
+      const d = simDate(simNow);
       const hh = String(d.getUTCHours()).padStart(2, '0');
       const mm = String(d.getUTCMinutes()).padStart(2, '0');
       clock.textContent = `${hh}:${mm}`;
-      clockSub.textContent = `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} de ${MONTHS[d.getUTCMonth()]} de ${d.getUTCFullYear()} · ×${Math.round(state.scale)}`;
-      if (shell.current() === 'overview') overview.update(state, t);
+      clockSub.textContent = `${longDate(d)} · ×${Math.round(state.scale)}`;
+      if (shell.current() === 'overview') overview.update(state, simNow);
     },
   };
 }

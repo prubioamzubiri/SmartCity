@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 const TIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/;
 
 export function normalizeBaseUrl(value) {
@@ -5,14 +6,14 @@ export function normalizeBaseUrl(value) {
   if (!text) return '';
   // Una ruta como "/" se resuelve contra el origen de la página (visor y API tras el mismo proxy).
   const url = new URL(text, globalThis.location?.origin);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('La URL debe empezar por http:// o https://');
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error(t('La URL debe empezar por http:// o https://'));
   return url.origin + url.pathname.replace(/\/+$/, '');
 }
 
 // El servidor trata `to` como límite exclusivo: para incluir el último día completo se usa el día siguiente.
 export function nextDay(date) {
   const d = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) throw new Error('Fecha no válida');
+  if (Number.isNaN(d.getTime())) throw new Error(t('Fecha no válida'));
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
 }
@@ -148,11 +149,11 @@ export class ApiClient {
 
   // URL de descarga directa: el navegador hace streaming del CSV sin cargarlo en memoria.
   csvUrl(kind, { from, to, id, type } = {}) {
-    if (!['traffic', 'parking', 'pedestrians', 'buses', 'bikes', 'events', 'weather', 'city'].includes(kind)) throw new Error('Tipo de CSV desconocido');
+    if (!['traffic', 'parking', 'pedestrians', 'buses', 'bikes', 'events', 'weather', 'city'].includes(kind)) throw new Error(t('Tipo de CSV desconocido'));
     const query = new URLSearchParams();
     for (const [key, value] of [['from', from], ['to', to]]) {
       if (!value) continue;
-      if (!TIME_RE.test(value)) throw new Error(`${key} debe ser una fecha AAAA-MM-DD`);
+      if (!TIME_RE.test(value)) throw new Error(t('{key} debe ser una fecha AAAA-MM-DD', { key }));
       query.set(key, value);
     }
     if (id) query.set('id', id);

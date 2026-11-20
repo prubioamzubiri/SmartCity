@@ -1,4 +1,5 @@
 import { el } from './dom.js';
+import { t } from '../i18n/index.js';
 
 const TAB_KEY = 'smartcity.ui.tab';
 const read = () => {
@@ -22,7 +23,7 @@ const write = (value) => {
  * Pulsar el icono de la sección abierta cierra el panel (más mapa). La sección abierta se recuerda.
  */
 export function createShell() {
-  const rail = el('nav', { class: 'ui-rail', 'aria-label': 'Secciones' });
+  const rail = el('nav', { class: 'ui-rail', 'aria-label': t('Secciones') });
   const header = el('div', { class: 'ui-header' });
   const body = el('div', { class: 'ui-body' });
   const title = el('h2', { class: 'ui-section-title' });
