@@ -16,6 +16,7 @@ ejemplo funcional está en [`examples/gestor.py`](https://github.com/prubioamzub
 | Escrituras (`POST`, `PUT`, `PATCH`, `DELETE`) | Cabecera `Authorization: Bearer <SMARTCITY_TOKEN>` si el servidor tiene token (en `.env`). Sin token configurado, cualquiera puede escribir |
 | Formato | JSON (`Content-Type: application/json`). Errores: `{"error": "mensaje"}` con 400 (datos no válidos), 401 (token), 403 (acción bloqueada), 404, 413 o 422 |
 | Esta guía | En el visor: pestaña **Conexión** o **Datos → Abrir la guía de la API**. En el servidor: `GET /api/docs` (página web) y `GET /api/docs.md` (Markdown) |
+| Explorador | `GET /api/explorer`: todas las funciones con sus parámetros, un ejemplo, el código para llamarlas (curl, Python, JavaScript) y un botón para probarlas. `GET /api/openapi.json`: la especificación OpenAPI (Swagger UI, Postman…) |
 
 ### Tiempo simulado
 

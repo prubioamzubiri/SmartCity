@@ -272,7 +272,11 @@ Docker Compose passes it to the simulator and to the viewer. It changes:
   dev`, GitHub Pages) it uses `VITE_LANG` at build time or `es`; `?lang=eu` in the address overrides it;
 - the **API messages** (errors) and the names the simulator makes up (events, holidays, unnamed car parks and stations,
   default sensor names), and the `weekday` column of the CSV downloads;
-- the **API guide** served at `/api/docs`: `docs/API.md` (Spanish), `docs/API.eu.md` and `docs/API.en.md`.
+- the **API guide** served at `/api/docs`: `docs/API.md` (Spanish), `docs/API.eu.md` and `docs/API.en.md`;
+- the **API explorer** at `/api/explorer` (like a Swagger UI: every endpoint, its parameters, an example answer, curl /
+  Python / JavaScript code and a «try it» button) and its OpenAPI spec at `/api/openapi.json`. Both come from
+  `src/docs/apiReference.js` (texts in the three languages); the example answers in `src/docs/examples/` were taken from a
+  real city. The explorer leaves out the sensor-fault endpoints.
 
 The data stays the same in every language: JSON fields, CSV columns and codes are not translated, and the records are
 stored in Spanish (the `weekday` column is translated on the way out), so a city can change language with a restart.

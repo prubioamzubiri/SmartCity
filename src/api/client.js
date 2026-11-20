@@ -142,9 +142,9 @@ export class ApiClient {
     return this.request(`/api/restrictions/${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
 
-  // Guía de la API que publica el servidor (docs/API.md).
-  docsUrl() {
-    return `${this.baseUrl}/api/docs`;
+  // Guía de la API que publica el servidor (docs/API.md) o su explorador ('explorer').
+  docsUrl(page = 'docs') {
+    return `${this.baseUrl}/api/${page}`;
   }
 
   // URL de descarga directa: el navegador hace streaming del CSV sin cargarlo en memoria.
