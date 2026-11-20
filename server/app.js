@@ -303,12 +303,12 @@ export function createApp({
   const citySummary = () => {
     const s = state();
     const lines = [
-      `Hora simulada: ${s.simTime} (${s.params?.scenario ?? ''}${s.holiday ? `, festivo: ${s.holiday}` : ''})`,
-      `Coches circulando: ${s.cars}; parados: ${s.traffic.stopped}; velocidad media: ${s.traffic.avgKmh} km/h`,
+      t('Hora simulada: {time} ({scenario})', { time: s.simTime, scenario: [s.params?.scenario, s.holiday && t('festivo: {holiday}', { holiday: s.holiday })].filter(Boolean).join(', ') }),
+      t('Coches circulando: {cars}; parados: {stopped}; velocidad media: {kmh} km/h', { cars: s.cars, stopped: s.traffic.stopped, kmh: s.traffic.avgKmh }),
     ];
-    if (s.weather) lines.push(`Tiempo: ${s.weather.condition}, ${s.weather.temperature_c} °C, lluvia ${s.weather.rain_mm_h} mm/h`);
-    if (s.events.active.length) lines.push(`Eventos en curso: ${s.events.active.map((e) => `${e.name} (${e.venueName})`).join('; ')}`);
-    if (s.restrictions.length) lines.push(`Restricciones activas: ${s.restrictions.length}`);
+    if (s.weather) lines.push(t('Tiempo: {condition}, {temp} °C, lluvia {rain} mm/h', { condition: s.weather.condition, temp: s.weather.temperature_c, rain: s.weather.rain_mm_h }));
+    if (s.events.active.length) lines.push(t('Eventos en curso: {list}', { list: s.events.active.map((e) => `${e.name} (${e.venueName})`).join('; ') }));
+    if (s.restrictions.length) lines.push(t('Restricciones activas: {n}', { n: s.restrictions.length }));
     return lines.join('\n');
   };
   const rawKeyHash = rawKey ? digest(rawKey) : null;
@@ -865,7 +865,7 @@ export function createApp({
     // Configuración del chatbot (con el token de la ciudad, como cualquier cambio): la página chat-admin o un programa.
     if (pathname.startsWith('/api/chat/')) {
       authorize(req);
-      if (pathname === '/api/chat/config' && method === 'GET') return send(200, chatbot.adminView());
+      if (pathname === '/api/chat/config' && method === 'GET') return send(200, { ...chatbot.adminView(), lang: getLang() }); // lang: idioma de la página chat-admin
       if (pathname === '/api/chat/config' && method === 'PUT') {
         const body = await readJson(req);
         return send(200, await chatCall(() => chatbot.update(body)));

@@ -314,6 +314,37 @@ autobusak nahikoa ez badira (jendea lurrean edo itxaronaldi oso luzeak) jende ho
 
 ---
 
+### 3.8 Hiriko txatbota — `/api/chat`
+
+Hiriak txatbot bat du, ikustailean (behean eskuinean) agertzen dena **zuek aktibatzen duzuenean**. Hasieran ezkutatuta
+dago eta, motorrik gabe, beti «Ez dakit» erantzuten du: «burmuina» zuek jartzen duzue. Tokenarekin konfiguratzen da,
+konfigurazio-orritik (biltegiko `chatadmin/`: aparteko edukiontzi bat, 8095 atakan) edo zuen programatik:
+
+```sh
+curl -X PUT http://localhost:8080/api/chat/config -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"enabled": true, "title": "Txiki", "provider": "custom", "url": "http://gure-zerbitzaria:5000/chat", "includeState": true}'
+```
+
+| Eremua | Zer den |
+| --- | --- |
+| `enabled` | `true` = ikustailean agertzen da |
+| `title` | ikustaileko izena |
+| `provider` | `none` («Ez dakit»), `ollama`, `openai` (API bateragarri oro: OpenAI, LM Studio, vLLM...) edo `custom` (zuen zerbitzua) |
+| `url` | motorraren helbidea, **hiritik ikusita** (hiriak deitzen dio). `custom`: URL osoa |
+| `model`, `apiKey` | eredua eta gakoa (gakoa ez da inoiz itzultzen; `null`-ek gordetakoa mantentzen du) |
+| `systemPrompt` | laguntzailearen jarraibideak |
+| `includeState` | hiriaren uneko egoera gehitu (ordua, trafikoa, eguraldia, ekitaldiak) |
+| `temperature`, `maxTokens`, `timeoutSeconds` | erantzunaren doikuntzak |
+
+Lehenetsitako izena eta jarraibideak zerbitzuaren hizkuntzan daude (`SMARTCITY_LANG`): laguntzaileak hizkuntza horretan
+erantzuten du, jarraibideak aldatzen ez badituzue. `custom`-ekin, hiriak `POST {"messages": [...], "instructions": "...",
+"city": "..." | null}` bidaltzen dio zuen URLari eta `{"reply": "testua"}` espero du (`apiKey`-rekin,
+`Authorization: Bearer` gisa iristen da). `GET /api/chat/config`-ek konfigurazioa ematen du; `POST /api/chat/test`
+`{"messages": [...], "config": {...}}`-ek konfigurazio bat probatzen du gorde gabe; `POST /api/chat/models`-ek motorraren
+ereduak zerrendatzen ditu eta `POST /api/chat/pull` `{"model": "llama3.2"}`-k bat deskargatzen du Ollaman. Edonork
+(ikustaileak) `POST /api/chat` `{"messages": [{"role": "user", "content": "..."}]}` → `{"reply": "..."}` bidez galdetzen
+du (minutuko 10 galdera; `GET /api/state`-ko `chat.enabled`-ek dio aktibo dagoen).
+
 ## Ezin dena egin (oraindik)
 
 Simulagailuak ez ditu modelatzen pilaketa-tasak, airearen kalitatea ezta isurketak ere, eta ezin dira aldatu

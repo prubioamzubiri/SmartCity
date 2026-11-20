@@ -5,6 +5,7 @@
 //   SMARTCITY_TOKEN      token de la ciudad (si la ciudad tiene token)
 //   CHAT_ADMIN_PASSWORD  contraseña de esta página (opcional; usuario «admin»)
 //   PORT                 puerto (por defecto 8095)
+// La página sale en el idioma de la ciudad (SMARTCITY_LANG de la ciudad): traducciones en i18n.json.
 import http from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -12,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const PAGE = readFileSync(path.join(here, 'index.html'), 'utf8');
+const I18N = readFileSync(path.join(here, 'i18n.json'), 'utf8');
+const PAGE = readFileSync(path.join(here, 'index.html'), 'utf8').replace('/*I18N*/{}', () => I18N);
 const digest = (s) => createHash('sha256').update(s).digest();
 
 // Rutas de esta página -> rutas de la ciudad.
@@ -38,11 +40,15 @@ export function createAdmin({ password = '', token = '', simUrl = 'http://sim:80
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(body));
   };
+  // Error con su texto en castellano y la clave para que la página lo traduzca al idioma de la ciudad.
+  const fail = (res, status, key, vars = {}) => json(res, status, {
+    error: key.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m)), i18n: { key, vars },
+  });
 
   return async (req, res) => {
     if (!authorized(req)) {
       res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Chatbot SmartCity", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Hace falta la contraseña (usuario: admin)');
+      res.end('Hace falta la contraseña · Pasahitza behar da · Password required (admin)');
       return;
     }
     const url = new URL(req.url, 'http://localhost');
@@ -53,7 +59,7 @@ export function createAdmin({ password = '', token = '', simUrl = 'http://sim:80
     }
     if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true });
     const route = ROUTES[`${req.method} ${url.pathname}`];
-    if (!route) return json(res, 404, { error: 'No encontrado' });
+    if (!route) return fail(res, 404, 'No encontrado');
     const chunks = [];
     for await (const c of req) chunks.push(c);
     const [method, target] = route;
@@ -67,14 +73,14 @@ export function createAdmin({ password = '', token = '', simUrl = 'http://sim:80
         signal: AbortSignal.timeout(timeout),
       });
       const text = await r.text();
-      if (r.status === 401) return json(res, 502, { error: 'La ciudad no acepta el token: revisa SMARTCITY_TOKEN' });
+      if (r.status === 401) return fail(res, 502, 'La ciudad no acepta el token: revisa SMARTCITY_TOKEN');
       if (r.status === 404 && url.pathname === '/config') {
-        return json(res, 502, { error: `${simUrl} no tiene chatbot: ¿es la dirección de la ciudad (sin /api) y está actualizada?` });
+        return fail(res, 502, '{url} no tiene chatbot: ¿es la dirección de la ciudad (sin /api) y está actualizada?', { url: simUrl });
       }
       res.writeHead(r.status, { 'Content-Type': 'application/json' });
       res.end(text);
     } catch (err) {
-      json(res, 502, { error: `No se puede conectar con la ciudad (${simUrl}): ${err.cause?.code ?? err.message}` });
+      fail(res, 502, 'No se puede conectar con la ciudad ({url}): {cause}', { url: simUrl, cause: err.cause?.code ?? err.message });
     }
   };
 }

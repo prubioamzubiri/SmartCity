@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { Chat, NO_SE, checkChatConfig, DEFAULT_CHAT } from '../server/chat.js';
+import fs from 'node:fs';
+import { Chat, noSe, checkChatConfig, defaultChat } from '../server/chat.js';
+import { setLang } from '../src/i18n/index.js';
 import { createAdmin } from '../chatadmin/server.js';
 import { SimEngine } from '../src/core/engine.js';
 import { Store } from '../server/store.js';
@@ -23,10 +25,10 @@ function fakeModel(body) {
 test('the chatbot starts hidden, answers "No sé" without a model and keeps its settings', async () => {
   const store = new Store();
   const chat = new Chat({ store });
-  assert.deepEqual(chat.publicState(), { enabled: false, title: DEFAULT_CHAT.title });
+  assert.deepEqual(chat.publicState(), { enabled: false, title: defaultChat().title });
   await assert.rejects(chat.ask(ask), { status: 404 });
   chat.update({ enabled: true });
-  assert.deepEqual(await chat.ask(ask), { reply: NO_SE });
+  assert.deepEqual(await chat.ask(ask), { reply: noSe() });
   assert.deepEqual(new Chat({ store }).publicState().enabled, true, 'la configuración se guarda');
   // Validación.
   assert.throws(() => checkChatConfig({ provider: 'gpt' }), /provider/);
@@ -37,15 +39,38 @@ test('the chatbot starts hidden, answers "No sé" without a model and keeps its 
   await assert.rejects(chat.ask([{ role: 'user', content: 'x'.repeat(3000) }]), /caracteres/);
 });
 
+test('the chatbot speaks the language of the service, also with a saved configuration', async () => {
+  const store = new Store();
+  try {
+    new Chat({ store }).update({ enabled: true, temperature: 0.5 });
+    assert.deepEqual(store.getMeta('chat'), { enabled: true, temperature: 0.5 }, 'solo se guarda lo cambiado');
+    setLang('eu');
+    const eu = new Chat({ store });
+    assert.deepEqual(eu.publicState(), { enabled: true, title: 'Laguntzailea' });
+    assert.deepEqual(await eu.ask(ask), { reply: 'Ez dakit' });
+    assert.match(eu.config.systemPrompt, /Erantzun euskaraz/);
+    assert.throws(() => checkChatConfig({ enabled: 'bai' }), /true edo false/);
+    setLang('en');
+    const en = new Chat({ store });
+    assert.deepEqual(await en.ask(ask), { reply: "I don't know" });
+    assert.match(en.config.systemPrompt, /Answer in English/);
+    en.update({ title: 'Txiki' });
+    setLang('es');
+    assert.equal(new Chat({ store }).publicState().title, 'Txiki', 'un nombre propio no cambia con el idioma');
+  } finally {
+    setLang('es');
+  }
+});
+
 test('questions are limited per minute and client', async () => {
   let t = 0;
   const chat = new Chat({ now: () => t });
   chat.update({ enabled: true });
   for (let i = 0; i < 10; i++) await chat.ask(ask, { client: 'a' });
   await assert.rejects(chat.ask(ask, { client: 'a' }), { status: 429 });
-  assert.deepEqual(await chat.ask(ask, { client: 'b' }), { reply: NO_SE });
+  assert.deepEqual(await chat.ask(ask, { client: 'b' }), { reply: noSe() });
   t += 61_000;
-  assert.deepEqual(await chat.ask(ask, { client: 'a' }), { reply: NO_SE });
+  assert.deepEqual(await chat.ask(ask, { client: 'a' }), { reply: noSe() });
 });
 
 test('the chatbot talks to Ollama and to OpenAI-compatible APIs (with the city summary if asked)', async () => {
@@ -111,11 +136,11 @@ test('API: hidden until the students enable it with their token; then the viewer
   assert.equal((await call('/api/chat/config')).status, 401, 'sin el token de la ciudad no se configura');
   assert.equal((await call('/api/chat/config', { key: 'otra' })).status, 401);
   // Probar sin activarlo.
-  assert.deepEqual((await call('/api/chat/test', { method: 'POST', key: 'clave', body: { messages: ask } })).body, { reply: NO_SE });
+  assert.deepEqual((await call('/api/chat/test', { method: 'POST', key: 'clave', body: { messages: ask } })).body, { reply: noSe() });
   const put = await call('/api/chat/config', { method: 'PUT', key: 'clave', body: { enabled: true, title: 'Txiki' } });
   assert.equal(put.status, 200);
   assert.deepEqual((await call('/api/state')).body.chat, { enabled: true, title: 'Txiki' });
-  assert.deepEqual((await call('/api/chat', { method: 'POST', body: { messages: ask } })).body, { reply: NO_SE });
+  assert.deepEqual((await call('/api/chat', { method: 'POST', body: { messages: ask } })).body, { reply: noSe() });
   assert.equal((await call('/api/chat/config', { method: 'PUT', key: 'clave', body: { provider: 'x' } })).status, 400);
 });
 
@@ -146,5 +171,38 @@ test('chat-admin asks for its password (if any) and passes the configuration to 
     open.close();
   } finally {
     server.close();
+  }
+});
+
+test('the chat-admin page has every text in Basque and English, and follows the language of the city', async () => {
+  const dict = JSON.parse(fs.readFileSync(new URL('../chatadmin/i18n.json', import.meta.url), 'utf8'));
+  const page = fs.readFileSync(new URL('../chatadmin/index.html', import.meta.url), 'utf8');
+  const server = fs.readFileSync(new URL('../chatadmin/server.js', import.meta.url), 'utf8');
+  const keys = new Set([
+    ...[...page.matchAll(/\btr\('((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]),
+    ...[...server.matchAll(/fail\(res, \d+, '((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]),
+  ]);
+  // Textos fijos de la página: lo que hay entre etiquetas dentro de <main>, y los placeholder.
+  const main = page.slice(page.indexOf('<main>'), page.indexOf('</main>'));
+  for (const m of main.matchAll(/>([^<>]*[A-Za-zÁÉÍÓÚáéíóú][^<>]*)</g)) keys.add(m[1].trim());
+  for (const m of main.matchAll(/placeholder="([^"]*[a-z][^"]*)"/g)) if (!m[1].startsWith('http') && !/^[a-z0-9.]+$/.test(m[1])) keys.add(m[1]);
+  const names = new Set(['Ollama', '—']);
+  for (const lang of ['eu', 'en']) {
+    const missing = [...keys].filter((k) => !names.has(k) && !(k in dict[lang]));
+    assert.deepEqual(missing, [], `${lang}: faltan traducciones en chat-admin`);
+  }
+  // La configuración que lee la página trae el idioma de la ciudad.
+  const store = new Store();
+  const runtime = new Runtime({ engine: new SimEngine({ data: { nodes: [0, 0, 400, 0], ways: [[2, 0, 0, 1]], signals: [] }, maxCars: 5 }), store, now: () => 1_000_000, checkpointMs: 1e9 });
+  const city = http.createServer(createApp({ runtime, store }));
+  await new Promise((resolve) => city.listen(0, '127.0.0.1', resolve));
+  try {
+    setLang('eu');
+    const config = await (await fetch(`http://127.0.0.1:${city.address().port}/api/chat/config`)).json();
+    assert.equal(config.lang, 'eu');
+    assert.equal(config.title, 'Laguntzailea');
+  } finally {
+    setLang('es');
+    city.close();
   }
 });

@@ -325,7 +325,8 @@ curl -X PUT http://localhost:8080/api/chat/config -H "Authorization: Bearer $TOK
 | `includeState` | añadir el estado actual de la ciudad (hora, tráfico, tiempo, eventos) |
 | `temperature`, `maxTokens`, `timeoutSeconds` | ajustes de la respuesta |
 
-Con `custom`, la ciudad envía a vuestra URL `POST {"messages": [...], "instructions": "...", "city": "..." | null}` y
+El nombre y las instrucciones por defecto están en el idioma del servicio (`SMARTCITY_LANG`): el asistente responde
+en ese idioma si no cambiáis las instrucciones. Con `custom`, la ciudad envía a vuestra URL `POST {"messages": [...], "instructions": "...", "city": "..." | null}` y
 espera `{"reply": "texto"}` (con `apiKey`, llega como `Authorization: Bearer`). `GET /api/chat/config` da la
 configuración; `POST /api/chat/test` `{"messages": [...], "config": {...}}` prueba una configuración sin guardarla;
 `POST /api/chat/models` lista los modelos del motor y `POST /api/chat/pull` `{"model": "llama3.2"}` descarga uno en

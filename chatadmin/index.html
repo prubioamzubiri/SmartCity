@@ -44,7 +44,7 @@
   <section>
     <div class="switch">
       <h2>Estado</h2>
-      <span id="badge" class="badge">—</span>
+      <span id="badge" class="badge" data-dyn>—</span>
     </div>
     <label class="check"><input type="checkbox" id="enabled"> Activado (aparece en el visor de la ciudad)</label>
     <label for="title">Nombre en el visor</label>
@@ -63,7 +63,7 @@
     <div id="engine">
       <label for="url">Dirección (vista desde la ciudad)</label>
       <input type="url" id="url" placeholder="http://ollama:11434">
-      <p class="muted" id="urlHelp"></p>
+      <p class="muted" id="urlHelp" data-dyn></p>
       <div id="keyBox">
         <label for="apiKey">Clave (opcional)</label>
         <input type="password" id="apiKey" autocomplete="off">
@@ -90,13 +90,13 @@
       <button id="save" type="button">Guardar</button>
       <button class="ghost" id="reload" type="button">Descartar cambios</button>
     </div>
-    <div id="status"></div>
+    <div id="status" data-dyn></div>
   </section>
 
   <section>
     <h2>Probar</h2>
     <p class="muted">Prueba la configuración del formulario aunque no esté guardada ni activada.</p>
-    <div id="log"></div>
+    <div id="log" data-dyn></div>
     <div class="row" style="margin-top:8px">
       <input type="text" id="question" placeholder="Escribe una pregunta…">
       <div style="flex:0"><button id="ask" type="button">Preguntar</button></div>
@@ -105,6 +105,38 @@
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
+// Idioma: el de la ciudad (llega con la configuración); hasta entonces, ?lang=, el último usado o el del navegador.
+const I18N = /*I18N*/{};
+const LANGS = ['es', 'eu', 'en'];
+const pick = (l) => (LANGS.includes(l) ? l : null);
+let lang = pick(new URLSearchParams(location.search).get('lang')) || pick(remembered()) || pick(navigator.language.slice(0, 2)) || 'es';
+function remembered() {
+  try { return localStorage.getItem('chatadmin-lang'); } catch { return null; }
+}
+const tr = (s, vars = {}) => ((I18N[lang] ?? {})[s] ?? s).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
+const originals = new Map();
+// Traduce los textos fijos de la página (los que cambian, [data-dyn], se escriben ya traducidos).
+function translatePage() {
+  document.documentElement.lang = lang;
+  document.title = tr('Chatbot SmartCity');
+  const walker = document.createTreeWalker(document.querySelector('main'), NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement.closest('[data-dyn]') || !n.nodeValue.trim() ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  for (let n; (n = walker.nextNode());) {
+    if (!originals.has(n)) originals.set(n, n.nodeValue);
+    const o = originals.get(n);
+    n.nodeValue = o.replace(o.trim(), tr(o.trim()));
+  }
+  for (const el of document.querySelectorAll('[data-ph]')) el.placeholder = tr(el.dataset.ph);
+}
+function setLang(l) {
+  if (!pick(l) || l === lang) return;
+  lang = l;
+  try { localStorage.setItem('chatadmin-lang', l); } catch { /* sin almacenamiento */ }
+  translatePage();
+}
+for (const el of document.querySelectorAll('main [placeholder]')) el.dataset.ph = el.placeholder;
+translatePage();
 const FIELDS = ['enabled', 'title', 'provider', 'url', 'model', 'systemPrompt', 'includeState', 'temperature', 'maxTokens', 'timeoutSeconds'];
 let saved = null;
 let history = [];
@@ -118,19 +150,20 @@ function status(text, kind = '') {
 async function call(method, path, body) {
   const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || `Error ${r.status}`);
+  if (!r.ok) throw new Error(data.i18n ? tr(data.i18n.key, data.i18n.vars) : data.error || tr('Error {status}', { status: r.status }));
   return data;
 }
 
 function fill(c) {
   saved = c;
+  setLang(c.lang);
   for (const f of FIELDS) {
     const el = $(f);
     if (el.type === 'checkbox') el.checked = c[f]; else el.value = c[f];
   }
   $('apiKey').value = '';
-  $('apiKey').placeholder = c.hasApiKey ? '(guardada; escribe otra para cambiarla)' : '';
-  $('badge').textContent = c.enabled ? 'Activado' : 'Escondido';
+  $('apiKey').placeholder = c.hasApiKey ? tr('(guardada; escribe otra para cambiarla)') : '';
+  $('badge').textContent = c.enabled ? tr('Activado') : tr('Escondido');
   $('badge').className = 'badge' + (c.enabled ? ' on' : '');
   showProvider();
 }
@@ -153,9 +186,9 @@ function showProvider() {
   $('loadModels').parentElement.hidden = p === 'custom';
   $('model').parentElement.hidden = p === 'custom';
   $('urlHelp').textContent = {
-    ollama: 'La ciudad es quien llama: usa una dirección a la que llegue la ciudad (http://ollama:11434 con el perfil ollama de su docker-compose).',
-    openai: 'Por ejemplo https://api.openai.com o la de vuestro LM Studio / vLLM, accesible desde la ciudad. Sin /v1 al final.',
-    custom: 'URL completa de vuestro servicio, accesible desde la ciudad. Recibe POST { messages, instructions, city } y responde { "reply": "texto" }. La clave, si la ponéis, llega como Authorization: Bearer.',
+    ollama: tr('La ciudad es quien llama: usa una dirección a la que llegue la ciudad (http://ollama:11434 con el perfil ollama de su docker-compose).'),
+    openai: tr('Por ejemplo https://api.openai.com o la de vuestro LM Studio / vLLM, accesible desde la ciudad. Sin /v1 al final.'),
+    custom: tr('URL completa de vuestro servicio, accesible desde la ciudad. Recibe POST { messages, instructions, city } y responde { "reply": "texto" }. La clave, si la ponéis, llega como Authorization: Bearer.'),
   }[p] ?? '';
 }
 
@@ -173,29 +206,29 @@ $('reload').addEventListener('click', load);
 $('save').addEventListener('click', async () => {
   try {
     fill(await call('PUT', '/config', form()));
-    status('Guardado. ' + (saved.enabled ? 'Ya aparece en el visor de la ciudad.' : 'Sigue escondido en el visor.'), 'ok');
+    status(tr('Guardado.') + ' ' + (saved.enabled ? tr('Ya aparece en el visor de la ciudad.') : tr('Sigue escondido en el visor.')), 'ok');
   } catch (err) {
     status(err.message, 'err');
   }
 });
 $('loadModels').addEventListener('click', async () => {
-  status('Buscando modelos…');
+  status(tr('Buscando modelos…'));
   try {
     const { models } = await call('POST', '/models', { config: form() });
     $('models').replaceChildren(...models.map((m) => Object.assign(document.createElement('option'), { value: m })));
-    status(models.length ? `Modelos: ${models.join(', ')}` : 'No hay modelos: descarga uno (p. ej. llama3.2).', models.length ? 'ok' : '');
+    status(models.length ? tr('Modelos: {list}', { list: models.join(', ') }) : tr('No hay modelos: descarga uno (p. ej. llama3.2).'), models.length ? 'ok' : '');
   } catch (err) {
     status(err.message, 'err');
   }
 });
 $('pull').addEventListener('click', async () => {
   const model = $('model').value.trim();
-  if (!model) return status('Escribe el nombre del modelo (p. ej. llama3.2) y pulsa Descargar.', 'err');
-  status(`Descargando ${model}… (puede tardar varios minutos)`);
+  if (!model) return status(tr('Escribe el nombre del modelo (p. ej. llama3.2) y pulsa Descargar.'), 'err');
+  status(tr('Descargando {model}… (puede tardar varios minutos)', { model }));
   $('pull').disabled = true;
   try {
     await call('POST', '/pull', { model, config: form() });
-    status(`${model} descargado.`, 'ok');
+    status(tr('{model} descargado.', { model }), 'ok');
   } catch (err) {
     status(err.message, 'err');
   } finally {
@@ -215,15 +248,15 @@ async function ask() {
   if (!q) return;
   $('question').value = '';
   history.push({ role: 'user', content: q });
-  addMessage('Tú', q);
+  addMessage(tr('Tú'), q);
   $('ask').disabled = true;
   try {
     const { reply } = await call('POST', '/test', { config: form(), messages: history });
     history.push({ role: 'assistant', content: reply });
-    addMessage($('title').value || 'Asistente', reply);
+    addMessage($('title').value || tr('Asistente'), reply);
   } catch (err) {
     history.pop();
-    addMessage('Error', err.message);
+    addMessage(tr('Error'), err.message);
   } finally {
     $('ask').disabled = false;
   }

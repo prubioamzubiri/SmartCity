@@ -304,6 +304,37 @@ bus, and if the buses cannot cope (people left behind or very long waits) some o
 
 ---
 
+### 3.8 The city chatbot — `/api/chat`
+
+The city has a chatbot that appears in the viewer (bottom right) **when you enable it**. At first it is hidden and,
+without an engine, it always answers «I don't know»: you provide the «brain». It is configured with the token, from the
+configuration page (`chatadmin/` in the repository: a separate container, on port 8095) or from your program:
+
+```sh
+curl -X PUT http://localhost:8080/api/chat/config -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"enabled": true, "title": "Txiki", "provider": "custom", "url": "http://our-server:5000/chat", "includeState": true}'
+```
+
+| Field | What it is |
+| --- | --- |
+| `enabled` | `true` = it appears in the viewer |
+| `title` | name in the viewer |
+| `provider` | `none` («I don't know»), `ollama`, `openai` (any compatible API: OpenAI, LM Studio, vLLM...) or `custom` (your service) |
+| `url` | address of the engine **as seen from the city** (the city is the one that calls it). `custom`: the full URL |
+| `model`, `apiKey` | model and key (the key is never returned; `null` keeps the saved one) |
+| `systemPrompt` | instructions of the assistant |
+| `includeState` | add the current state of the city (time, traffic, weather, events) |
+| `temperature`, `maxTokens`, `timeoutSeconds` | settings of the answer |
+
+The default name and instructions are in the language of the service (`SMARTCITY_LANG`): the assistant answers in that
+language unless you change the instructions. With `custom`, the city sends your URL `POST {"messages": [...],
+"instructions": "...", "city": "..." | null}` and expects `{"reply": "text"}` (with `apiKey`, it arrives as
+`Authorization: Bearer`). `GET /api/chat/config` gives the configuration; `POST /api/chat/test`
+`{"messages": [...], "config": {...}}` tries a configuration without saving it; `POST /api/chat/models` lists the models
+of the engine and `POST /api/chat/pull` `{"model": "llama3.2"}` downloads one into Ollama. Anyone (the viewer) asks with
+`POST /api/chat` `{"messages": [{"role": "user", "content": "..."}]}` → `{"reply": "..."}` (10 questions per minute;
+`chat.enabled` in `GET /api/state` says whether it is enabled).
+
 ## What CANNOT be done (yet)
 
 The simulator does not model congestion charging, air quality or emissions, and parking spaces, the route or the

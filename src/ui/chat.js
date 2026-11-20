@@ -1,4 +1,5 @@
 import { el } from './dom.js';
+import { t } from '../i18n/index.js';
 
 // Chatbot de la ciudad: un botón abajo a la derecha que abre una conversación. Solo aparece cuando el servidor dice que
 // está activo (`chat.enabled` en /api/state); mientras tanto no hay nada en el visor.
@@ -6,15 +7,15 @@ export function createChat({ sync }) {
   let history = [];
   let busy = false;
   const log = el('div', { class: 'chat-log', role: 'log', 'aria-live': 'polite' });
-  const input = el('textarea', { class: 'chat-input', rows: 1, placeholder: 'Escribe una pregunta…', 'aria-label': 'Pregunta' });
-  const send = el('button', { type: 'button', class: 'chat-send', textContent: 'Enviar', onclick: () => ask() });
+  const input = el('textarea', { class: 'chat-input', rows: 1, placeholder: t('Escribe una pregunta…'), 'aria-label': t('Pregunta') });
+  const send = el('button', { type: 'button', class: 'chat-send', textContent: t('Enviar'), onclick: () => ask() });
   const title = el('span', { class: 'chat-title' });
   const panel = el('div', { class: 'chat-panel', hidden: true },
     el('div', { class: 'chat-head' }, title,
-      el('button', { type: 'button', class: 'chat-close', textContent: '✕', title: 'Cerrar', onclick: () => toggle(false) })),
+      el('button', { type: 'button', class: 'chat-close', textContent: '✕', title: t('Cerrar'), onclick: () => toggle(false) })),
     log,
     el('div', { class: 'chat-form' }, input, send));
-  const button = el('button', { type: 'button', class: 'chat-button', title: 'Asistente', 'aria-label': 'Abrir el asistente', textContent: '💬', onclick: () => toggle() });
+  const button = el('button', { type: 'button', class: 'chat-button', title: t('Asistente'), 'aria-label': t('Abrir el asistente'), textContent: '💬', onclick: () => toggle() });
   const root = el('div', { class: 'chat', hidden: true }, panel, button);
   document.body.append(root);
 
@@ -47,7 +48,7 @@ export function createChat({ sync }) {
     } catch (err) {
       history.pop();
       waiting.remove();
-      add('error', err.message || 'No se ha podido preguntar');
+      add('error', err.message || t('No se ha podido preguntar'));
     } finally {
       busy = false;
       send.disabled = false;
@@ -71,7 +72,7 @@ export function createChat({ sync }) {
         toggle(false);
       }
       root.hidden = !on;
-      title.textContent = chat?.title || 'Asistente';
+      title.textContent = chat?.title || t('Asistente');
       button.title = title.textContent;
     },
   };

@@ -486,6 +486,11 @@ reach it and the API key never leaves the city. API (with the token): `GET`/`PUT
 /api/chat/test`, `POST /api/chat/models`, `POST /api/chat/pull`; anyone: `POST /api/chat` `{ messages }` (10 questions a
 minute per client, the last 20 messages, 2000 characters each) and `chat` in `GET /api/state`.
 
+It follows `SMARTCITY_LANG`: «No sé» / «Ez dakit» / «I don't know», the default name and instructions (which tell the model
+which language to answer in), the errors, the chat window and the configuration page (it takes the language from the
+city, whatever the language of the browser). Only what the students change is stored, so the defaults follow the
+language if it changes later; a name or instructions they write stay as they are.
+
 ## Checks
 
 ```sh
