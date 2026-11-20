@@ -127,10 +127,12 @@ async function main() {
   );
   signalMarker.visible = false;
   scene.add(signalMarker);
-  const markSignal = (signal) => {
-    signalMarker.position.set(signal.x, 1, signal.z);
+  // Anillo sobre lo que se ha elegido en el mapa (semáforo, parking o puesto de bicis).
+  const markAt = (x, z) => {
+    signalMarker.position.set(x, 1, z);
     signalMarker.visible = true;
   };
+  const markSignal = (signal) => markAt(signal.x, signal.z);
   const focusSignal = (signal) => {
     markSignal(signal);
     const offset = camera.position.clone().sub(controls.target);
@@ -146,7 +148,23 @@ async function main() {
     camera.position.copy(controls.target).add(offset);
     controls.update();
   };
-  const focusBikeStation = (station) => focusPoint(station.x, station.z);
+  const focusBikeStation = (station) => {
+    markAt(station.x, station.z);
+    focusPoint(station.x, station.z);
+  };
+  const parkingMarker = (id) => parkingLayer.userData.markers?.find((m) => m.userData.id === id);
+  const focusParking = (id) => {
+    const marker = parkingMarker(id);
+    if (!marker) return;
+    markAt(marker.position.x, marker.position.z);
+    focusPoint(marker.position.x, marker.position.z);
+  };
+  // Enseña una línea de autobús entera (y la vuelve a mostrar si estaba oculta).
+  const focusBusLine = (li) => {
+    signalMarker.visible = false;
+    const { x, z, size } = busView.lineBounds(li);
+    focusPoint(x, z, Math.max(400, size * 1.1));
+  };
   const eventView = new EventView(scene);
   const topBar = document.createElement('div');
   topBar.className = 'top-bar';
@@ -165,10 +183,10 @@ async function main() {
   });
   const hud = createHud({
     sync, signals, localGraphKey: graphKey, setMode, getMode: () => mode, focusSignal, focusPoint, graph, restrictionView,
-    parking: { layer: parkingLayer, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked), prices: (priceOf) => setPriceLabels(parkingLayer, priceOf, CONFIG.parking.basePrice) },
+    parking: { layer: parkingLayer, focus: focusParking, stats: parkingStats(data), highlight: (isTracked) => highlightTracked(parkingLayer, isTracked), prices: (priceOf) => setPriceLabels(parkingLayer, priceOf, CONFIG.parking.basePrice) },
     server: { view: serverView },
     pedestrianSensors: { view: pedestrianSensorView },
-    transit: { buses, view: busView },
+    transit: { buses, view: busView, focusLine: focusBusLine },
     bikes: { stations: bicycleStations, view: bikeStationView, focus: focusBikeStation },
   });
   const signalTooltip = document.createElement('div');
@@ -253,10 +271,23 @@ async function main() {
     if (!down || ev.button !== 0 || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
     setPointer(ev);
     if (mode === 'navigate') {
+      // Clic en algo que se configura: se abre su pestaña con ese elemento (como con los semáforos).
       const bikeStationId = bikeStationView.pick(raycaster);
-      if (bikeStationId) return hud.revealBikeStation(bikeStationId);
+      if (bikeStationId) {
+        const station = bicycleStations.find((s) => s.id === bikeStationId);
+        if (station) markAt(station.x, station.z);
+        return hud.revealBikeStation(bikeStationId);
+      }
       const parkingHit = parkingLayer.visible ? raycaster.intersectObjects(parkingLayer.userData.markers, false)[0] : undefined;
-      if (parkingHit) return hud.toggleParking(parkingHit.object.userData.id);
+      if (parkingHit) {
+        markAt(parkingHit.object.position.x, parkingHit.object.position.z);
+        return hud.revealParking(parkingHit.object.userData.id);
+      }
+      const bus = busView.pick(raycaster);
+      if (bus >= 0) {
+        signalMarker.visible = false;
+        return hud.revealBusLine(buses.lines[buses.line[bus]].id);
+      }
       const hit = raycaster.intersectObject(signalViz.mesh, false)[0];
       const id = hit?.instanceId === undefined ? undefined : signalViz.signalIds[hit.instanceId];
       const signal = id === undefined ? undefined : signals.signals.find((s) => s.id === id);
@@ -264,6 +295,15 @@ async function main() {
         markSignal(signal);
         hud.revealSignal(signal.id);
         return;
+      }
+      // Recorrido o parada de una línea de autobús (con un margen que crece al alejarse la cámara); los sensores, antes.
+      if (!pedestrianSensorView.pick(raycaster) && !serverView.pick(raycaster) && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
+        const tolerance = Math.max(6, camera.position.distanceTo(hitPoint) * 0.012);
+        const line = busView.pickLineAt(hitPoint.x, hitPoint.z, tolerance);
+        if (line >= 0) {
+          signalMarker.visible = false;
+          return hud.revealBusLine(buses.lines[line].id);
+        }
       }
     }
     if (mode === 'restriction') {

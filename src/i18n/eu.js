@@ -379,7 +379,7 @@ export default {
   "Se registran todos los parkings": "Aparkaleku guztiak erregistratzen dira",
   "No se registra ningún parking": "Ez da aparkalekurik erregistratzen",
   "Parkings subterráneos": "Lurpeko aparkalekuak",
-  "«Registrar» guarda su ocupación cada 5 min simulados (CSV de parkings). También puedes pulsar la P de un parking en el mapa.": "«Erregistratu» aukerak bere okupazioa gordetzen du 5 min simulatuz behin (aparkalekuen CSVa). Mapako aparkaleku baten P-a ere saka dezakezu.",
+  "«Registrar» guarda su ocupación cada 5 min simulados (CSV de parkings). Al pulsar la P de un parking en el mapa se abre aquí.": "«Erregistratu»-k haren okupazioa gordetzen du 5 minutu simulaturo (aparkalekuen CSVa). Mapako aparkaleku baten P sakatzean hemen irekitzen da.",
   "La tarifa solo cambia a las 0:00: lo que guardes hoy se aplica mañana y se mantiene hasta que la cambies. Precio entre {v} y {v2} por hora (por defecto {v3}). Un parking más caro que sus vecinos les manda coches; con los parkings caros, parte de la gente deja el coche. Los precios altos tienen un coste para los ciudadanos.": "Tarifa 0:00etan bakarrik aldatzen da: gaur gordetzen duzuna bihar aplikatzen da eta aldatu arte mantentzen da. Prezioa {v} eta {v2} artean orduko ({v3} lehenetsita). Bere auzokideak baino garestiagoa den aparkaleku batek autoak bidaltzen dizkie; aparkaleku garestiekin, jendearen zati batek autoa uzten du. Prezio altuek kostua dute herritarrentzat.",
   "Leyenda del mapa": "Maparen legenda",
   "Parking con sitio": "Lekua duen aparkalekua",
@@ -568,4 +568,5 @@ export default {
   "plantilla-semaforos": "semaforoen-txantiloia",
   "plan-semaforos": "semaforoen-plana",
   "Explorador de la API": "APIaren arakatzailea",
+  "Lleno": "Beteta",
 };

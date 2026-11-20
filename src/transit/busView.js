@@ -166,6 +166,43 @@ export class BusView {
     this.dots.instanceMatrix.needsUpdate = true;
   }
 
+  // Línea visible cuyo recorrido pasa a menos de `tolerance` metros del punto (x, z), la más cercana, o -1.
+  // El recorrido es una cinta de 3 m: con margen se puede pulsar también desde lejos.
+  pickLineAt(x, z, tolerance) {
+    if (!this.group.visible) return -1;
+    let best = -1;
+    let bestD = tolerance * tolerance;
+    this.buses.lines.forEach((line, li) => {
+      if (!this.lineVisible[li]) return;
+      const { x: rx, z: rz } = line.route;
+      for (let k = 0; k + 1 < rx.length; k++) {
+        const dx = rx[k + 1] - rx[k];
+        const dz = rz[k + 1] - rz[k];
+        const len2 = dx * dx + dz * dz;
+        const u = len2 ? Math.max(0, Math.min(1, ((x - rx[k]) * dx + (z - rz[k]) * dz) / len2)) : 0;
+        const ex = rx[k] + u * dx - x;
+        const ez = rz[k] + u * dz - z;
+        const d = ex * ex + ez * ez;
+        if (d < bestD) {
+          bestD = d;
+          best = li;
+        }
+      }
+    });
+    return best;
+  }
+
+  // Centro y tamaño del recorrido de una línea (para enseñarla entera en el mapa).
+  lineBounds(li) {
+    const r = this.buses.lines[li].route;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (let k = 0; k < r.x.length; k++) {
+      minX = Math.min(minX, r.x[k]); maxX = Math.max(maxX, r.x[k]);
+      minZ = Math.min(minZ, r.z[k]); maxZ = Math.max(maxZ, r.z[k]);
+    }
+    return { x: (minX + maxX) / 2, z: (minZ + maxZ) / 2, size: Math.max(maxX - minX, maxZ - minZ) };
+  }
+
   // Autobús bajo el puntero (índice de `buses`) o -1.
   pick(raycaster) {
     if (!this.group.visible || !this.body.count) return -1;

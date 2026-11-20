@@ -379,7 +379,7 @@ export default {
   "Se registran todos los parkings": "All car parks are recorded",
   "No se registra ningún parking": "No car park is recorded",
   "Parkings subterráneos": "Underground car parks",
-  "«Registrar» guarda su ocupación cada 5 min simulados (CSV de parkings). También puedes pulsar la P de un parking en el mapa.": "«Record» saves its occupancy every 5 simulated minutes (car parks CSV). You can also click the P of a car park on the map.",
+  "«Registrar» guarda su ocupación cada 5 min simulados (CSV de parkings). Al pulsar la P de un parking en el mapa se abre aquí.": "«Record» saves its occupancy every 5 simulated minutes (car parks CSV). Clicking the P of a car park on the map opens it here.",
   "La tarifa solo cambia a las 0:00: lo que guardes hoy se aplica mañana y se mantiene hasta que la cambies. Precio entre {v} y {v2} por hora (por defecto {v3}). Un parking más caro que sus vecinos les manda coches; con los parkings caros, parte de la gente deja el coche. Los precios altos tienen un coste para los ciudadanos.": "The tariff only changes at 0:00: what you save today applies tomorrow and stays until you change it. Price between {v} and {v2} per hour (default {v3}). A car park dearer than its neighbours sends them cars; with expensive car parks, some people leave the car. High prices have a cost for the citizens.",
   "Leyenda del mapa": "Map legend",
   "Parking con sitio": "Car park with room",
@@ -568,4 +568,5 @@ export default {
   "plantilla-semaforos": "signal-template",
   "plan-semaforos": "signal-plan",
   "Explorador de la API": "API explorer",
+  "Lleno": "Full",
 };

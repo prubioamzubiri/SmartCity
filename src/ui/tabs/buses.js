@@ -29,7 +29,15 @@ export function createBusesTab(ctx) {
     });
     const node = el('div', { class: 'ui-item', style: `--accent:${hex(line.color)}` },
       el('div', { class: 'ui-item-head' },
-        el('label', { class: 'ui-line-name', title: t('Mostrar u ocultar en el mapa') }, show, el('i', { style: `background:${hex(line.color)}` }), el('b', { textContent: line.id })),
+        el('span', { class: 'ui-row nowrap' },
+          el('label', { class: 'ui-line-name', title: t('Mostrar u ocultar en el mapa') }, show, el('i', { style: `background:${hex(line.color)}` }), el('b', { textContent: line.id })),
+          el('button', { type: 'button', class: 'ui-link', textContent: t('Ver en el mapa'), onclick: () => {
+            if (!show.checked) {
+              show.checked = true;
+              ctx.transit.view.setLineVisible(li, true);
+            }
+            ctx.transit.focusLine?.(li);
+          } })),
         record.node),
       flags,
       el('div', { class: 'ui-row nowrap' }, load.node, info),
@@ -40,7 +48,7 @@ export function createBusesTab(ctx) {
   const legend = el('div', { class: 'ui-legend' },
     el('span', {}, el('i', { style: `background:${hex(loadColor(0))}` }), t('Con sitio')),
     el('span', {}, el('i', { style: `background:${hex(loadColor(0.5))}` }), t('Bastante gente')),
-    el('span', {}, el('i', { style: `background:${hex(loadColor(1))}` }), 'Lleno'),
+    el('span', {}, el('i', { style: `background:${hex(loadColor(1))}` }), t('Lleno')),
     el('span', {}, el('i', { style: `background:${hex(CONFIG.pedestrians.color)}` }), t('Esperando en la parada')));
   const allNone = el('div', { class: 'ui-row' },
     button(t('Registrar todas'), () => setTracked(b.lines.map((l) => l.id), t('Se registran todas las líneas')), 'ghost'),
@@ -61,6 +69,14 @@ export function createBusesTab(ctx) {
 
   return {
     node,
+    // Línea elegida en el mapa: se ve aquí, resaltada, con su flota.
+    reveal(id) {
+      const r = rows.find((x) => x.line.id === id);
+      if (!r) return;
+      r.node.scrollIntoView({ block: 'nearest' });
+      r.node.classList.add('flash');
+      setTimeout(() => r.node.classList.remove('flash'), 1200);
+    },
     onState(s) {
       const byId = new Map((s.buses?.lines ?? []).map((l) => [l.id, l]));
       const writable = ctx.canWrite();

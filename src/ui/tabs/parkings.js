@@ -74,7 +74,7 @@ export function createParkingsTab(ctx) {
   const node = el('div', {},
     card(el('div', { class: 'ui-stats two' }, stats.avg.node, stats.full.node)),
     card(cardTitle(t('Parkings subterráneos')),
-      hint(t('«Registrar» guarda su ocupación cada 5 min simulados (CSV de parkings). También puedes pulsar la P de un parking en el mapa.')),
+      hint(t('«Registrar» guarda su ocupación cada 5 min simulados (CSV de parkings). Al pulsar la P de un parking en el mapa se abre aquí.')),
       hint(t('La tarifa solo cambia a las 0:00: lo que guardes hoy se aplica mañana y se mantiene hasta que la cambies. Precio entre {v} y {v2} por hora (por defecto {v3}). Un parking más caro que sus vecinos les manda coches; con los parkings caros, parte de la gente deja el coche. Los precios altos tienen un coste para los ciudadanos.', { v: euros(P.minPrice), v2: euros(P.maxPrice), v3: euros(P.basePrice) })),
       list, allNone),
     card(cardTitle(t('Leyenda del mapa')),
@@ -86,9 +86,23 @@ export function createParkingsTab(ctx) {
       ctx.parking.stats ? hint(t('Datos de OSM: {lots} aparcamientos, {underground} subterráneos públicos, {street} tramos con aparcamiento en la calle.', { lots: ctx.parking.stats.lots, underground: ctx.parking.stats.underground, street: ctx.parking.stats.street })) : ''));
 
   let key = '';
+  let pending = null; // parking pedido antes de tener la lista (clic en el mapa sin datos del servidor todavía)
+  const reveal = (id) => {
+    const r = rows.get(id);
+    if (!r) {
+      pending = id;
+      return;
+    }
+    pending = null;
+    r.editor.node.open = true;
+    r.row.scrollIntoView({ block: 'nearest' });
+    r.row.classList.add('flash');
+    setTimeout(() => r.row.classList.remove('flash'), 1200);
+  };
   return {
     node,
     toggle,
+    reveal,
     onState(s) {
       const lots = s.parkings ?? [];
       const writable = ctx.canWrite();
@@ -107,10 +121,12 @@ export function createParkingsTab(ctx) {
           const entry = { id: lot.id, name: lot.name, live: lot };
           const editor = tariffEditor(ctx, entry);
           const row = el('div', { class: 'ui-item' },
-            el('div', { class: 'ui-item-head' }, el('b', { textContent: lot.name }), el('label', { class: 'ui-check' }, box, t(' Registrar'))),
+            el('div', { class: 'ui-item-head' },
+              el('button', { type: 'button', class: 'ui-link strong', textContent: lot.name, title: t('Ver en el mapa'), onclick: () => ctx.parking.focus?.(lot.id) }),
+              el('label', { class: 'ui-check' }, box, t(' Registrar'))),
             el('div', { class: 'ui-row nowrap' }, load.node, pct),
             now, flags, editor.node);
-          rows.set(lot.id, { load, pct, box, now, flags, editor, entry });
+          rows.set(lot.id, { row, load, pct, box, now, flags, editor, entry });
           list.append(row);
         }
       }
@@ -134,6 +150,7 @@ export function createParkingsTab(ctx) {
       stats.full.set(String(full), t('de {length}', { length: lots.length }));
       for (const b of allNone.querySelectorAll('button')) b.disabled = !writable;
       ctx.parking.highlight((id) => lots.some((p) => p.id === id && p.tracked));
+      if (pending && rows.has(pending)) reveal(pending);
       const prices = new Map(lots.map((p) => [p.id, p.price]));
       ctx.parking.prices?.((id) => prices.get(id));
     },

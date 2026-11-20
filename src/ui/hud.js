@@ -140,10 +140,17 @@ export function createHud(deps) {
       shell.show('bikes');
       bikesTab.reveal(id);
     },
+    revealParking(id) {
+      shell.show('parkings');
+      parkings.reveal(id);
+    },
+    revealBusLine(id) {
+      shell.show('buses');
+      buses.reveal(id);
+    },
     selectSensor: (id) => sensors.selectTraffic(id ?? null),
     selectPedestrianSensor: (id) => sensors.selectPedestrian(id ?? null),
     removeSelectedSensor: () => sensors.removeSelected(),
-    toggleParking: (id) => parkings.toggle(id),
     addServerSensor: (x, z) => sensors.place('sensor', x, z),
     addPedestrianSensor: (x, z) => sensors.place('pedsensor', x, z),
     // Modo «restriction»: clic y cursor sobre el mapa mientras se elige zona o calles.
